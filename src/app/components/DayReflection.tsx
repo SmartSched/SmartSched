@@ -1,136 +1,107 @@
-import { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, Box, Typography, Rating, Button, Divider } from '@mui/material';
+import { useEffect, useState, FormEvent } from 'react';
+import { Box, Typography, Rating, Card, CardContent, Button, Link as MuiLink } from '@mui/material';
 import { format } from 'date-fns';
-import { Task } from './TaskList';
-import { TimeBlock } from './DailyPlanner';
+import { Link as RouterLink } from 'react-router';
+import { useAuth } from '../lib/AuthContext';
+import { apiGet, apiPost } from '../lib/api';
 
-interface DayReflectionProps {
-  open: boolean;
-  onClose: () => void;
-  selectedDate: Date;
-  tasks: Task[];
-  timeBlocks: TimeBlock[];
-  onSubmit: (ratings: { [key: string]: number }) => void;
-}
+const CRITERIA = [
+  { key: 'productivity', label: 'Productivity' },
+  { key: 'mood', label: 'Mood' },
+  { key: 'energy', label: 'Energy' },
+  { key: 'sleep', label: 'Sleep' },
+] as const;
 
-export function DayReflection({ open, onClose, selectedDate, tasks, timeBlocks, onSubmit }: DayReflectionProps) {
-  const [ratings, setRatings] = useState<{ [key: string]: number }>(() => {
-    const initial: { [key: string]: number } = {};
-    tasks.forEach(task => {
-      initial[`task-${task.id}`] = 5;
-    });
-    timeBlocks.forEach(block => {
-      initial[`block-${block.id}`] = 5;
-    });
-    return initial;
-  });
+type Ratings = Record<(typeof CRITERIA)[number]['key'], number>;
 
-  const handleSubmit = () => {
-    onSubmit(ratings);
-    onClose();
+const todayIso = format(new Date(), 'yyyy-MM-dd');
+
+export function DayReflection() {
+  const { user } = useAuth();
+  const [ratings, setRatings] = useState<Ratings>({ productivity: 0, mood: 0, energy: 0, sleep: 0 });
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    apiGet(`/api/reflections/${todayIso}`)
+      .then((existing) => {
+        if (existing) setRatings(existing.ratings);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setSaved(false);
+    try {
+      await apiPost('/api/reflections', { date: todayIso, ratings });
+      setSaved(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const allItems = [
-    ...tasks.map(task => ({ type: 'task', id: task.id, title: task.title, emoji: '✓' })),
-    ...timeBlocks.map(block => ({ type: 'block', id: block.id, title: block.activity, emoji: getTypeEmoji(block.type) })),
-  ];
-
-  function getTypeEmoji(type: string) {
-    switch (type) {
-      case 'class': return '📚';
-      case 'study': return '✏️';
-      case 'break': return '☕';
-      case 'personal': return '🌟';
-      case 'commute': return '🚗';
-      case 'meal': return '🍽️';
-      default: return '📌';
-    }
+  if (!user) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        <MuiLink component={RouterLink} to="/auth">Log in</MuiLink> to rate your day.
+      </Typography>
+    );
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ backgroundColor: '#f3e8ff', color: '#7c3aed' }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          day reflection 🌙
+    <Card sx={{ maxWidth: '500px', mx: 'auto', borderRadius: '16px' }}>
+      <CardContent sx={{ p: 4 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+          Day Reflection
         </Typography>
-        <Typography variant="body2" sx={{ fontWeight: 300, fontStyle: 'italic', mt: 0.5 }}>
-          {format(selectedDate, 'EEEE, MMMM d')}
-        </Typography>
-      </DialogTitle>
-      <DialogContent sx={{ mt: 2 }}>
-        <Typography variant="body2" sx={{ mb: 3, fontStyle: 'italic', color: 'text.secondary' }}>
-          how'd everything feel today? rate what worked for you (everything starts at 5 stars, just tap to adjust)
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          {format(new Date(), 'EEEE, MMMM d')}
         </Typography>
 
-        {allItems.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4, fontStyle: 'italic' }}>
-            no activities to reflect on today... rest days are important too! 💜
+        {loading ? (
+          <Typography variant="body2" color="text.secondary">
+            Loading...
           </Typography>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {allItems.map((item, index) => {
-              const key = `${item.type}-${item.id}`;
-              return (
-                <Box key={key}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
-                      <Typography sx={{ fontSize: '20px' }}>{item.emoji}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {item.title}
-                      </Typography>
-                    </Box>
-                    <Rating
-                      value={ratings[key] || 5}
-                      onChange={(_, newValue) => {
-                        setRatings({ ...ratings, [key]: newValue || 0 });
-                      }}
-                      size="small"
-                      sx={{
-                        '& .MuiRating-iconFilled': {
-                          color: '#fbbf24',
-                        },
-                      }}
-                    />
-                  </Box>
-                  {index < allItems.length - 1 && <Divider sx={{ opacity: 0.3 }} />}
-                </Box>
-              );
-            })}
+          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {CRITERIA.map(({ key, label }) => (
+              <Box key={key} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="body1">{label}</Typography>
+                <Rating
+                  value={ratings[key]}
+                  onChange={(_, newValue) => setRatings({ ...ratings, [key]: newValue || 0 })}
+                />
+              </Box>
+            ))}
+
+            {error && (
+              <Typography variant="body2" color="error">
+                {error}
+              </Typography>
+            )}
+            {saved && (
+              <Typography variant="body2" color="success.main">
+                Saved.
+              </Typography>
+            )}
+
+            <Button type="submit" variant="contained" disabled={submitting} sx={{ backgroundColor: '#8b5cf6' }}>
+              {submitting ? 'Saving...' : 'Save Reflection'}
+            </Button>
           </Box>
         )}
-
-        <Box
-          sx={{
-            mt: 4,
-            p: 2,
-            backgroundColor: '#fef3c7',
-            borderRadius: '12px',
-          }}
-        >
-          <Typography variant="body2" sx={{ color: '#92400e', fontStyle: 'italic', fontWeight: 300, textAlign: 'center' }}>
-            💛 reflecting helps you learn what works for you... there's no wrong answers here
-          </Typography>
-        </Box>
-
-        <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-          <Button onClick={onClose} sx={{ textTransform: 'none' }}>
-            skip for now
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            sx={{
-              backgroundColor: '#8b5cf6',
-              textTransform: 'none',
-              '&:hover': {
-                backgroundColor: '#7c3aed',
-              },
-            }}
-          >
-            done reflecting ✨
-          </Button>
-        </Box>
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   );
 }

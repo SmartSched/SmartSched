@@ -1,111 +1,59 @@
-import { useState } from 'react';
-import { Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, IconButton, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
-import { Add, Edit, Delete, DragIndicator } from '@mui/icons-material';
+import { useEffect, useState, FormEvent } from 'react';
+import { Card, CardContent, Typography, Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, Link as MuiLink } from '@mui/material';
+import { Add } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { DndProvider, useDrag, useDrop } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
+import { Link as RouterLink } from 'react-router';
+import { useAuth } from '../lib/AuthContext';
+import { apiGet, apiPost } from '../lib/api';
 
 export interface TimeBlock {
   id: string;
-  startTime: string;
-  endTime: string;
+  date: string;
+  start_time: string;
+  end_time: string;
   activity: string;
   type: 'class' | 'study' | 'break' | 'personal' | 'commute' | 'meal';
-  color: string;
 }
 
-interface DailyPlannerProps {
-  selectedDate: Date;
-  timeBlocks: TimeBlock[];
-  onAddBlock: (block: Omit<TimeBlock, 'id'>) => void;
-  onDeleteBlock: (id: string) => void;
-  onReorderBlocks: (blocks: TimeBlock[]) => void;
-}
+const todayIso = format(new Date(), 'yyyy-MM-dd');
 
-interface DraggableBlockProps {
-  block: TimeBlock;
-  index: number;
-  moveBlock: (dragIndex: number, hoverIndex: number) => void;
-  onDelete: (id: string) => void;
-  getTypeEmoji: (type: string) => string;
-}
-
-function DraggableBlock({ block, index, moveBlock, onDelete, getTypeEmoji }: DraggableBlockProps) {
-  const [{ isDragging }, drag] = useDrag({
-    type: 'timeBlock',
-    item: { index },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
-    }),
-  });
-
-  const [, drop] = useDrop({
-    accept: 'timeBlock',
-    hover: (item: { index: number }) => {
-      if (item.index !== index) {
-        moveBlock(item.index, index);
-        item.index = index;
-      }
-    },
-  });
-
-  return (
-    <Box
-      ref={(node) => drag(drop(node))}
-      sx={{
-        mb: 1,
-        p: 1.5,
-        backgroundColor: block.color + '20',
-        border: `2px solid ${block.color}`,
-        borderRadius: '12px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        opacity: isDragging ? 0.5 : 1,
-        cursor: 'move',
-        transition: 'opacity 0.2s',
-        '&:hover': {
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        },
-      }}
-    >
-      <DragIndicator sx={{ color: block.color, cursor: 'grab' }} />
-      <Typography variant="body2" sx={{ fontSize: '18px' }}>
-        {getTypeEmoji(block.type)}
-      </Typography>
-      <Box sx={{ flex: 1 }}>
-        <Typography variant="body2" sx={{ fontWeight: 600, color: block.color }}>
-          {block.activity}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {block.startTime} - {block.endTime}
-        </Typography>
-      </Box>
-      <IconButton size="small" onClick={() => onDelete(block.id)}>
-        <Delete fontSize="small" />
-      </IconButton>
-    </Box>
-  );
-}
-
-export function DailyPlanner({ selectedDate, timeBlocks, onAddBlock, onDeleteBlock, onReorderBlocks }: DailyPlannerProps) {
-  const [showDialog, setShowDialog] = useState(false);
-  const [newBlock, setNewBlock] = useState({
-    startTime: '09:00',
-    endTime: '10:00',
-    activity: '',
-    type: 'study' as const,
-  });
-
-  const moveBlock = (dragIndex: number, hoverIndex: number) => {
-    const draggedBlock = sortedBlocks[dragIndex];
-    const newBlocks = [...sortedBlocks];
-    newBlocks.splice(dragIndex, 1);
-    newBlocks.splice(hoverIndex, 0, draggedBlock);
-    onReorderBlocks(newBlocks);
-  };
+export function DailyPlanner() {
+  const { user } = useAuth();
+  const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [newBlock, setNewBlock] = useState({ date: todayIso, start_time: '09:00', end_time: '10:00', activity: '', type: 'study' });
 
   const hours = Array.from({ length: 15 }, (_, i) => i + 7);
+
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    apiGet('/api/time-blocks')
+      .then(setTimeBlocks)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  const handleAddBlock = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newBlock.activity.trim()) return;
+    setSubmitting(true);
+    try {
+      const created = await apiPost('/api/time-blocks', newBlock);
+      setTimeBlocks([...timeBlocks, created]);
+      setNewBlock({ date: todayIso, start_time: '09:00', end_time: '10:00', activity: '', type: 'study' });
+      setShowForm(false);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -126,109 +74,101 @@ export function DailyPlanner({ selectedDate, timeBlocks, onAddBlock, onDeleteBlo
     }
   };
 
-  const getTypeEmoji = (type: string) => {
-    switch (type) {
-      case 'class':
-        return '📚';
-      case 'study':
-        return '✏️';
-      case 'break':
-        return '☕';
-      case 'personal':
-        return '🌟';
-      case 'commute':
-        return '🚗';
-      case 'meal':
-        return '🍽️';
-      default:
-        return '📌';
-    }
-  };
-
-  const handleAddBlock = () => {
-    if (newBlock.activity.trim()) {
-      onAddBlock({
-        ...newBlock,
-        color: getTypeColor(newBlock.type),
-      });
-      setNewBlock({
-        startTime: '09:00',
-        endTime: '10:00',
-        activity: '',
-        type: 'study',
-      });
-      setShowDialog(false);
-    }
-  };
-
   const getBlocksForHour = (hour: number) => {
-    const hourStr = `${hour.toString().padStart(2, '0')}:00`;
-    return timeBlocks.filter(block => {
-      const blockHour = parseInt(block.startTime.split(':')[0]);
-      return blockHour === hour;
-    });
+    return timeBlocks.filter((block) => parseInt(block.start_time.split(':')[0]) === hour);
   };
 
-  const sortedBlocks = [...timeBlocks].sort((a, b) => {
-    const timeA = a.startTime.split(':').map(Number);
-    const timeB = b.startTime.split(':').map(Number);
-    return timeA[0] * 60 + timeA[1] - (timeB[0] * 60 + timeB[1]);
-  });
+  if (!user) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        <MuiLink component={RouterLink} to="/auth">Log in</MuiLink> to see and add your schedule.
+      </Typography>
+    );
+  }
 
   return (
-    <DndProvider backend={HTML5Backend}>
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 700, color: '#8b5cf6' }}>
-          Daily Schedule for {format(selectedDate, 'EEEE, MMM d')} 📋
+          Daily Schedule
         </Typography>
         <Button
           variant="contained"
           startIcon={<Add />}
-          onClick={() => setShowDialog(true)}
-          sx={{
-            borderRadius: '12px',
-            textTransform: 'none',
-            backgroundColor: '#8b5cf6',
-            '&:hover': {
-              backgroundColor: '#7c3aed',
-            },
-          }}
+          onClick={() => setShowForm(!showForm)}
+          sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
         >
           Add Time Block
         </Button>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '200px 1fr' }, gap: 3 }}>
-        <Card sx={{ borderRadius: '16px', height: 'fit-content' }}>
+      {showForm && (
+        <Card sx={{ mb: 3, borderRadius: '16px' }}>
           <CardContent>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: '#8b5cf6' }}>
-              Quick Stats 📊
-            </Typography>
-            {['class', 'study', 'break', 'personal'].map(type => {
-              const count = timeBlocks.filter(b => b.type === type).length;
-              return (
-                <Box key={type} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Box
-                    sx={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: '50%',
-                      backgroundColor: getTypeColor(type),
-                    }}
-                  />
-                  <Typography variant="caption" sx={{ textTransform: 'capitalize', flex: 1 }}>
-                    {getTypeEmoji(type)} {type}
-                  </Typography>
-                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                    {count}
-                  </Typography>
-                </Box>
-              );
-            })}
+            <Box component="form" onSubmit={handleAddBlock} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Activity"
+                value={newBlock.activity}
+                onChange={(e) => setNewBlock({ ...newBlock, activity: e.target.value })}
+                placeholder="e.g., CSC 453 Lecture"
+                autoFocus
+              />
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <TextField
+                  fullWidth
+                  label="Start Time"
+                  type="time"
+                  value={newBlock.start_time}
+                  onChange={(e) => setNewBlock({ ...newBlock, start_time: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                />
+                <TextField
+                  fullWidth
+                  label="End Time"
+                  type="time"
+                  value={newBlock.end_time}
+                  onChange={(e) => setNewBlock({ ...newBlock, end_time: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Box>
+              <FormControl fullWidth>
+                <InputLabel>Type</InputLabel>
+                <Select
+                  value={newBlock.type}
+                  label="Type"
+                  onChange={(e) => setNewBlock({ ...newBlock, type: e.target.value })}
+                >
+                  <MenuItem value="class">Class</MenuItem>
+                  <MenuItem value="study">Study</MenuItem>
+                  <MenuItem value="break">Break</MenuItem>
+                  <MenuItem value="personal">Personal</MenuItem>
+                  <MenuItem value="commute">Commute</MenuItem>
+                  <MenuItem value="meal">Meal</MenuItem>
+                </Select>
+              </FormControl>
+              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                <Button onClick={() => setShowForm(false)}>Cancel</Button>
+                <Button type="submit" variant="contained" disabled={submitting} sx={{ backgroundColor: '#8b5cf6' }}>
+                  {submitting ? 'Adding...' : 'Add Block'}
+                </Button>
+              </Box>
+            </Box>
           </CardContent>
         </Card>
+      )}
 
+      {error && (
+        <Typography variant="body2" color="error" sx={{ mb: 2 }}>
+          {error}
+        </Typography>
+      )}
+
+      {loading ? (
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+          Loading...
+        </Typography>
+      ) : (
         <Card sx={{ borderRadius: '16px' }}>
           <CardContent>
             <Box sx={{ position: 'relative' }}>
@@ -240,92 +180,44 @@ export function DailyPlanner({ selectedDate, timeBlocks, onAddBlock, onDeleteBlo
                     </Typography>
                   </Box>
                   <Box sx={{ flex: 1, pl: 2, borderLeft: '2px solid #e5e7eb', pt: 1 }}>
-                    {getBlocksForHour(hour).map((block, idx) => {
-                      const blockIndex = sortedBlocks.findIndex(b => b.id === block.id);
-                      return (
-                        <DraggableBlock
-                          key={block.id}
-                          block={block}
-                          index={blockIndex}
-                          moveBlock={moveBlock}
-                          onDelete={onDeleteBlock}
-                          getTypeEmoji={getTypeEmoji}
-                        />
-                      );
-                    })}
+                    {getBlocksForHour(hour).map((block) => (
+                      <Box
+                        key={block.id}
+                        sx={{
+                          mb: 1,
+                          p: 1.5,
+                          backgroundColor: getTypeColor(block.type) + '20',
+                          border: `2px solid ${getTypeColor(block.type)}`,
+                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                        }}
+                      >
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: getTypeColor(block.type) }}>
+                            {block.activity}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {block.start_time} - {block.end_time}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    ))}
                   </Box>
                 </Box>
               ))}
             </Box>
+            {timeBlocks.length === 0 && (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Your schedule is empty — add a time block above
+                </Typography>
+              </Box>
+            )}
           </CardContent>
         </Card>
-      </Box>
-
-      {sortedBlocks.length === 0 && (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
-            Your schedule is empty! 🌸
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Add time blocks to plan your day and avoid burnout
-          </Typography>
-        </Box>
       )}
-
-      <Dialog open={showDialog} onClose={() => setShowDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 600, color: '#8b5cf6' }}>Add Time Block</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-            <TextField
-              fullWidth
-              label="Activity"
-              value={newBlock.activity}
-              onChange={(e) => setNewBlock({ ...newBlock, activity: e.target.value })}
-              placeholder="e.g., CSC 453 Lecture"
-            />
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <TextField
-                fullWidth
-                label="Start Time"
-                type="time"
-                value={newBlock.startTime}
-                onChange={(e) => setNewBlock({ ...newBlock, startTime: e.target.value })}
-                InputLabelProps={{ shrink: true }}
-              />
-              <TextField
-                fullWidth
-                label="End Time"
-                type="time"
-                value={newBlock.endTime}
-                onChange={(e) => setNewBlock({ ...newBlock, endTime: e.target.value })}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Box>
-            <FormControl fullWidth>
-              <InputLabel>Type</InputLabel>
-              <Select
-                value={newBlock.type}
-                label="Type"
-                onChange={(e) => setNewBlock({ ...newBlock, type: e.target.value as any })}
-              >
-                <MenuItem value="class">{getTypeEmoji('class')} Class</MenuItem>
-                <MenuItem value="study">{getTypeEmoji('study')} Study</MenuItem>
-                <MenuItem value="break">{getTypeEmoji('break')} Break</MenuItem>
-                <MenuItem value="personal">{getTypeEmoji('personal')} Personal</MenuItem>
-                <MenuItem value="commute">{getTypeEmoji('commute')} Commute</MenuItem>
-                <MenuItem value="meal">{getTypeEmoji('meal')} Meal</MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleAddBlock} sx={{ backgroundColor: '#8b5cf6' }}>
-            Add Block
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
-    </DndProvider>
   );
 }
