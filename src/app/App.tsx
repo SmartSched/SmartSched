@@ -1,8 +1,12 @@
 import { ReactNode } from 'react';
 import { ThemeProvider, createTheme, CssBaseline, Box, Container, AppBar, Toolbar, Typography, Button } from '@mui/material';
 import { BrowserRouter, Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router';
+import { AccountCircle } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './lib/AuthContext';
+import { ProfileProvider, useProfile } from './lib/ProfileContext';
 import { HomePage } from './components/HomePage';
+import { SurveyPage } from './components/SurveyPage';
+import { ProfilePage } from './components/ProfilePage';
 import { TaskList } from './components/TaskList';
 import { DailyPlanner } from './components/DailyPlanner';
 import { DayReflection } from './components/DayReflection';
@@ -54,10 +58,17 @@ const theme = createTheme({
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const { profile, loading: profileLoading, error: profileError } = useProfile();
   const location = useLocation();
 
   if (loading) return null;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
+  if (profileLoading) return null;
+  // New students take the survey before anything else. If the profile couldn't be loaded
+  // (e.g. server down), let them through rather than trapping them on the survey.
+  if (!profileError && !profile?.survey && location.pathname !== '/survey') {
+    return <Navigate to="/survey" replace />;
+  }
 
   return <>{children}</>;
 }
@@ -72,7 +83,9 @@ function NavAuthControls() {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <Typography variant="body2" sx={{ color: '#6b7280' }}>{user.email}</Typography>
+      <Button component={Link} to="/profile" startIcon={<AccountCircle />} sx={{ color: '#6b7280', fontWeight: 400 }}>
+        {user.email}
+      </Button>
       <Button
         onClick={async () => {
           await signOut();
@@ -111,6 +124,8 @@ function AppShell() {
           <Route path="/schedule" element={<RequireAuth><TaskList /></RequireAuth>} />
           <Route path="/planner" element={<RequireAuth><DailyPlanner /></RequireAuth>} />
           <Route path="/reflection" element={<RequireAuth><DayReflection /></RequireAuth>} />
+          <Route path="/survey" element={<RequireAuth><SurveyPage /></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
         </Routes>
       </Container>
     </Box>
@@ -123,7 +138,9 @@ export default function App() {
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
-          <AppShell />
+          <ProfileProvider>
+            <AppShell />
+          </ProfileProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

@@ -3,3 +3,5 @@ node_modules
 journey.md
 .env
 dist
+.DS_Store
+*.textClipping
