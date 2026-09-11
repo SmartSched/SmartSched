@@ -1,4 +1,11 @@
 
+# TEMP
+
+npx supabase db push
+npm install && npm run dev
+cd server && npm install && npm start
+
+
 # SmartSched  
 ## Student Life Scheduler Built for Balance
 
