@@ -33,3 +33,8 @@ export async function apiPatch(path: string, body: unknown) {
   if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
   return res.json();
 }
+
+export async function apiDelete(path: string) {
+  const res = await fetch(`${API_URL}${path}`, { method: 'DELETE', headers: await authHeaders() });
+  if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
+}

@@ -42,23 +42,55 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
 
 app.post('/api/tasks', requireAuth, async (req, res) => {
   const { title, description, type, priority, due_date, estimated_time } = req.body;
+  if (typeof title !== 'string' || !title.trim()) {
+    return res.status(400).json({ error: 'Title is required' });
+  }
   const { data, error } = await req.supabase
     .from('tasks')
-    .insert({ user_id: req.userId, title, description, type, priority, due_date, estimated_time })
+    .insert({ user_id: req.userId, title: title.trim(), description, type, priority, due_date, estimated_time })
     .select();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data[0]);
 });
 
+const EDITABLE_TASK_FIELDS = ['title', 'description', 'type', 'priority', 'due_date', 'estimated_time', 'completed'];
+
 app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
-  const { completed } = req.body;
+  const updates = {};
+  for (const field of EDITABLE_TASK_FIELDS) {
+    if (field in req.body) updates[field] = req.body[field];
+  }
+  if ('title' in updates) {
+    if (typeof updates.title !== 'string' || !updates.title.trim()) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
+    updates.title = updates.title.trim();
+  }
+  if ('completed' in updates) {
+    updates.completed_at = updates.completed ? new Date().toISOString() : null;
+  }
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'No fields to update' });
+  }
   const { data, error } = await req.supabase
     .from('tasks')
-    .update({ completed, completed_at: completed ? new Date().toISOString() : null })
+    .update(updates)
     .eq('id', req.params.id)
     .select();
   if (error) return res.status(500).json({ error: error.message });
+  if (data.length === 0) return res.status(404).json({ error: 'Task not found' });
   res.json(data[0]);
+});
+
+app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
+  const { data, error } = await req.supabase
+    .from('tasks')
+    .delete()
+    .eq('id', req.params.id)
+    .select();
+  if (error) return res.status(500).json({ error: error.message });
+  if (data.length === 0) return res.status(404).json({ error: 'Task not found' });
+  res.status(204).end();
 });
 
 app.get('/api/habits', requireAuth, async (req, res) => {
