@@ -2,12 +2,25 @@ import { Card, CardContent, Typography, Box, Grid } from '@mui/material';
 import { CalendarMonth, Schedule, NightsStay } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { Link } from 'react-router';
-
-const studentName = 'Student';
-const tasksCompleted = 1;
-const totalTasks = 4;
+import { useEffect, useState } from 'react';
+import { useAuth } from '../lib/AuthContext';
+import { apiGet } from '../lib/api';
+import type { Task } from './TaskList'; // adjust path if TaskList lives elsewhere
 
 export function HomePage() {
+  const { user, profile } = useAuth();
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    apiGet('/api/tasks')
+      .then(setTasks)
+      .catch(() => {}); // homepage stays silent on error; TaskList surfaces it
+  }, [user]);
+
+  const tasksCompleted = tasks.filter((t) => t.completed).length;
+  const totalTasks = tasks.length;
+
   const greeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -15,11 +28,13 @@ export function HomePage() {
     return 'Good evening';
   };
 
+  const displayName = profile?.name || 'there';
+
   return (
     <Box sx={{ maxWidth: '900px', mx: 'auto' }}>
       <Box sx={{ textAlign: 'center', mb: 6, mt: 4 }}>
         <Typography variant="h3" sx={{ fontWeight: 700, color: '#8b5cf6', mb: 1 }}>
-          {greeting()}, {studentName}!
+          {greeting()}, {displayName}!
         </Typography>
         <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 400, mb: 3 }}>
           {format(new Date(), 'EEEE, MMMM d, yyyy')}
