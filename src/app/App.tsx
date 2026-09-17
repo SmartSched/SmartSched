@@ -11,6 +11,7 @@ import { TaskList } from './components/TaskList';
 import { DailyPlanner } from './components/DailyPlanner';
 import { DayReflection } from './components/DayReflection';
 import { AuthPage } from './components/AuthPage';
+import { ResetPasswordPage } from './components/ResetPasswordPage';
 
 const theme = createTheme({
   palette: {
@@ -124,6 +125,7 @@ function AppShell() {
           <Route path="/schedule" element={<RequireAuth><TaskList /></RequireAuth>} />
           <Route path="/planner" element={<RequireAuth><DailyPlanner /></RequireAuth>} />
           <Route path="/reflection" element={<RequireAuth><DayReflection /></RequireAuth>} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/survey" element={<RequireAuth><SurveyPage /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
         </Routes>
