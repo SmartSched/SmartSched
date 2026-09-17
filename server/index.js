@@ -181,7 +181,7 @@ app.post('/api/habits', requireAuth, async (req, res) => {
   res.status(201).json(data[0]);
 });
 
-const TIME_BLOCK_TYPES = ['class', 'study', 'break', 'personal', 'commute', 'meal'];
+const TIME_BLOCK_TYPES = ['class', 'study', 'break', 'personal', 'commute', 'meal', 'work'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 
@@ -216,11 +216,21 @@ function validateTimeBlock(input) {
 
 app.get('/api/time-blocks', requireAuth, async (req, res) => {
   let query = req.supabase.from('time_blocks').select('*');
+
   if (req.query.date !== undefined) {
     if (!isValidDate(req.query.date)) return res.status(400).json({ error: 'Date must be a valid YYYY-MM-DD date' });
     query = query.eq('date', req.query.date);
+  } else if (req.query.start !== undefined || req.query.end !== undefined) {
+    if (!isValidDate(req.query.start) || !isValidDate(req.query.end)) {
+      return res.status(400).json({ error: 'start and end must both be valid YYYY-MM-DD dates' });
+    }
+    if (req.query.end < req.query.start) {
+      return res.status(400).json({ error: 'end must be on or after start' });
+    }
+    query = query.gte('date', req.query.start).lte('date', req.query.end);
   }
-  const { data, error } = await query.order('start_time', { ascending: true });
+
+  const { data, error } = await query.order('date', { ascending: true }).order('start_time', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });

@@ -20,9 +20,11 @@ import {
   Snackbar,
   Alert,
   Link as MuiLink,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import { Add, ChevronLeft, ChevronRight } from '@mui/icons-material';
-import { addDays, format, parseISO } from 'date-fns';
+import { addDays, format, parseISO, startOfWeek } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
@@ -33,15 +35,17 @@ export interface TimeBlock {
   start_time: string;
   end_time: string;
   activity: string;
-  type: 'class' | 'study' | 'break' | 'personal' | 'commute' | 'meal';
+  type: 'class' | 'study' | 'break' | 'personal' | 'commute' | 'meal' | 'work';
 }
 
 type BlockPayload = Omit<TimeBlock, 'id'>;
+type ViewMode = 'day' | 'week';
 
 const HOUR_HEIGHT = 64; // px per hour on the grid
 const MIN_BLOCK_HEIGHT = 26; // px, so very short blocks stay readable and clickable
 const DEFAULT_START_HOUR = 7;
 const DEFAULT_END_HOUR = 22; // grid runs until 10 PM unless a block goes later
+const WEEK_STARTS_ON = 0; // 0 = Sunday
 
 function todayIso() {
   return format(new Date(), 'yyyy-MM-dd');
@@ -67,6 +71,16 @@ function formatDay(date: string) {
   return format(day, day.getFullYear() === new Date().getFullYear() ? 'EEEE, MMMM d' : 'EEEE, MMMM d, yyyy');
 }
 
+function formatWeekRange(weekStart: Date) {
+  const weekEnd = addDays(weekStart, 6);
+  const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+  const sameYear = weekStart.getFullYear() === weekEnd.getFullYear();
+  const startLabel = format(weekStart, sameMonth ? 'MMM d' : 'MMM d');
+  const endLabel = format(weekEnd, sameYear ? (sameMonth ? 'd' : 'MMM d') : 'MMM d, yyyy');
+  const year = sameYear ? `, ${weekStart.getFullYear()}` : '';
+  return `${startLabel} – ${endLabel}${year}`;
+}
+
 const getTypeColor = (type: string) => {
   switch (type) {
     case 'class':
@@ -81,6 +95,8 @@ const getTypeColor = (type: string) => {
       return '#f59e0b';
     case 'meal':
       return '#06b6d4';
+    case 'work':
+      return '#64748b';
     default:
       return '#6b7280';
   }
@@ -164,7 +180,6 @@ function BlockForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel, 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // HH:MM strings compare correctly as text.
   const endBeforeStart = values.start_time !== '' && values.end_time !== '' && values.end_time <= values.start_time;
 
   const handleSubmit = async (e: FormEvent) => {
@@ -244,6 +259,7 @@ function BlockForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel, 
           <MenuItem value="personal">Personal</MenuItem>
           <MenuItem value="commute">Commute</MenuItem>
           <MenuItem value="meal">Meal</MenuItem>
+          <MenuItem value="work">Work</MenuItem>
         </Select>
       </FormControl>
       {error && (
@@ -274,8 +290,68 @@ function BlockForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel, 
   );
 }
 
+// Shared between the day view (one wide column) and week view (7 narrow columns) so both
+// reuse the same duration-based sizing, colors, and click behavior.
+interface TimeBlockItemProps {
+  block: TimeBlock;
+  column: number;
+  columns: number;
+  startHour: number;
+  dense?: boolean;
+  onClick: () => void;
+}
+
+function TimeBlockItem({ block, column, columns, startHour, dense, onClick }: TimeBlockItemProps) {
+  const start = toMinutes(block.start_time);
+  const end = toMinutes(block.end_time);
+  const top = ((start - startHour * 60) / 60) * HOUR_HEIGHT;
+  const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, MIN_BLOCK_HEIGHT);
+  const compact = height < 48;
+  const color = getTypeColor(block.type);
+  const timeRange = `${formatTime(block.start_time)} – ${formatTime(block.end_time)}`;
+  const gap = dense ? 2 : 4;
+
+  return (
+    <ButtonBase
+      onClick={onClick}
+      aria-label={`Edit ${block.activity}, ${timeRange}`}
+      sx={{
+        position: 'absolute',
+        top,
+        height,
+        left: `calc(${(column * 100) / columns}% + ${gap}px)`,
+        width: `calc(${100 / columns}% - ${gap * 2}px)`,
+        px: dense ? 0.5 : 1.25,
+        py: compact ? 0 : dense ? 0.25 : 0.75,
+        backgroundColor: color + '20',
+        border: `2px solid ${color}`,
+        borderRadius: dense ? '6px' : '10px',
+        display: 'flex',
+        flexDirection: compact ? 'row' : 'column',
+        alignItems: compact ? 'center' : 'flex-start',
+        justifyContent: 'flex-start',
+        gap: compact ? 1 : 0,
+        overflow: 'hidden',
+        textAlign: 'left',
+        boxSizing: 'border-box',
+        '&:hover': { backgroundColor: color + '35' },
+      }}
+    >
+      <Typography variant={dense ? 'caption' : 'body2'} noWrap sx={{ fontWeight: 600, color, minWidth: 0 }}>
+        {block.activity}
+      </Typography>
+      {!dense && (
+        <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
+          {timeRange}
+        </Typography>
+      )}
+    </ButtonBase>
+  );
+}
+
 export function DailyPlanner() {
   const { user } = useAuth();
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [loading, setLoading] = useState(true);
@@ -286,25 +362,46 @@ export function DailyPlanner() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const weekStart = useMemo(
+    () => startOfWeek(parseISO(selectedDate), { weekStartsOn: WEEK_STARTS_ON }),
+    [selectedDate]
+  );
+  const weekDates = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => format(addDays(weekStart, i), 'yyyy-MM-dd')),
+    [weekStart]
+  );
+
   useEffect(() => {
     if (!user) {
       setLoading(false);
       return;
     }
-    // Ignore a slow response for a day the user has already clicked past.
     let cancelled = false;
     setLoading(true);
     setError(null);
-    apiGet(`/api/time-blocks?date=${selectedDate}`)
+
+    const query =
+      viewMode === 'day'
+        ? `date=${selectedDate}`
+        : `start=${weekDates[0]}&end=${weekDates[6]}`;
+
+    apiGet(`/api/time-blocks?${query}`)
       .then((data) => !cancelled && setTimeBlocks(data))
       .catch((err) => !cancelled && setError(err.message))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [user, selectedDate]);
+  }, [user, viewMode, selectedDate, weekDates]);
 
   const placedBlocks = useMemo(() => layoutBlocks(timeBlocks), [timeBlocks]);
+  const blocksByDate = useMemo(() => {
+    const map = new Map<string, TimeBlock[]>();
+    for (const block of timeBlocks) {
+      map.set(block.date, [...(map.get(block.date) ?? []), block]);
+    }
+    return map;
+  }, [timeBlocks]);
 
   // Widen the grid past 7 AM–10 PM when a block starts earlier or ends later.
   const startHour = Math.min(DEFAULT_START_HOUR, ...timeBlocks.map((b) => Math.floor(toMinutes(b.start_time) / 60)));
@@ -315,12 +412,22 @@ export function DailyPlanner() {
     setSelectedDate((current) => format(addDays(parseISO(current), days), 'yyyy-MM-dd'));
   };
 
-  // A block saved to another day takes the view to that day, so it doesn't seem to vanish.
+  const changeWeek = (weeks: number) => {
+    setSelectedDate((current) => format(addDays(parseISO(current), weeks * 7), 'yyyy-MM-dd'));
+  };
+
+  const goToPrevious = () => (viewMode === 'day' ? changeDay(-1) : changeWeek(-1));
+  const goToNext = () => (viewMode === 'day' ? changeDay(1) : changeWeek(1));
+
+  // A block saved to another day takes the view to that day (in day mode), so it doesn't seem to vanish.
   const showSavedBlock = (saved: TimeBlock) => {
-    if (saved.date === selectedDate) {
+    if (viewMode === 'week' && weekDates.includes(saved.date)) {
+      setTimeBlocks((current) => [...current.filter((b) => b.id !== saved.id), saved]);
+    } else if (saved.date === selectedDate) {
       setTimeBlocks((current) => [...current.filter((b) => b.id !== saved.id), saved]);
     } else {
       setSelectedDate(saved.date);
+      if (viewMode === 'week') setViewMode('day');
     }
   };
 
@@ -360,34 +467,50 @@ export function DailyPlanner() {
   }
 
   const isToday = selectedDate === todayIso();
+  const isCurrentWeek = weekDates.includes(todayIso());
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
         <Typography variant="h5" sx={{ fontWeight: 700, color: '#8b5cf6' }}>
-          Daily Schedule
+          {viewMode === 'day' ? 'Daily Schedule' : 'Weekly Schedule'}
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => setShowForm(!showForm)}
-          sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
-        >
-          Add Time Block
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            size="small"
+            onChange={(_, newMode) => newMode && setViewMode(newMode)}
+          >
+            <ToggleButton value="day">Day</ToggleButton>
+            <ToggleButton value="week">Week</ToggleButton>
+          </ToggleButtonGroup>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => setShowForm(!showForm)}
+            sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
+          >
+            Add Time Block
+          </Button>
+        </Box>
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-        <IconButton aria-label="Previous day" onClick={() => changeDay(-1)}>
+        <IconButton aria-label={viewMode === 'day' ? 'Previous day' : 'Previous week'} onClick={goToPrevious}>
           <ChevronLeft />
         </IconButton>
         <Typography variant="h6" sx={{ fontWeight: 600, minWidth: { sm: 260 }, textAlign: 'center' }}>
-          {formatDay(selectedDate)}
+          {viewMode === 'day' ? formatDay(selectedDate) : formatWeekRange(weekStart)}
         </Typography>
-        <IconButton aria-label="Next day" onClick={() => changeDay(1)}>
+        <IconButton aria-label={viewMode === 'day' ? 'Next day' : 'Next week'} onClick={goToNext}>
           <ChevronRight />
         </IconButton>
-        <Button size="small" onClick={() => setSelectedDate(todayIso())} disabled={isToday}>
+        <Button
+          size="small"
+          onClick={() => setSelectedDate(todayIso())}
+          disabled={viewMode === 'day' ? isToday : isCurrentWeek}
+        >
           Today
         </Button>
       </Box>
@@ -396,7 +519,7 @@ export function DailyPlanner() {
         <Card sx={{ mb: 3, borderRadius: '16px' }}>
           <CardContent>
             <BlockForm
-              initial={emptyForm(selectedDate)}
+              initial={emptyForm(viewMode === 'day' ? selectedDate : todayIso())}
               submitLabel="Add Block"
               submittingLabel="Adding..."
               onSubmit={handleAddBlock}
@@ -416,7 +539,7 @@ export function DailyPlanner() {
         <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
           Loading...
         </Typography>
-      ) : (
+      ) : viewMode === 'day' ? (
         <Card sx={{ borderRadius: '16px' }}>
           <CardContent>
             {timeBlocks.length === 0 && (
@@ -438,48 +561,76 @@ export function DailyPlanner() {
                 {hours.map((hour, index) => (
                   <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? '1px dashed #e5e7eb' : 'none' }} />
                 ))}
-                {placedBlocks.map(({ block, column, columns }) => {
-                  const start = toMinutes(block.start_time);
-                  const end = toMinutes(block.end_time);
-                  const top = ((start - startHour * 60) / 60) * HOUR_HEIGHT;
-                  const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, MIN_BLOCK_HEIGHT);
-                  const compact = height < 48;
-                  const color = getTypeColor(block.type);
-                  const timeRange = `${formatTime(block.start_time)} – ${formatTime(block.end_time)}`;
+                {placedBlocks.map(({ block, column, columns }) => (
+                  <TimeBlockItem
+                    key={block.id}
+                    block={block}
+                    column={column}
+                    columns={columns}
+                    startHour={startHour}
+                    onClick={() => setEditingBlock(block)}
+                  />
+                ))}
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card sx={{ borderRadius: '16px' }}>
+          <CardContent sx={{ overflowX: 'auto' }}>
+            <Box sx={{ minWidth: 780 }}>
+              <Box sx={{ display: 'flex' }}>
+                <Box sx={{ width: '56px', flexShrink: 0 }} />
+                {weekDates.map((date) => {
+                  const day = parseISO(date);
+                  const isDayToday = date === todayIso();
                   return (
-                    <ButtonBase
-                      key={block.id}
-                      onClick={() => setEditingBlock(block)}
-                      aria-label={`Edit ${block.activity}, ${timeRange}`}
-                      sx={{
-                        position: 'absolute',
-                        top,
-                        height,
-                        left: `calc(${(column * 100) / columns}% + 4px)`,
-                        width: `calc(${100 / columns}% - 8px)`,
-                        px: 1.25,
-                        py: compact ? 0 : 0.75,
-                        backgroundColor: color + '20',
-                        border: `2px solid ${color}`,
-                        borderRadius: '10px',
-                        display: 'flex',
-                        flexDirection: compact ? 'row' : 'column',
-                        alignItems: compact ? 'center' : 'flex-start',
-                        justifyContent: 'flex-start',
-                        gap: compact ? 1 : 0,
-                        overflow: 'hidden',
-                        textAlign: 'left',
-                        boxSizing: 'border-box',
-                        '&:hover': { backgroundColor: color + '35' },
-                      }}
+                    <Box key={date} sx={{ flex: 1, textAlign: 'center', pb: 1 }}>
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 700, color: isDayToday ? '#8b5cf6' : 'text.primary' }}
+                      >
+                        {format(day, 'EEE')}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: isDayToday ? '#8b5cf6' : 'text.secondary' }}>
+                        {format(day, 'd')}
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+              <Box sx={{ display: 'flex' }}>
+                <Box sx={{ width: '56px', flexShrink: 0 }}>
+                  {hours.map((hour) => (
+                    <Box key={hour} sx={{ height: HOUR_HEIGHT, pr: 1, pt: 0.5 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                        {formatHour(hour)}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+                {weekDates.map((date) => {
+                  const dayBlocks = layoutBlocks(blocksByDate.get(date) ?? []);
+                  return (
+                    <Box
+                      key={date}
+                      sx={{ flex: 1, position: 'relative', borderLeft: '1px solid #e5e7eb' }}
                     >
-                      <Typography variant="body2" noWrap sx={{ fontWeight: 600, color, minWidth: 0 }}>
-                        {block.activity}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
-                        {timeRange}
-                      </Typography>
-                    </ButtonBase>
+                      {hours.map((hour, index) => (
+                        <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? '1px dashed #e5e7eb' : 'none' }} />
+                      ))}
+                      {dayBlocks.map(({ block, column, columns }) => (
+                        <TimeBlockItem
+                          key={block.id}
+                          block={block}
+                          column={column}
+                          columns={columns}
+                          startHour={startHour}
+                          dense
+                          onClick={() => setEditingBlock(block)}
+                        />
+                      ))}
+                    </Box>
                   );
                 })}
               </Box>
