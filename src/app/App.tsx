@@ -1,7 +1,24 @@
-import { ReactNode } from 'react';
-import { ThemeProvider, createTheme, CssBaseline, Box, Container, AppBar, Toolbar, Typography, Button } from '@mui/material';
+import { ReactNode, useState } from 'react';
+import {
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  Box,
+  Container,
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  IconButton,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemText,
+  Divider,
+  useMediaQuery,
+} from '@mui/material';
 import { BrowserRouter, Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router';
-import { AccountCircle } from '@mui/icons-material';
+import { AccountCircle, Menu as MenuIcon } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ProfileProvider, useProfile } from './lib/ProfileContext';
 import { HomePage } from './components/HomePage';
@@ -57,6 +74,13 @@ const theme = createTheme({
   },
 });
 
+const NAV_LINKS = [
+  { to: '/', label: 'Home' },
+  { to: '/schedule', label: 'Schedule' },
+  { to: '/planner', label: 'Planner' },
+  { to: '/reflection', label: 'Reflection' },
+];
+
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const { profile, loading: profileLoading, error: profileError } = useProfile();
@@ -65,8 +89,6 @@ function RequireAuth({ children }: { children: ReactNode }) {
   if (loading) return null;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
   if (profileLoading) return null;
-  // New students take the survey before anything else. If the profile couldn't be loaded
-  // (e.g. server down), let them through rather than trapping them on the survey.
   if (!profileError && !profile?.survey && location.pathname !== '/survey') {
     return <Navigate to="/survey" replace />;
   }
@@ -74,22 +96,33 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function NavAuthControls() {
+function NavAuthControls({ onNavigate }: { onNavigate?: () => void }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
   if (!user) {
-    return <Button component={Link} to="/auth" sx={{ color: '#8b5cf6' }}>Log In / Sign Up</Button>;
+    return (
+      <Button component={Link} to="/auth" onClick={onNavigate} sx={{ color: '#8b5cf6' }}>
+        Log In / Sign Up
+      </Button>
+    );
   }
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <Button component={Link} to="/profile" startIcon={<AccountCircle />} sx={{ color: '#6b7280', fontWeight: 400 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      <Button
+        component={Link}
+        to="/profile"
+        onClick={onNavigate}
+        startIcon={<AccountCircle />}
+        sx={{ color: '#6b7280', fontWeight: 400 }}
+      >
         {user.email}
       </Button>
       <Button
         onClick={async () => {
           await signOut();
+          onNavigate?.();
           navigate('/auth');
         }}
         sx={{ color: '#8b5cf6' }}
@@ -101,31 +134,63 @@ function NavAuthControls() {
 }
 
 function AppShell() {
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: '#ffffff' }}>
       <AppBar position="static" elevation={0} sx={{ backgroundColor: 'white', borderBottom: '2px solid #e9d5ff' }}>
-        <Toolbar sx={{ flexWrap: 'wrap', gap: 1 }}>
+        <Toolbar sx={{ gap: 1 }}>
           <Typography variant="h5" sx={{ flexGrow: 1, color: '#8b5cf6', fontWeight: 700 }}>
             StudyBalance
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Button component={Link} to="/" sx={{ color: '#8b5cf6' }}>Home</Button>
-            <Button component={Link} to="/schedule" sx={{ color: '#8b5cf6' }}>Schedule</Button>
-            <Button component={Link} to="/planner" sx={{ color: '#8b5cf6' }}>Planner</Button>
-            <Button component={Link} to="/reflection" sx={{ color: '#8b5cf6' }}>Reflection</Button>
-            <NavAuthControls />
-          </Box>
+
+          {isMobile ? (
+            <IconButton aria-label="Open menu" onClick={() => setDrawerOpen(true)} sx={{ color: '#8b5cf6' }}>
+              <MenuIcon />
+            </IconButton>
+          ) : (
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+              {NAV_LINKS.map((link) => (
+                <Button key={link.to} component={Link} to={link.to} sx={{ color: '#8b5cf6' }}>
+                  {link.label}
+                </Button>
+              ))}
+              <NavAuthControls />
+            </Box>
+          )}
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+        <Box sx={{ width: 260, pt: 2 }} role="presentation">
+          <List>
+            {NAV_LINKS.map((link) => (
+              <ListItemButton
+                key={link.to}
+                component={Link}
+                to={link.to}
+                onClick={() => setDrawerOpen(false)}
+              >
+                <ListItemText primary={link.label} />
+              </ListItemButton>
+            ))}
+          </List>
+          <Divider />
+          <Box sx={{ p: 2 }}>
+            <NavAuthControls onNavigate={() => setDrawerOpen(false)} />
+          </Box>
+        </Box>
+      </Drawer>
+
+      <Container maxWidth="xl" sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/" element={<RequireAuth><HomePage /></RequireAuth>} />
           <Route path="/schedule" element={<RequireAuth><TaskList /></RequireAuth>} />
           <Route path="/planner" element={<RequireAuth><DailyPlanner /></RequireAuth>} />
           <Route path="/reflection" element={<RequireAuth><DayReflection /></RequireAuth>} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/survey" element={<RequireAuth><SurveyPage /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
         </Routes>

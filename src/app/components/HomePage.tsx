@@ -80,7 +80,7 @@ export function HomePage() {
       </Box>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <Card
             component={Link}
             to="/schedule"
@@ -122,7 +122,7 @@ export function HomePage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <Card
             component={Link}
             to="/planner"
@@ -164,7 +164,7 @@ export function HomePage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <Card
             component={Link}
             to="/reflection"
