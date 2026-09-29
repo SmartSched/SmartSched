@@ -279,7 +279,22 @@ app.delete('/api/time-blocks/:id', requireAuth, async (req, res) => {
   res.status(204).end();
 });
 
+const REFLECTION_KEYS = ['productivity', 'mood', 'energy', 'sleep'];
+
+// Returns { ratings } with exactly the four known keys, or { error } for the first one that isn't rated 1-5.
+function validateRatings(input) {
+  if (!input || typeof input !== 'object') return { error: 'Ratings are required' };
+  const ratings = {};
+  for (const key of REFLECTION_KEYS) {
+    const value = input[key];
+    if (!Number.isInteger(value) || value < 1 || value > 5) return { error: `Rate ${key} from 1 to 5` };
+    ratings[key] = value;
+  }
+  return { ratings };
+}
+
 app.get('/api/reflections/:date', requireAuth, async (req, res) => {
+  if (!isValidDate(req.params.date)) return res.status(400).json({ error: 'Date must be a valid YYYY-MM-DD date' });
   const { data, error } = await req.supabase
     .from('reflections')
     .select('*')
@@ -290,7 +305,10 @@ app.get('/api/reflections/:date', requireAuth, async (req, res) => {
 });
 
 app.post('/api/reflections', requireAuth, async (req, res) => {
-  const { date, ratings } = req.body;
+  const { date } = req.body;
+  if (!isValidDate(date)) return res.status(400).json({ error: 'Date must be a valid YYYY-MM-DD date' });
+  const { ratings, error: validationError } = validateRatings(req.body.ratings);
+  if (validationError) return res.status(400).json({ error: validationError });
   const { data, error } = await req.supabase
     .from('reflections')
     .upsert({ user_id: req.userId, date, ratings }, { onConflict: 'user_id,date' })
