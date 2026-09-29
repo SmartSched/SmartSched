@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet } from '../lib/api';
 import { useToday } from '../lib/today';
+import { quoteFor } from '../lib/quotes';
 import type { Task } from './TaskList'; // adjust path if TaskList lives elsewhere
 
 export function HomePage() {
@@ -40,6 +41,9 @@ export function HomePage() {
         </Typography>
         <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 400, mb: 3 }}>
           {format(parseISO(today), 'EEEE, MMMM d, yyyy')}
+        </Typography>
+        <Typography variant="body1" sx={{ color: '#7c3aed', fontStyle: 'italic', maxWidth: '600px', mx: 'auto' }}>
+          {quoteFor(today)}
         </Typography>
       </Box>
 
