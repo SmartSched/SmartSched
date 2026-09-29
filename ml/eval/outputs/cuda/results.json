@@ -1,0 +1,344 @@
+{
+  "results": [
+    {
+      "prompt": "01",
+      "scenario": "Light week, 2 tasks",
+      "input_tokens": 945,
+      "output_tokens": 135,
+      "seconds": 7.5,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 60"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 90"
+        ]
+      ],
+      "soft": null
+    },
+    {
+      "prompt": "02",
+      "scenario": "Heavy week, 8 tasks, 3 deadlines",
+      "input_tokens": 1204,
+      "output_tokens": 182,
+      "seconds": 7.7,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 120"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 150"
+        ],
+        [
+          "H7",
+          null,
+          "t3: 45 min accounted for, needs 60"
+        ],
+        [
+          "H7",
+          null,
+          "t4: 0 min accounted for, needs 240"
+        ],
+        [
+          "H7",
+          null,
+          "t5: 0 min accounted for, needs 90"
+        ],
+        [
+          "H7",
+          null,
+          "t6: 0 min accounted for, needs 180"
+        ],
+        [
+          "H7",
+          null,
+          "t7: 0 min accounted for, needs 45"
+        ],
+        [
+          "H7",
+          null,
+          "t8: 0 min accounted for, needs 30"
+        ]
+      ],
+      "soft": null
+    },
+    {
+      "prompt": "03",
+      "scenario": "Exam tomorrow + homework due Friday",
+      "input_tokens": 956,
+      "output_tokens": 134,
+      "seconds": 6.0,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H4",
+          0,
+          "block 1 (t1 2026-09-22 19:00-19:45): ends after the task is due"
+        ],
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 240"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 120"
+        ]
+      ],
+      "soft": null
+    },
+    {
+      "prompt": "04",
+      "scenario": "Work shifts every evening",
+      "input_tokens": 1303,
+      "output_tokens": 188,
+      "seconds": 7.7,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H2",
+          0,
+          "block 1 (t1 2026-09-23 19:00-19:45): overlaps Shift at cafe"
+        ],
+        [
+          "H2",
+          1,
+          "block 2 (t2 2026-09-24 19:00-19:45): overlaps Shift at cafe"
+        ],
+        [
+          "H2",
+          2,
+          "block 3 (t3 2026-09-25 19:00-19:45): overlaps Shift at cafe"
+        ],
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 120"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 150"
+        ],
+        [
+          "H7",
+          null,
+          "t3: 45 min accounted for, needs 90"
+        ],
+        [
+          "H7",
+          null,
+          "t4: 0 min accounted for, needs 60"
+        ]
+      ],
+      "soft": null
+    },
+    {
+      "prompt": "05",
+      "scenario": "Low sleep ratings in recent reflections",
+      "input_tokens": 1018,
+      "output_tokens": 158,
+      "seconds": 7.1,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 120"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 150"
+        ]
+      ],
+      "soft": "pass: 0 block(s) end after 22:00"
+    },
+    {
+      "prompt": "06",
+      "scenario": "\"Full day off\" non-negotiable",
+      "input_tokens": 1039,
+      "output_tokens": 139,
+      "seconds": 5.7,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 120"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 180"
+        ],
+        [
+          "H7",
+          null,
+          "t3: 0 min accounted for, needs 150"
+        ],
+        [
+          "H7",
+          null,
+          "t4: 0 min accounted for, needs 60"
+        ]
+      ],
+      "soft": null
+    },
+    {
+      "prompt": "07",
+      "scenario": "Prefers late-night focus",
+      "input_tokens": 989,
+      "output_tokens": 136,
+      "seconds": 6.3,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 120"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 150"
+        ],
+        [
+          "H7",
+          null,
+          "t3: 0 min accounted for, needs 90"
+        ]
+      ],
+      "soft": "fail: 0% of minutes start at or after 20:00"
+    },
+    {
+      "prompt": "08",
+      "scenario": "25-minute work sessions",
+      "input_tokens": 985,
+      "output_tokens": 158,
+      "seconds": 6.4,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H8",
+          0,
+          "block 1 (t1 2026-09-23 19:00-19:45): 45 min is longer than 25"
+        ],
+        [
+          "H8",
+          1,
+          "block 2 (t2 2026-09-24 19:00-19:45): 45 min is longer than 25"
+        ],
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 100"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 75"
+        ],
+        [
+          "H7",
+          null,
+          "t3: 60 min accounted for, needs 50"
+        ]
+      ],
+      "soft": null
+    },
+    {
+      "prompt": "09",
+      "scenario": "More task time than free time (can't all fit)",
+      "input_tokens": 859,
+      "output_tokens": 131,
+      "seconds": 6.0,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 360"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 240"
+        ],
+        [
+          "H7",
+          null,
+          "t3: 0 min accounted for, needs 180"
+        ],
+        [
+          "H7",
+          null,
+          "t4: 0 min accounted for, needs 120"
+        ]
+      ],
+      "soft": null
+    },
+    {
+      "prompt": "10",
+      "scenario": "Commute between class and work",
+      "input_tokens": 1565,
+      "output_tokens": 135,
+      "seconds": 5.8,
+      "hit_token_limit": false,
+      "valid_json": true,
+      "matches_schema": true,
+      "violations": [
+        [
+          "H2",
+          0,
+          "block 1 (t1 2026-09-22 19:00-19:45): overlaps Bus home"
+        ],
+        [
+          "H7",
+          null,
+          "t1: 45 min accounted for, needs 120"
+        ],
+        [
+          "H7",
+          null,
+          "t2: 45 min accounted for, needs 150"
+        ],
+        [
+          "H7",
+          null,
+          "t3: 0 min accounted for, needs 60"
+        ]
+      ],
+      "soft": null
+    }
+  ]
+}

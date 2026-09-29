@@ -1,0 +1,13 @@
+{
+  "commitments": {
+    "classes": 6
+  },
+  "focus_time": "afternoon",
+  "work_session": "90",
+  "non_negotiables": [
+    "meals",
+    "family"
+  ],
+  "deadline_style": "day_before",
+  "calendar_style": "calendar2"
+}

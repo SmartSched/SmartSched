@@ -5,3 +5,12 @@ journey.md
 dist
 .DS_Store
 *.textClipping
+
+ml/eval.zip
+__pycache__
+ml/csp.zip
+ml/csp/outputs/
+ml/csp/train/
+ml/prefs.zip
+ml/prefs/data/
+ml/prefs/outputs/

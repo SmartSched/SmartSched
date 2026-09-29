@@ -1,0 +1,18 @@
+{
+  "blocks": [
+    {
+      "task": "t1",
+      "date": "2026-09-22",
+      "start": "19:00",
+      "end": "19:45"
+    },
+    {
+      "task": "t2",
+      "date": "2026-09-22",
+      "start": "20:00",
+      "end": "20:45"
+    }
+  ],
+  "unscheduled": [],
+  "note": "Tasks t1 and t2 were combined as they both need studying."
+}

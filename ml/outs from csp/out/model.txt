@@ -1,0 +1,16 @@
+{
+  "picks": [
+    {
+      "id": "c05",
+      "reason": "This candidate has a balanced schedule with moderate focus, decent slack, and a mix of front-loaded and back-to-back blocks. It also avoids late blocks and maximizes early mornings."
+    },
+    {
+      "id": "c050",
+      "reason": "This candidate has a very focused schedule with minimal slack, which aligns well with the student's need for high focus times. The front-loading and consistent study hours make it ideal for the student's preferences."
+    },
+    {
+      "id": "c122",
+      "reason": "This candidate offers a flexible schedule with some overlap but still manages to cover all necessary study sessions without excessive gaps. It balances front loading with occasional breaks, making it suitable for the student's needs."
+    }
+  ]
+}

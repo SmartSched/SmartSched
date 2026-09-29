@@ -1,0 +1,93 @@
+{
+  "scenario": "Light week, 2 tasks",
+  "soft": null,
+  "input": {
+    "now": "2026-09-21T08:00",
+    "week": {
+      "start": "2026-09-21",
+      "end": "2026-09-27"
+    },
+    "available": {
+      "start": "08:00",
+      "end": "23:00"
+    },
+    "day_off": null,
+    "prefs": {
+      "focus_time": "afternoon",
+      "session_minutes": 45,
+      "deadline_style": "steady",
+      "calendar_style": "calendar2"
+    },
+    "fixed": [
+      {
+        "date": "2026-09-21",
+        "start": "10:00",
+        "end": "11:15",
+        "type": "class",
+        "label": "CSC 101"
+      },
+      {
+        "date": "2026-09-23",
+        "start": "10:00",
+        "end": "11:15",
+        "type": "class",
+        "label": "CSC 101"
+      },
+      {
+        "date": "2026-09-25",
+        "start": "10:00",
+        "end": "11:15",
+        "type": "class",
+        "label": "CSC 101"
+      },
+      {
+        "date": "2026-09-22",
+        "start": "13:00",
+        "end": "14:15",
+        "type": "class",
+        "label": "MATH 220"
+      },
+      {
+        "date": "2026-09-24",
+        "start": "13:00",
+        "end": "14:15",
+        "type": "class",
+        "label": "MATH 220"
+      }
+    ],
+    "tasks": [
+      {
+        "id": "t1",
+        "title": "Read chapter 4",
+        "type": "study",
+        "priority": "medium",
+        "due": "2026-09-24T23:59",
+        "minutes": 60
+      },
+      {
+        "id": "t2",
+        "title": "Problem set 2",
+        "type": "homework",
+        "priority": "high",
+        "due": "2026-09-25T23:59",
+        "minutes": 90
+      }
+    ],
+    "recent_ratings": [
+      {
+        "date": "2026-09-19",
+        "productivity": 4,
+        "mood": 4,
+        "energy": 4,
+        "sleep": 4
+      },
+      {
+        "date": "2026-09-20",
+        "productivity": 3,
+        "mood": 4,
+        "energy": 4,
+        "sleep": 4
+      }
+    ]
+  }
+}

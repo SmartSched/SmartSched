@@ -1,0 +1,14 @@
+{
+  "commitments": {
+    "classes": 6,
+    "work": 35
+  },
+  "focus_time": "evening",
+  "work_session": "45",
+  "non_negotiables": [
+    "sleep",
+    "hobby"
+  ],
+  "deadline_style": "steady",
+  "calendar_style": "calendar2"
+}

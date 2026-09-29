@@ -1,0 +1,17 @@
+[
+  {
+    "id": "c050",
+    "reason": "This candidate has a very focused schedule with minimal slack, which aligns well with the student's need for high focus times. The front-loading and consistent study hours make it ideal for the student's preferences.",
+    "source": "ai"
+  },
+  {
+    "id": "c122",
+    "reason": "This candidate offers a flexible schedule with some overlap but still manages to cover all necessary study sessions without excessive gaps. It balances front loading with occasional breaks, making it suitable for the student's needs.",
+    "source": "ai"
+  },
+  {
+    "id": "c183",
+    "reason": "Next best by score.",
+    "source": "score"
+  }
+]

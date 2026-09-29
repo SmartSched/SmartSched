@@ -1,0 +1,206 @@
+{
+  "scenario": "Commute between class and work",
+  "soft": null,
+  "input": {
+    "now": "2026-09-21T08:00",
+    "week": {
+      "start": "2026-09-21",
+      "end": "2026-09-27"
+    },
+    "available": {
+      "start": "08:00",
+      "end": "23:00"
+    },
+    "day_off": null,
+    "prefs": {
+      "focus_time": "afternoon",
+      "session_minutes": 45,
+      "deadline_style": "steady",
+      "calendar_style": "calendar2"
+    },
+    "fixed": [
+      {
+        "date": "2026-09-21",
+        "start": "09:00",
+        "end": "12:00",
+        "type": "class",
+        "label": "Morning classes"
+      },
+      {
+        "date": "2026-09-21",
+        "start": "12:00",
+        "end": "12:45",
+        "type": "commute",
+        "label": "Bus to work"
+      },
+      {
+        "date": "2026-09-21",
+        "start": "12:45",
+        "end": "17:00",
+        "type": "work",
+        "label": "Shift at library"
+      },
+      {
+        "date": "2026-09-21",
+        "start": "17:00",
+        "end": "17:45",
+        "type": "commute",
+        "label": "Bus home"
+      },
+      {
+        "date": "2026-09-23",
+        "start": "09:00",
+        "end": "12:00",
+        "type": "class",
+        "label": "Morning classes"
+      },
+      {
+        "date": "2026-09-23",
+        "start": "12:00",
+        "end": "12:45",
+        "type": "commute",
+        "label": "Bus to work"
+      },
+      {
+        "date": "2026-09-23",
+        "start": "12:45",
+        "end": "17:00",
+        "type": "work",
+        "label": "Shift at library"
+      },
+      {
+        "date": "2026-09-23",
+        "start": "17:00",
+        "end": "17:45",
+        "type": "commute",
+        "label": "Bus home"
+      },
+      {
+        "date": "2026-09-25",
+        "start": "09:00",
+        "end": "12:00",
+        "type": "class",
+        "label": "Morning classes"
+      },
+      {
+        "date": "2026-09-25",
+        "start": "12:00",
+        "end": "12:45",
+        "type": "commute",
+        "label": "Bus to work"
+      },
+      {
+        "date": "2026-09-25",
+        "start": "12:45",
+        "end": "17:00",
+        "type": "work",
+        "label": "Shift at library"
+      },
+      {
+        "date": "2026-09-25",
+        "start": "17:00",
+        "end": "17:45",
+        "type": "commute",
+        "label": "Bus home"
+      },
+      {
+        "date": "2026-09-22",
+        "start": "13:00",
+        "end": "14:15",
+        "type": "class",
+        "label": "MATH 220"
+      },
+      {
+        "date": "2026-09-22",
+        "start": "14:15",
+        "end": "15:00",
+        "type": "commute",
+        "label": "Bus to work"
+      },
+      {
+        "date": "2026-09-22",
+        "start": "15:00",
+        "end": "19:00",
+        "type": "work",
+        "label": "Shift at library"
+      },
+      {
+        "date": "2026-09-22",
+        "start": "19:00",
+        "end": "19:45",
+        "type": "commute",
+        "label": "Bus home"
+      },
+      {
+        "date": "2026-09-24",
+        "start": "13:00",
+        "end": "14:15",
+        "type": "class",
+        "label": "MATH 220"
+      },
+      {
+        "date": "2026-09-24",
+        "start": "14:15",
+        "end": "15:00",
+        "type": "commute",
+        "label": "Bus to work"
+      },
+      {
+        "date": "2026-09-24",
+        "start": "15:00",
+        "end": "19:00",
+        "type": "work",
+        "label": "Shift at library"
+      },
+      {
+        "date": "2026-09-24",
+        "start": "19:00",
+        "end": "19:45",
+        "type": "commute",
+        "label": "Bus home"
+      }
+    ],
+    "tasks": [
+      {
+        "id": "t1",
+        "title": "Problem set 3",
+        "type": "homework",
+        "priority": "high",
+        "due": "2026-09-23T23:59",
+        "minutes": 120
+      },
+      {
+        "id": "t2",
+        "title": "Lab report",
+        "type": "homework",
+        "priority": "high",
+        "due": "2026-09-25T23:59",
+        "minutes": 150
+      },
+      {
+        "id": "t3",
+        "title": "Reading",
+        "type": "study",
+        "priority": "medium",
+        "due": "2026-09-27T23:59",
+        "minutes": 60
+      }
+    ],
+    "recent_ratings": [
+      {
+        "date": "2026-09-19",
+        "productivity": 4,
+        "mood": 4,
+        "energy": 4,
+        "sleep": 4
+      },
+      {
+        "date": "2026-09-20",
+        "productivity": 3,
+        "mood": 4,
+        "energy": 4,
+        "sleep": 4
+      }
+    ]
+  }
+}
