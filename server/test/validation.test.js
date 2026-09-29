@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isValidDate, validateRatings, validateSurvey, validateTimeBlock } from '../validation.js';
+import { isValidDate, isValidTimeSpent, validateRatings, validateSurvey, validateTimeBlock } from '../validation.js';
 
 describe('isValidDate', () => {
   it('accepts real YYYY-MM-DD dates', () => {
@@ -23,7 +23,14 @@ describe('validateTimeBlock', () => {
 
   it('returns a clean block with times as HH:MM:SS', () => {
     expect(validateTimeBlock(valid)).toEqual({
-      block: { activity: 'CSC 453 Lecture', date: '2026-09-29', start_time: '09:30:00', end_time: '10:45:00', type: 'class' },
+      block: {
+        activity: 'CSC 453 Lecture',
+        date: '2026-09-29',
+        start_time: '09:30:00',
+        end_time: '10:45:00',
+        type: 'class',
+        task_id: null,
+      },
     });
   });
 
@@ -38,6 +45,15 @@ describe('validateTimeBlock', () => {
     for (const type of ['class', 'study', 'break', 'personal', 'commute', 'meal', 'work']) {
       expect(validateTimeBlock({ ...valid, type }).block?.type).toBe(type);
     }
+  });
+
+  it('needs a task id on a task block, and drops one from any other type', () => {
+    const taskId = '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b';
+    expect(validateTimeBlock({ ...valid, type: 'task', task_id: taskId }).block?.task_id).toBe(taskId);
+    expect(validateTimeBlock({ ...valid, type: 'task' })).toEqual({ error: 'Pick a task for this block' });
+    expect(validateTimeBlock({ ...valid, type: 'task', task_id: 'not-an-id' })).toEqual({ error: 'Pick a task for this block' });
+    // Changing a task block to study: the merged row still has the old task_id, which must go.
+    expect(validateTimeBlock({ ...valid, type: 'study', task_id: taskId }).block?.task_id).toBeNull();
   });
 
   it('explains the first problem', () => {
@@ -86,6 +102,18 @@ describe('validateSurvey', () => {
 
   it('needs an object', () => {
     expect(validateSurvey(null).error).toBe('Survey answers are required');
+  });
+});
+
+describe('isValidTimeSpent', () => {
+  it('takes whole minutes from 0 up to a week', () => {
+    expect(isValidTimeSpent(0)).toBe(true);
+    expect(isValidTimeSpent(95)).toBe(true);
+    expect(isValidTimeSpent(10080)).toBe(true);
+    expect(isValidTimeSpent(10081)).toBe(false);
+    expect(isValidTimeSpent(-5)).toBe(false);
+    expect(isValidTimeSpent(12.5)).toBe(false);
+    expect(isValidTimeSpent('60')).toBe(false);
   });
 });
 

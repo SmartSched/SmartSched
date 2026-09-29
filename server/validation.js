@@ -48,9 +48,14 @@ export function validateSurvey(input) {
   };
 }
 
-export const TIME_BLOCK_TYPES = ['class', 'study', 'break', 'personal', 'commute', 'meal', 'work'];
+export const TIME_BLOCK_TYPES = ['class', 'study', 'break', 'personal', 'commute', 'meal', 'work', 'task'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value) {
+  return typeof value === 'string' && UUID_PATTERN.test(value);
+}
 
 export function isValidDate(value) {
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false;
@@ -78,7 +83,15 @@ export function validateTimeBlock(input) {
   const end_time = normalizeTime(input.end_time);
   if (end_time <= start_time) return { error: 'End time must be after start time' };
   if (!TIME_BLOCK_TYPES.includes(input.type)) return { error: 'Invalid block type' };
-  return { block: { activity, date: input.date, start_time, end_time, type: input.type } };
+  // Task blocks point at their task; any other type drops a leftover task_id (e.g. after changing the type).
+  if (input.type === 'task' && !isUuid(input.task_id)) return { error: 'Pick a task for this block' };
+  const task_id = input.type === 'task' ? input.task_id : null;
+  return { block: { activity, date: input.date, start_time, end_time, type: input.type, task_id } };
+}
+
+// Minutes a finished task actually took: a whole number from 0 up to a week.
+export function isValidTimeSpent(value) {
+  return Number.isInteger(value) && value >= 0 && value <= 7 * 24 * 60;
 }
 
 export const REFLECTION_KEYS = ['productivity', 'mood', 'energy', 'sleep'];

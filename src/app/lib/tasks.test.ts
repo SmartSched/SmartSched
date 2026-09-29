@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sortTasks, type Task } from './tasks';
+import { estimateRatios, sortTasks, type Task } from './tasks';
 
 function task(id: string, fields: Partial<Task> = {}): Task {
   return {
@@ -13,6 +13,7 @@ function task(id: string, fields: Partial<Task> = {}): Task {
     estimated_time: null,
     completed_at: null,
     created_at: '2026-09-01T12:00:00Z',
+    time_spent: 0,
     ...fields,
   };
 }
@@ -59,5 +60,30 @@ describe('sortTasks', () => {
     const tasks = [task('b', { priority: 'low' }), task('a', { priority: 'high' })];
     sortTasks(tasks);
     expect(tasks.map((t) => t.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('estimateRatios', () => {
+  const done = (id: string, type: Task['type'], estimated_time: number, time_spent: number) =>
+    task(id, { type, estimated_time, time_spent, completed: true, completed_at: '2026-09-28T10:00:00Z' });
+
+  it('compares total time spent with total estimated, per type', () => {
+    const tasks = [done('a', 'homework', 60, 90), done('b', 'homework', 120, 150), done('c', 'study', 30, 30), done('d', 'study', 60, 45)];
+    expect(estimateRatios(tasks)).toEqual({ homework: { ratio: 1.3, count: 2 }, study: { ratio: 0.8, count: 2 } });
+  });
+
+  it('needs at least two finished tasks of a type', () => {
+    expect(estimateRatios([done('a', 'exam', 60, 120)])).toEqual({});
+  });
+
+  it('skips unfinished tasks and ones without an estimate or a recorded time', () => {
+    const tasks = [
+      done('a', 'homework', 60, 90),
+      done('b', 'homework', 60, 90),
+      task('open', { type: 'homework', estimated_time: 60, time_spent: 600 }),
+      done('no-estimate', 'homework', 0, 600),
+      done('no-time', 'homework', 60, 0),
+    ];
+    expect(estimateRatios(tasks)).toEqual({ homework: { ratio: 1.5, count: 2 } });
   });
 });

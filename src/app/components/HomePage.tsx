@@ -1,18 +1,28 @@
-import { Card, CardContent, Typography, Box, Grid } from '@mui/material';
+import { Card, CardContent, Typography, Box, Grid, Button } from '@mui/material';
 import { CalendarMonth, Schedule, NightsStay } from '@mui/icons-material';
-import { format, parseISO } from 'date-fns';
+import { addDays, format, parseISO, startOfWeek } from 'date-fns';
 import { Link } from 'react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet } from '../lib/api';
 import { useToday } from '../lib/today';
 import { quoteFor } from '../lib/quotes';
 import type { Task } from '../lib/tasks';
+import type { TimeBlock } from '../lib/planner';
+import { burnoutWarnings } from '../lib/burnout';
+import { BurnoutBanner } from './BurnoutBanner';
 
 export function HomePage() {
   const { user, profile } = useAuth();
   const today = useToday();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [weekBlocks, setWeekBlocks] = useState<TimeBlock[]>([]);
+
+  // This week as the planner shows it (Sunday to Saturday), plus the next day for Saturday night.
+  const weekDates = useMemo(() => {
+    const start = startOfWeek(parseISO(today), { weekStartsOn: 0 });
+    return Array.from({ length: 7 }, (_, i) => format(addDays(start, i), 'yyyy-MM-dd'));
+  }, [today]);
 
   useEffect(() => {
     if (!user) return;
@@ -20,6 +30,16 @@ export function HomePage() {
       .then(setTasks)
       .catch(() => {}); // homepage stays silent on error; TaskList surfaces it
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const end = format(addDays(parseISO(weekDates[6]), 1), 'yyyy-MM-dd');
+    apiGet(`/api/time-blocks?start=${weekDates[0]}&end=${end}`)
+      .then(setWeekBlocks)
+      .catch(() => {}); // no banner rather than an error on Home
+  }, [user, weekDates]);
+
+  const warnings = useMemo(() => burnoutWarnings(weekBlocks, tasks, weekDates), [weekBlocks, tasks, weekDates]);
 
   const tasksCompleted = tasks.filter((t) => t.completed).length;
   const totalTasks = tasks.length;
@@ -46,6 +66,15 @@ export function HomePage() {
           {quoteFor(today)}
         </Typography>
       </Box>
+
+      <BurnoutBanner
+        warnings={warnings}
+        action={
+          <Button component={Link} to="/planner" color="inherit" size="small">
+            Open planner
+          </Button>
+        }
+      />
 
       <Box
         sx={{

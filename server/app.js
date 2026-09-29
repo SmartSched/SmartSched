@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import ws from 'ws';
 import { createClient } from '@supabase/supabase-js';
-import { isValidDate, validateRatings, validateSurvey, validateTimeBlock } from './validation.js';
+import { isUuid, isValidDate, isValidTimeSpent, validateRatings, validateSurvey, validateTimeBlock } from './validation.js';
 
 // The Express app with every route. index.js starts it; the tests use it directly.
 export const app = express();
@@ -88,7 +88,7 @@ app.post('/api/tasks', requireAuth, async (req, res) => {
   res.status(201).json(data[0]);
 });
 
-const EDITABLE_TASK_FIELDS = ['title', 'description', 'type', 'priority', 'due_date', 'estimated_time', 'completed'];
+const EDITABLE_TASK_FIELDS = ['title', 'description', 'type', 'priority', 'due_date', 'estimated_time', 'completed', 'time_spent'];
 
 app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
   const updates = {};
@@ -100,6 +100,9 @@ app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Title is required' });
     }
     updates.title = updates.title.trim();
+  }
+  if ('time_spent' in updates && !isValidTimeSpent(updates.time_spent)) {
+    return res.status(400).json({ error: 'Time spent must be a whole number of minutes' });
   }
   if ('completed' in updates) {
     updates.completed_at = updates.completed ? new Date().toISOString() : null;
@@ -128,9 +131,31 @@ app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
   res.status(204).end();
 });
 
-app.get('/api/time-blocks', requireAuth, async (req, res) => {
-  let query = req.supabase.from('time_blocks').select('*');
+// Task blocks come back with their task, so the planner can show its title, priority and checkbox.
+const BLOCK_COLUMNS = '*, task:tasks(id, title, priority, type, completed, due_date, estimated_time, time_spent)';
 
+// A task block has to point at one of the user's own tasks. Row-level security hides everyone else's,
+// so "not found" covers both a deleted task and someone else's.
+async function checkTask(req, res, taskId) {
+  const { data, error } = await req.supabase.from('tasks').select('id').eq('id', taskId).maybeSingle();
+  if (error) {
+    serverError(res, error);
+    return false;
+  }
+  if (!data) {
+    res.status(400).json({ error: 'That task no longer exists' });
+    return false;
+  }
+  return true;
+}
+
+app.get('/api/time-blocks', requireAuth, async (req, res) => {
+  let query = req.supabase.from('time_blocks').select(BLOCK_COLUMNS);
+
+  if (req.query.task_id !== undefined) {
+    if (!isUuid(req.query.task_id)) return res.status(400).json({ error: 'task_id must be a task id' });
+    query = query.eq('task_id', req.query.task_id);
+  }
   if (req.query.date !== undefined) {
     if (!isValidDate(req.query.date)) return res.status(400).json({ error: 'Date must be a valid YYYY-MM-DD date' });
     query = query.eq('date', req.query.date);
@@ -152,10 +177,11 @@ app.get('/api/time-blocks', requireAuth, async (req, res) => {
 app.post('/api/time-blocks', requireAuth, async (req, res) => {
   const { block, error: validationError } = validateTimeBlock(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
+  if (block.task_id && !(await checkTask(req, res, block.task_id))) return;
   const { data, error } = await req.supabase
     .from('time_blocks')
     .insert({ user_id: req.userId, ...block })
-    .select();
+    .select(BLOCK_COLUMNS);
   if (error) return serverError(res, error);
   res.status(201).json(data[0]);
 });
@@ -172,11 +198,12 @@ app.patch('/api/time-blocks/:id', requireAuth, async (req, res) => {
 
   const { block, error: validationError } = validateTimeBlock({ ...existing, ...req.body });
   if (validationError) return res.status(400).json({ error: validationError });
+  if (block.task_id && block.task_id !== existing.task_id && !(await checkTask(req, res, block.task_id))) return;
   const { data, error } = await req.supabase
     .from('time_blocks')
     .update(block)
     .eq('id', req.params.id)
-    .select();
+    .select(BLOCK_COLUMNS);
   if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Time block not found' });
   res.json(data[0]);

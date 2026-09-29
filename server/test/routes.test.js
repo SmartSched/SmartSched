@@ -43,6 +43,7 @@ vi.mock('@supabase/supabase-js', () => ({ createClient: () => fake.client }));
 
 const { app } = await import('../app.js');
 const AUTH = { Authorization: 'Bearer test-token' };
+const TASK_ID = '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b';
 
 // The calls made on the one query sent to `table`, e.g. [['insert', {...}], ['select']].
 function callsOn(table) {
@@ -154,6 +155,19 @@ describe('tasks', () => {
     expect(typeof updates.completed_at).toBe('string');
   });
 
+  it('records how long a finished task took, in whole minutes', async () => {
+    fake.state.results = [{ data: [{ id: 't1', time_spent: 95 }], error: null }];
+    const res = await request(app).patch('/api/tasks/t1').set(AUTH).send({ completed: true, time_spent: 95 });
+    expect(res.status).toBe(200);
+    const [, updates] = callsOn('tasks').find(([method]) => method === 'update');
+    expect(updates.time_spent).toBe(95);
+
+    fake.state.queries = [];
+    const bad = await request(app).patch('/api/tasks/t1').set(AUTH).send({ time_spent: -10 });
+    expect(bad.status).toBe(400);
+    expect(fake.state.queries).toHaveLength(0);
+  });
+
   it('says 404 when the task isn\'t there (or isn\'t yours)', async () => {
     const res = await request(app).delete('/api/tasks/missing').set(AUTH);
     expect(res.status).toBe(404);
@@ -183,7 +197,36 @@ describe('time blocks', () => {
     const res = await request(app).post('/api/time-blocks').set(AUTH).send(block);
     expect(res.status).toBe(201);
     const [, row] = callsOn('time_blocks').find(([method]) => method === 'insert');
-    expect(row).toEqual({ user_id: 'user-1', ...block, start_time: '17:00:00', end_time: '18:00:00' });
+    expect(row).toEqual({ user_id: 'user-1', ...block, start_time: '17:00:00', end_time: '18:00:00', task_id: null });
+  });
+
+  it('returns each block with its task attached', async () => {
+    await request(app).get('/api/time-blocks?date=2026-09-29').set(AUTH);
+    const [, columns] = callsOn('time_blocks').find(([method]) => method === 'select');
+    expect(columns).toMatch(/task:tasks\(/);
+  });
+
+  it('filters by task, for adding up the time planned for one', async () => {
+    await request(app).get(`/api/time-blocks?task_id=${TASK_ID}`).set(AUTH);
+    expect(callsOn('time_blocks')).toContainEqual(['eq', 'task_id', TASK_ID]);
+    expect((await request(app).get('/api/time-blocks?task_id=nope').set(AUTH)).status).toBe(400);
+  });
+
+  it('saves a task block only for one of your own tasks', async () => {
+    const taskBlock = { ...block, type: 'task', task_id: TASK_ID };
+    fake.state.results = [{ data: { id: TASK_ID }, error: null }, { data: [{ id: 'b1' }], error: null }];
+    const res = await request(app).post('/api/time-blocks').set(AUTH).send(taskBlock);
+    expect(res.status).toBe(201);
+    expect(callsOn('tasks')).toContainEqual(['eq', 'id', TASK_ID]);
+    const [, row] = callsOn('time_blocks').find(([method]) => method === 'insert');
+    expect(row.task_id).toBe(TASK_ID);
+
+    fake.state.queries = [];
+    fake.state.results = [{ data: null, error: null }];
+    const missing = await request(app).post('/api/time-blocks').set(AUTH).send(taskBlock);
+    expect(missing.status).toBe(400);
+    expect(missing.body.error).toBe('That task no longer exists');
+    expect(fake.state.queries.some((q) => q.table === 'time_blocks')).toBe(false);
   });
 
   it('never reaches the database with an invalid block', async () => {

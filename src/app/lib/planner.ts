@@ -1,12 +1,26 @@
 // Planner logic with no React in it, so it can be unit-tested.
 
+// The task a 'task' block is for, as the server attaches it.
+export interface BlockTask {
+  id: string;
+  title: string;
+  priority: 'low' | 'medium' | 'high';
+  type: 'homework' | 'exam' | 'project' | 'work' | 'study';
+  completed: boolean;
+  due_date: string | null;
+  estimated_time: number | null;
+  time_spent: number;
+}
+
 export interface TimeBlock {
   id: string;
   date: string;
   start_time: string;
   end_time: string;
   activity: string;
-  type: 'class' | 'study' | 'break' | 'personal' | 'commute' | 'meal' | 'work';
+  type: 'class' | 'study' | 'break' | 'personal' | 'commute' | 'meal' | 'work' | 'task';
+  task_id: string | null;
+  task?: BlockTask | null;
 }
 
 export interface PlacedBlock {
@@ -55,4 +69,25 @@ export function layoutBlocks(blocks: TimeBlock[], minVisualMinutes = 0): PlacedB
   }
   closeGroup();
   return placed;
+}
+
+// When a block starts and ends, as local Date objects.
+export function blockTimes(block: Pick<TimeBlock, 'date' | 'start_time' | 'end_time'>) {
+  return {
+    start: new Date(`${block.date}T${block.start_time.slice(0, 5)}`),
+    end: new Date(`${block.date}T${block.end_time.slice(0, 5)}`),
+  };
+}
+
+// Minutes of a task's blocks that have already happened by `now` (a block still going counts up to now).
+// This is the starting guess for "how long did it actually take?".
+export function minutesSoFar(blocks: TimeBlock[], taskId: string, now: Date) {
+  let total = 0;
+  for (const block of blocks) {
+    if (block.task_id !== taskId) continue;
+    const { start, end } = blockTimes(block);
+    const until = Math.min(end.getTime(), now.getTime());
+    if (until > start.getTime()) total += Math.round((until - start.getTime()) / 60_000);
+  }
+  return total;
 }

@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   ButtonBase,
+  Checkbox,
   IconButton,
   TextField,
   Select,
@@ -24,14 +25,19 @@ import {
   ToggleButtonGroup,
 } from '@mui/material';
 import { Add, ChevronLeft, ChevronRight } from '@mui/icons-material';
-import { addDays, format, parseISO, startOfWeek } from 'date-fns';
+import { addDays, format, parseISO, startOfWeek, subDays } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
 import { useSelectedDay } from '../lib/today';
-import { layoutBlocks, toMinutes, type TimeBlock } from '../lib/planner';
+import { layoutBlocks, toMinutes, type BlockTask, type TimeBlock } from '../lib/planner';
+import { burnoutWarnings } from '../lib/burnout';
+import { findOpenSlot, missedTaskBlocks, type Slot } from '../lib/reschedule';
+import type { Task } from '../lib/tasks';
+import { BurnoutBanner } from './BurnoutBanner';
+import { TimeSpentDialog } from './TimeSpentDialog';
 
-type BlockPayload = Omit<TimeBlock, 'id'>;
+type BlockPayload = Omit<TimeBlock, 'id' | 'task'>;
 type ViewMode = 'day' | 'week';
 
 const HOUR_HEIGHT = 64; // px per hour on the grid
@@ -80,6 +86,8 @@ const getTypeColor = (type: string) => {
       return '#06b6d4';
     case 'work':
       return '#64748b';
+    case 'task':
+      return '#4f46e5';
     default:
       return '#6b7280';
   }
@@ -91,10 +99,11 @@ interface BlockFormValues {
   start_time: string; // HH:MM
   end_time: string; // HH:MM
   type: string;
+  task_id: string; // '' unless type is 'task'
 }
 
 function emptyForm(date: string): BlockFormValues {
-  return { activity: '', date, start_time: '09:00', end_time: '10:00', type: 'study' };
+  return { activity: '', date, start_time: '09:00', end_time: '10:00', type: 'study', task_id: '' };
 }
 
 function toFormValues(block: TimeBlock): BlockFormValues {
@@ -104,6 +113,7 @@ function toFormValues(block: TimeBlock): BlockFormValues {
     start_time: block.start_time.slice(0, 5),
     end_time: block.end_time.slice(0, 5),
     type: block.type,
+    task_id: block.task_id ?? '',
   };
 }
 
@@ -111,21 +121,30 @@ interface BlockFormProps {
   initial: BlockFormValues;
   submitLabel: string;
   submittingLabel: string;
+  tasks: Task[];
   onSubmit: (payload: BlockPayload) => Promise<void>;
   onCancel: () => void;
   onDelete?: () => void;
 }
 
-function BlockForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel, onDelete }: BlockFormProps) {
+function BlockForm({ initial, submitLabel, submittingLabel, tasks, onSubmit, onCancel, onDelete }: BlockFormProps) {
   const [values, setValues] = useState(initial);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const endBeforeStart = values.start_time !== '' && values.end_time !== '' && values.end_time <= values.start_time;
+  const isTask = values.type === 'task';
+  // Open tasks, plus this block's own task even if it's been finished since.
+  const taskOptions = tasks.filter((t) => !t.completed || t.id === values.task_id);
+  const pickedTask = tasks.find((t) => t.id === values.task_id);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!values.activity.trim()) {
+    if (isTask && !pickedTask) {
+      setError('Pick the task this time is for.');
+      return;
+    }
+    if (!isTask && !values.activity.trim()) {
       setError('Give the block an activity name.');
       return;
     }
@@ -141,11 +160,13 @@ function BlockForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel, 
     setError(null);
     try {
       await onSubmit({
-        activity: values.activity.trim(),
+        // A task block is named after its task, so it still reads sensibly anywhere the task isn't attached.
+        activity: isTask && pickedTask ? pickedTask.title : values.activity.trim(),
         date: values.date,
         start_time: values.start_time,
         end_time: values.end_time,
         type: values.type as TimeBlock['type'],
+        task_id: isTask ? values.task_id : null,
       });
     } catch (err: any) {
       setError(err.message);
@@ -155,14 +176,49 @@ function BlockForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel, 
 
   return (
     <Box component="form" onSubmit={handleSubmit} noValidate sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <TextField
-        fullWidth
-        label="Activity"
-        value={values.activity}
-        onChange={(e) => setValues({ ...values, activity: e.target.value })}
-        placeholder="e.g., CSC 453 Lecture"
-        autoFocus
-      />
+      <FormControl fullWidth>
+        <InputLabel>Type</InputLabel>
+        <Select value={values.type} label="Type" onChange={(e) => setValues({ ...values, type: e.target.value })}>
+          <MenuItem value="task">Task (time for one of your tasks)</MenuItem>
+          <MenuItem value="class">Class</MenuItem>
+          <MenuItem value="study">Study</MenuItem>
+          <MenuItem value="break">Break</MenuItem>
+          <MenuItem value="personal">Personal</MenuItem>
+          <MenuItem value="commute">Commute</MenuItem>
+          <MenuItem value="meal">Meal</MenuItem>
+          <MenuItem value="work">Work</MenuItem>
+        </Select>
+      </FormControl>
+      {isTask ? (
+        <FormControl fullWidth>
+          <InputLabel>Task</InputLabel>
+          <Select
+            value={values.task_id}
+            label="Task"
+            onChange={(e) => setValues({ ...values, task_id: e.target.value })}
+          >
+            {taskOptions.map((t) => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.title}
+              </MenuItem>
+            ))}
+          </Select>
+          {taskOptions.length === 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+              No open tasks. Add one on the Tasks page first.
+            </Typography>
+          )}
+        </FormControl>
+      ) : (
+        <TextField
+          fullWidth
+          label="Activity"
+          value={values.activity}
+          onChange={(e) => setValues({ ...values, activity: e.target.value })}
+          placeholder="e.g., CSC 453 Lecture"
+          autoFocus
+        />
+      )}
       <TextField
         fullWidth
         label="Date"
@@ -191,18 +247,6 @@ function BlockForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel, 
           slotProps={{ inputLabel: { shrink: true } }}
         />
       </Box>
-      <FormControl fullWidth>
-        <InputLabel>Type</InputLabel>
-        <Select value={values.type} label="Type" onChange={(e) => setValues({ ...values, type: e.target.value })}>
-          <MenuItem value="class">Class</MenuItem>
-          <MenuItem value="study">Study</MenuItem>
-          <MenuItem value="break">Break</MenuItem>
-          <MenuItem value="personal">Personal</MenuItem>
-          <MenuItem value="commute">Commute</MenuItem>
-          <MenuItem value="meal">Meal</MenuItem>
-          <MenuItem value="work">Work</MenuItem>
-        </Select>
-      </FormControl>
       {error && (
         <Typography variant="body2" color="error">
           {error}
@@ -231,6 +275,37 @@ function BlockForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel, 
   );
 }
 
+// How far around today the planner looks for task blocks that were missed, and for room to move them.
+const NEARBY_DAYS = 14;
+const LEFT_KEY = 'smartsched.leftMissedBlocks';
+
+function formatSlot(slot: Pick<Slot, 'date' | 'start_time' | 'end_time'>) {
+  return `${format(parseISO(slot.date), 'EEE, MMM d')}, ${formatTime(slot.start_time)} – ${formatTime(slot.end_time)}`;
+}
+
+function durationText(block: TimeBlock) {
+  const minutes = toMinutes(block.end_time) - toMinutes(block.start_time);
+  return minutes % 60 === 0 ? `${minutes / 60}-hour` : `${minutes}-minute`;
+}
+
+// Missed blocks the user chose to leave where they are, remembered in this browser. Storage can be
+// unavailable (private windows, blocked site data), so every access is guarded.
+function readLeftBlocks(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(LEFT_KEY) ?? '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveLeftBlocks(ids: Set<string>) {
+  try {
+    localStorage.setItem(LEFT_KEY, JSON.stringify([...ids]));
+  } catch {
+    // Not remembered past this visit; the prompt just comes back next time.
+  }
+}
+
 // Shared between the day view (one wide column) and week view (7 narrow columns) so both
 // reuse the same duration-based sizing, colors, and click behavior.
 interface TimeBlockItemProps {
@@ -240,9 +315,10 @@ interface TimeBlockItemProps {
   startHour: number;
   dense?: boolean;
   onClick: () => void;
+  onToggleTask: (block: TimeBlock) => void;
 }
 
-function TimeBlockItem({ block, column, columns, startHour, dense, onClick }: TimeBlockItemProps) {
+function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onToggleTask }: TimeBlockItemProps) {
   const start = toMinutes(block.start_time);
   const end = toMinutes(block.end_time);
   const top = ((start - startHour * 60) / 60) * HOUR_HEIGHT;
@@ -251,42 +327,70 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick }: Ti
   const color = getTypeColor(block.type);
   const timeRange = `${formatTime(block.start_time)} – ${formatTime(block.end_time)}`;
   const gap = dense ? 2 : 4;
+  // Task blocks show the task's current title and priority, and a checkbox that completes the task.
+  const task = block.type === 'task' ? block.task : null;
+  const title = task?.title ?? block.activity;
 
   return (
-    <ButtonBase
-      onClick={onClick}
-      aria-label={`Edit ${block.activity}, ${timeRange}`}
+    <Box
       sx={{
         position: 'absolute',
         top,
         height,
         left: `calc(${(column * 100) / columns}% + ${gap}px)`,
         width: `calc(${100 / columns}% - ${gap * 2}px)`,
-        px: dense ? 0.5 : 1.25,
-        py: compact ? 0 : dense ? 0.25 : 0.75,
         backgroundColor: color + '20',
         border: `2px solid ${color}`,
         borderRadius: dense ? '6px' : '10px',
         display: 'flex',
-        flexDirection: compact ? 'row' : 'column',
         alignItems: compact ? 'center' : 'flex-start',
-        justifyContent: 'flex-start',
-        gap: compact ? 1 : 0,
         overflow: 'hidden',
-        textAlign: 'left',
         boxSizing: 'border-box',
+        opacity: task?.completed ? 0.6 : 1,
         '&:hover': { backgroundColor: color + '35' },
       }}
     >
-      <Typography variant={dense ? 'caption' : 'body2'} noWrap sx={{ fontWeight: 600, color, minWidth: 0 }}>
-        {block.activity}
-      </Typography>
-      {!dense && (
-        <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
-          {timeRange}
-        </Typography>
+      {task && (
+        <Checkbox
+          size="small"
+          checked={task.completed}
+          onChange={() => onToggleTask(block)}
+          slotProps={{ input: { 'aria-label': `${task.completed ? 'Reopen' : 'Check off'} ${title}` } }}
+          sx={{ p: dense ? 0.25 : 0.5, color, '&.Mui-checked': { color } }}
+        />
       )}
-    </ButtonBase>
+      <ButtonBase
+        onClick={onClick}
+        aria-label={`Edit ${title}, ${timeRange}`}
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          height: '100%',
+          px: task ? 0.25 : dense ? 0.5 : 1.25,
+          py: compact ? 0 : dense ? 0.25 : 0.75,
+          display: 'flex',
+          flexDirection: compact ? 'row' : 'column',
+          alignItems: compact ? 'center' : 'flex-start',
+          justifyContent: 'flex-start',
+          gap: compact ? 1 : 0,
+          textAlign: 'left',
+        }}
+      >
+        <Typography
+          variant={dense ? 'caption' : 'body2'}
+          noWrap
+          sx={{ fontWeight: 600, color, minWidth: 0, maxWidth: '100%', textDecoration: task?.completed ? 'line-through' : 'none' }}
+        >
+          {title}
+        </Typography>
+        {!dense && (
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
+            {timeRange}
+            {task ? ` · ${task.priority} priority` : ''}
+          </Typography>
+        )}
+      </ButtonBase>
+    </Box>
   );
 }
 
@@ -302,6 +406,14 @@ export function DailyPlanner() {
   const [deletingBlock, setDeletingBlock] = useState<TimeBlock | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  // Blocks from two weeks back to two weeks ahead, for spotting missed task blocks (#9) and finding room.
+  const [nearbyBlocks, setNearbyBlocks] = useState<TimeBlock[]>([]);
+  const [nearbyVersion, setNearbyVersion] = useState(0);
+  const [finishingTask, setFinishingTask] = useState<BlockTask | null>(null);
+  const [leftBlocks, setLeftBlocks] = useState<Set<string>>(readLeftBlocks);
+  const [now, setNow] = useState(() => Date.now());
 
   const weekStart = useMemo(
     () => startOfWeek(parseISO(selectedDate), { weekStartsOn: WEEK_STARTS_ON }),
@@ -334,6 +446,47 @@ export function DailyPlanner() {
       cancelled = true;
     };
   }, [user, viewMode, selectedDate, weekDates]);
+
+  useEffect(() => {
+    if (!user) return;
+    apiGet('/api/tasks')
+      .then(setTasks)
+      .catch(() => {}); // the task picker and due dates just stay empty; the Tasks page shows the error
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const start = format(subDays(parseISO(today), NEARBY_DAYS), 'yyyy-MM-dd');
+    const end = format(addDays(parseISO(today), NEARBY_DAYS), 'yyyy-MM-dd');
+    apiGet(`/api/time-blocks?start=${start}&end=${end}`)
+      .then((data) => !cancelled && setNearbyBlocks(data))
+      .catch(() => {}); // without these the missed-block prompts just don't show
+    return () => {
+      cancelled = true;
+    };
+  }, [user, today, nearbyVersion]);
+
+  // Blocks end while the page is open, so re-check for missed ones every minute.
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const missed = useMemo(() => {
+    const at = new Date(now);
+    return missedTaskBlocks(nearbyBlocks, at)
+      .filter((block) => !leftBlocks.has(block.id))
+      .map((block) => ({
+        block,
+        slot: findOpenSlot(block, nearbyBlocks, at, block.task?.due_date ? new Date(block.task.due_date) : null),
+      }));
+  }, [nearbyBlocks, now, leftBlocks]);
+
+  const warnings = useMemo(
+    () => (viewMode === 'week' ? burnoutWarnings(timeBlocks, tasks, weekDates) : []),
+    [viewMode, timeBlocks, tasks, weekDates],
+  );
 
   const placedBlocks = useMemo(
     () => layoutBlocks(timeBlocks, (MIN_BLOCK_HEIGHT / HOUR_HEIGHT) * 60),
@@ -379,6 +532,7 @@ export function DailyPlanner() {
     const created = await apiPost('/api/time-blocks', payload);
     showSavedBlock(created);
     setShowForm(false);
+    setNearbyVersion((v) => v + 1);
   };
 
   const handleEditBlock = async (payload: BlockPayload) => {
@@ -386,6 +540,57 @@ export function DailyPlanner() {
     const updated = await apiPatch(`/api/time-blocks/${editingBlock.id}`, payload);
     showSavedBlock(updated);
     setEditingBlock(null);
+    setNearbyVersion((v) => v + 1);
+  };
+
+  // Every block for a task shows the task's latest state (checked or not).
+  const applyTask = (updated: Task) => {
+    setTasks((current) => current.map((t) => (t.id === updated.id ? updated : t)));
+    const refresh = (blocks: TimeBlock[]) =>
+      blocks.map((b) => (b.task_id === updated.id && b.task ? { ...b, task: { ...b.task, ...updated } } : b));
+    setTimeBlocks(refresh);
+    setNearbyBlocks(refresh);
+  };
+
+  const updateTask = async (taskId: string, changes: { completed: boolean; time_spent?: number }) => {
+    try {
+      applyTask(await apiPatch(`/api/tasks/${taskId}`, changes));
+    } catch {
+      setActionError("Couldn't update the task. Try again.");
+    }
+  };
+
+  // Checking off a task block completes the task (after asking how long it took); unchecking reopens it.
+  const handleToggleTask = (block: TimeBlock) => {
+    if (!block.task) return;
+    if (block.task.completed) updateTask(block.task.id, { completed: false });
+    else setFinishingTask(block.task);
+  };
+
+  const finishTask = async (minutes: number | null) => {
+    if (!finishingTask) return;
+    const taskId = finishingTask.id;
+    setFinishingTask(null);
+    await updateTask(taskId, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
+  };
+
+  const isShown = (date: string) => (viewMode === 'day' ? date === selectedDate : weekDates.includes(date));
+
+  const moveBlock = async (block: TimeBlock, slot: Slot) => {
+    try {
+      const moved: TimeBlock = await apiPatch(`/api/time-blocks/${block.id}`, slot);
+      setNearbyBlocks((current) => current.map((b) => (b.id === moved.id ? moved : b)));
+      setTimeBlocks((current) => [...current.filter((b) => b.id !== moved.id), ...(isShown(moved.date) ? [moved] : [])]);
+      setNotice(`Moved “${moved.task?.title ?? moved.activity}” to ${formatSlot(moved)}.`);
+    } catch {
+      setActionError("Couldn't move the block. Try again.");
+    }
+  };
+
+  const leaveBlock = (block: TimeBlock) => {
+    const next = new Set(leftBlocks).add(block.id);
+    setLeftBlocks(next);
+    saveLeftBlocks(next);
   };
 
   const handleDeleteBlock = async () => {
@@ -394,6 +599,7 @@ export function DailyPlanner() {
     try {
       await apiDelete(`/api/time-blocks/${deletingBlock.id}`);
       setTimeBlocks((current) => current.filter((b) => b.id !== deletingBlock.id));
+      setNearbyBlocks((current) => current.filter((b) => b.id !== deletingBlock.id));
       setDeletingBlock(null);
     } catch {
       setActionError("Couldn't delete time block. Try again.");
@@ -459,6 +665,52 @@ export function DailyPlanner() {
         </Button>
       </Box>
 
+      {missed.map(({ block, slot }) => {
+        const title = block.task?.title ?? block.activity;
+        const due = block.task?.due_date ? format(new Date(block.task.due_date), 'EEE, MMM d, h:mm a') : null;
+        return slot ? (
+          <Alert
+            key={block.id}
+            severity="info"
+            sx={{ mb: 2, borderRadius: '12px' }}
+            action={
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Button size="small" variant="contained" onClick={() => moveBlock(block, slot)}>
+                  Move it
+                </Button>
+                <Button size="small" color="inherit" onClick={() => leaveBlock(block)}>
+                  Leave it
+                </Button>
+              </Box>
+            }
+          >
+            “{title}” was planned for {formatSlot(block)} and isn't checked off. The next open time is{' '}
+            <strong>{formatSlot(slot)}</strong>.
+          </Alert>
+        ) : (
+          <Alert
+            key={block.id}
+            severity="warning"
+            sx={{ mb: 2, borderRadius: '12px' }}
+            action={
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Button size="small" color="inherit" onClick={() => setEditingBlock(block)}>
+                  Edit block
+                </Button>
+                <Button size="small" color="inherit" onClick={() => leaveBlock(block)}>
+                  Leave it
+                </Button>
+              </Box>
+            }
+          >
+            <strong>At risk:</strong> “{title}” was planned for {formatSlot(block)} and isn't checked off, and there's
+            no open {durationText(block)} slot {due ? `before it's due (${due})` : 'in the next two weeks'}.
+          </Alert>
+        );
+      })}
+
+      {viewMode === 'week' && <BurnoutBanner warnings={warnings} />}
+
       {showForm && (
         <Card sx={{ mb: 3, borderRadius: '16px' }}>
           <CardContent>
@@ -466,6 +718,7 @@ export function DailyPlanner() {
               initial={emptyForm(viewMode === 'day' ? selectedDate : today)}
               submitLabel="Add Block"
               submittingLabel="Adding..."
+              tasks={tasks}
               onSubmit={handleAddBlock}
               onCancel={() => setShowForm(false)}
             />
@@ -513,6 +766,7 @@ export function DailyPlanner() {
                     columns={columns}
                     startHour={startHour}
                     onClick={() => setEditingBlock(block)}
+                    onToggleTask={handleToggleTask}
                   />
                 ))}
               </Box>
@@ -572,6 +826,7 @@ export function DailyPlanner() {
                           startHour={startHour}
                           dense
                           onClick={() => setEditingBlock(block)}
+                          onToggleTask={handleToggleTask}
                         />
                       ))}
                     </Box>
@@ -593,6 +848,7 @@ export function DailyPlanner() {
                 initial={toFormValues(editingBlock)}
                 submitLabel="Save"
                 submittingLabel="Saving..."
+                tasks={tasks}
                 onSubmit={handleEditBlock}
                 onCancel={() => setEditingBlock(null)}
                 onDelete={() => {
@@ -619,6 +875,19 @@ export function DailyPlanner() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <TimeSpentDialog task={finishingTask} onFinish={finishTask} onCancel={() => setFinishingTask(null)} />
+
+      <Snackbar
+        open={notice !== null}
+        autoHideDuration={5000}
+        onClose={() => setNotice(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" onClose={() => setNotice(null)} sx={{ width: '100%' }}>
+          {notice}
+        </Alert>
+      </Snackbar>
 
       <Snackbar
         open={actionError !== null}

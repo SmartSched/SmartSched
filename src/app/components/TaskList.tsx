@@ -30,7 +30,8 @@ import { Link as RouterLink } from 'react-router';
 import { format } from 'date-fns';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
-import { sortTasks, type Task } from '../lib/tasks';
+import { estimateRatios, sortTasks, type EstimateRatio, type Task } from '../lib/tasks';
+import { TimeSpentDialog } from './TimeSpentDialog';
 
 type TaskPayload = Pick<Task, 'title' | 'description' | 'type' | 'priority' | 'due_date' | 'estimated_time'>;
 
@@ -63,18 +64,33 @@ function formatDue(dueDate: string) {
   return format(due, pattern);
 }
 
+type Ratios = ReturnType<typeof estimateRatios>;
+
+function ratioText(ratio: EstimateRatio) {
+  return `${ratio.ratio}× your estimate`;
+}
+
 interface TaskFormProps {
   initial: TaskFormValues;
   submitLabel: string;
   submittingLabel: string;
+  ratios: Ratios;
   onSubmit: (payload: TaskPayload) => Promise<void>;
   onCancel: () => void;
 }
 
-function TaskForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel }: TaskFormProps) {
+function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onCancel }: TaskFormProps) {
   const [values, setValues] = useState(initial);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // What past tasks of this type say about the estimate being typed in.
+  const ratio = ratios[values.type as Task['type']];
+  const estimate = Number(values.estimatedTime);
+  const estimateHint =
+    ratio && ratio.ratio !== 1 && Number.isInteger(estimate) && estimate > 0
+      ? `Your ${values.type} tasks usually take ${ratioText(ratio)}, so about ${Math.round(estimate * ratio.ratio)} min`
+      : undefined;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -161,6 +177,7 @@ function TaskForm({ initial, submitLabel, submittingLabel, onSubmit, onCancel }:
           label="Estimated minutes"
           value={values.estimatedTime}
           onChange={(e) => setValues({ ...values, estimatedTime: e.target.value })}
+          helperText={estimateHint}
           slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: 1, step: 5 } }}
           sx={{ flex: 1 }}
         />
@@ -194,6 +211,7 @@ export function TaskList() {
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [finishingTask, setFinishingTask] = useState<Task | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -213,6 +231,8 @@ export function TaskList() {
   }, []);
 
   const sortedTasks = useMemo(() => sortTasks(tasks), [tasks]);
+  const ratios = useMemo(() => estimateRatios(tasks), [tasks]);
+  const ratioEntries = Object.entries(ratios) as [Task['type'], EstimateRatio][];
 
   const handleAddTask = async (payload: TaskPayload) => {
     const created = await apiPost('/api/tasks', payload);
@@ -250,14 +270,16 @@ export function TaskList() {
     });
   };
 
-  const handleToggleTask = async (task: Task) => {
-    const completed = !task.completed;
+  const updateCompleted = async (task: Task, changes: { completed: boolean; time_spent?: number }) => {
+    const { completed } = changes;
     setToggling(task.id, true);
     setTasks((current) =>
-      current.map((t) => (t.id === task.id ? { ...t, completed, completed_at: completed ? new Date().toISOString() : null } : t))
+      current.map((t) =>
+        t.id === task.id ? { ...t, ...changes, completed_at: completed ? new Date().toISOString() : null } : t
+      )
     );
     try {
-      const updated = await apiPatch(`/api/tasks/${task.id}`, { completed });
+      const updated = await apiPatch(`/api/tasks/${task.id}`, changes);
       setTasks((current) => current.map((t) => (t.id === task.id ? updated : t)));
     } catch {
       setTasks((current) => current.map((t) => (t.id === task.id ? task : t)));
@@ -265,6 +287,19 @@ export function TaskList() {
     } finally {
       setToggling(task.id, false);
     }
+  };
+
+  // Checking a task off asks how long it took first; unchecking just reopens it.
+  const handleToggleTask = (task: Task) => {
+    if (task.completed) updateCompleted(task, { completed: false });
+    else setFinishingTask(task);
+  };
+
+  const finishTask = async (minutes: number | null) => {
+    if (!finishingTask) return;
+    const task = finishingTask;
+    setFinishingTask(null);
+    await updateCompleted(task, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
   };
 
   const getPriorityColor = (priority: string) => {
@@ -304,10 +339,18 @@ export function TaskList() {
           </Button>
         </Box>
 
+        {ratioEntries.length > 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            How long your finished tasks took:{' '}
+            {ratioEntries.map(([type, ratio]) => `${type} tasks ${ratioText(ratio)} (${ratio.count} tasks)`).join(', ')}.
+          </Typography>
+        )}
+
         {showForm && (
           <Box sx={{ mb: 3, p: 2, backgroundColor: 'action.hover', borderRadius: 1 }}>
             <TaskForm
               initial={EMPTY_FORM}
+              ratios={ratios}
               submitLabel="Add Task"
               submittingLabel="Adding..."
               onSubmit={handleAddTask}
@@ -371,6 +414,9 @@ export function TaskList() {
                             {task.estimated_time && (
                               <Chip label={`${task.estimated_time}min`} size="small" variant="outlined" sx={{ height: 20, fontSize: '10px' }} />
                             )}
+                            {task.completed && task.time_spent > 0 && (
+                              <Chip label={`took ${task.time_spent}min`} size="small" variant="outlined" sx={{ height: 20, fontSize: '10px' }} />
+                            )}
                             {task.due_date && (
                               <Chip
                                 label={`${overdue ? 'Overdue · ' : 'Due '}${formatDue(task.due_date)}`}
@@ -408,6 +454,7 @@ export function TaskList() {
               <TaskForm
                 key={editingTask.id}
                 initial={toFormValues(editingTask)}
+                ratios={ratios}
                 submitLabel="Save"
                 submittingLabel="Saving..."
                 onSubmit={handleEditTask}
@@ -432,6 +479,8 @@ export function TaskList() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <TimeSpentDialog task={finishingTask} onFinish={finishTask} onCancel={() => setFinishingTask(null)} />
 
       <Snackbar
         open={actionError !== null}
