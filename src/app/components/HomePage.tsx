@@ -7,7 +7,7 @@ import { useAuth } from '../lib/AuthContext';
 import { apiGet } from '../lib/api';
 import { useToday } from '../lib/today';
 import { quoteFor } from '../lib/quotes';
-import type { Task } from './TaskList'; // adjust path if TaskList lives elsewhere
+import type { Task } from '../lib/tasks';
 
 export function HomePage() {
   const { user, profile } = useAuth();

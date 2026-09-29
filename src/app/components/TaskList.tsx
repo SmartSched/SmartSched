@@ -30,19 +30,7 @@ import { Link as RouterLink } from 'react-router';
 import { format } from 'date-fns';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
-
-export interface Task {
-  id: string;
-  title: string;
-  description: string | null;
-  completed: boolean;
-  priority: 'low' | 'medium' | 'high';
-  type: 'homework' | 'exam' | 'project' | 'work' | 'study';
-  due_date: string | null;
-  estimated_time: number | null;
-  completed_at: string | null;
-  created_at: string;
-}
+import { sortTasks, type Task } from '../lib/tasks';
 
 type TaskPayload = Pick<Task, 'title' | 'description' | 'type' | 'priority' | 'due_date' | 'estimated_time'>;
 
@@ -57,7 +45,6 @@ interface TaskFormValues {
 
 const EMPTY_FORM: TaskFormValues = { title: '', description: '', type: 'study', priority: 'medium', due: '', estimatedTime: '' };
 
-const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 function toFormValues(task: Task): TaskFormValues {
   return {
@@ -68,24 +55,6 @@ function toFormValues(task: Task): TaskFormValues {
     due: task.due_date ? format(new Date(task.due_date), "yyyy-MM-dd'T'HH:mm") : '',
     estimatedTime: task.estimated_time ? String(task.estimated_time) : '',
   };
-}
-
-// Unfinished first (soonest due, undated last, then priority, then newest); finished below, most recently finished first.
-function sortTasks(tasks: Task[]) {
-  const time = (value: string | null) => (value ? new Date(value).getTime() : null);
-  return [...tasks].sort((a, b) => {
-    if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    if (a.completed) return (time(b.completed_at) ?? 0) - (time(a.completed_at) ?? 0);
-    const aDue = time(a.due_date);
-    const bDue = time(b.due_date);
-    if (aDue !== bDue) {
-      if (aDue === null) return 1;
-      if (bDue === null) return -1;
-      return aDue - bDue;
-    }
-    if (a.priority !== b.priority) return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
 }
 
 function formatDue(dueDate: string) {

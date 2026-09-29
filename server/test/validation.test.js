@@ -1,0 +1,108 @@
+import { describe, expect, it } from 'vitest';
+import { isValidDate, validateRatings, validateSurvey, validateTimeBlock } from '../validation.js';
+
+describe('isValidDate', () => {
+  it('accepts real YYYY-MM-DD dates', () => {
+    expect(isValidDate('2026-09-29')).toBe(true);
+    expect(isValidDate('2028-02-29')).toBe(true); // leap year
+  });
+
+  it('rejects impossible dates and other formats', () => {
+    expect(isValidDate('2026-02-30')).toBe(false);
+    expect(isValidDate('2027-02-29')).toBe(false);
+    expect(isValidDate('2026-13-01')).toBe(false);
+    expect(isValidDate('9/29/2026')).toBe(false);
+    expect(isValidDate('2026-9-29')).toBe(false);
+    expect(isValidDate(20260929)).toBe(false);
+    expect(isValidDate(undefined)).toBe(false);
+  });
+});
+
+describe('validateTimeBlock', () => {
+  const valid = { activity: 'CSC 453 Lecture', date: '2026-09-29', start_time: '09:30', end_time: '10:45', type: 'class' };
+
+  it('returns a clean block with times as HH:MM:SS', () => {
+    expect(validateTimeBlock(valid)).toEqual({
+      block: { activity: 'CSC 453 Lecture', date: '2026-09-29', start_time: '09:30:00', end_time: '10:45:00', type: 'class' },
+    });
+  });
+
+  it('trims the activity and drops fields it doesn\'t know', () => {
+    const { block } = validateTimeBlock({ ...valid, activity: '  Gym  ', user_id: 'someone-else', id: 'x' });
+    expect(block.activity).toBe('Gym');
+    expect(block).not.toHaveProperty('user_id');
+    expect(block).not.toHaveProperty('id');
+  });
+
+  it('accepts every block type the planner offers, including work', () => {
+    for (const type of ['class', 'study', 'break', 'personal', 'commute', 'meal', 'work']) {
+      expect(validateTimeBlock({ ...valid, type }).block?.type).toBe(type);
+    }
+  });
+
+  it('explains the first problem', () => {
+    expect(validateTimeBlock({ ...valid, activity: '   ' })).toEqual({ error: 'Activity is required' });
+    expect(validateTimeBlock({ ...valid, date: '2026-02-30' })).toEqual({ error: 'Date must be a valid YYYY-MM-DD date' });
+    expect(validateTimeBlock({ ...valid, start_time: '9:30' })).toEqual({ error: 'Start time must be HH:MM' });
+    expect(validateTimeBlock({ ...valid, end_time: '24:00' })).toEqual({ error: 'End time must be HH:MM' });
+    expect(validateTimeBlock({ ...valid, type: 'nap' })).toEqual({ error: 'Invalid block type' });
+  });
+
+  it('needs the end after the start, comparing HH:MM with HH:MM:SS correctly', () => {
+    expect(validateTimeBlock({ ...valid, end_time: '09:30' }).error).toBe('End time must be after start time');
+    expect(validateTimeBlock({ ...valid, end_time: '09:00' }).error).toBe('End time must be after start time');
+    expect(validateTimeBlock({ ...valid, start_time: '09:30:00', end_time: '09:31' }).block).toBeDefined();
+  });
+});
+
+describe('validateSurvey', () => {
+  const valid = {
+    commitments: { classes: 15, work: 10 },
+    focus_time: 'morning',
+    work_session: '45',
+    non_negotiables: ['sleep', 'friends', 'sleep'],
+    deadline_style: 'steady',
+    calendar_style: 'calendar2',
+  };
+
+  it('keeps known answers and removes duplicate non-negotiables', () => {
+    const { survey } = validateSurvey({ ...valid, extra: 'ignored' });
+    expect(survey).toEqual({ ...valid, non_negotiables: ['sleep', 'friends'] });
+  });
+
+  it('needs at least one commitment, with sensible hours', () => {
+    expect(validateSurvey({ ...valid, commitments: {} }).error).toBe('Pick at least one weekly commitment');
+    expect(validateSurvey({ ...valid, commitments: { classes: 0 } }).error).toMatch(/between 0 and 168/);
+    expect(validateSurvey({ ...valid, commitments: { classes: 200 } }).error).toMatch(/between 0 and 168/);
+    expect(validateSurvey({ ...valid, commitments: { chores: 5 } }).error).toBe('Unknown commitment: chores');
+  });
+
+  it('rejects answers that aren\'t options', () => {
+    expect(validateSurvey({ ...valid, focus_time: 'noon' }).error).toBe('Invalid answer for focus_time');
+    expect(validateSurvey({ ...valid, calendar_style: 'calendar9' }).error).toBe('Invalid answer for calendar_style');
+    expect(validateSurvey({ ...valid, non_negotiables: [] }).error).toMatch(/at least one thing/);
+    expect(validateSurvey({ ...valid, non_negotiables: ['sleep', 'naps'] }).error).toBe('Invalid answer for non_negotiables');
+  });
+
+  it('needs an object', () => {
+    expect(validateSurvey(null).error).toBe('Survey answers are required');
+  });
+});
+
+describe('validateRatings', () => {
+  const valid = { productivity: 4, mood: 3, energy: 2, sleep: 5 };
+
+  it('keeps exactly the four ratings', () => {
+    expect(validateRatings({ ...valid, stress: 5 })).toEqual({ ratings: valid });
+  });
+
+  it('needs every rating to be a whole number from 1 to 5', () => {
+    expect(validateRatings({ ...valid, mood: 0 }).error).toBe('Rate mood from 1 to 5');
+    expect(validateRatings({ ...valid, energy: 6 }).error).toBe('Rate energy from 1 to 5');
+    expect(validateRatings({ ...valid, sleep: 3.5 }).error).toBe('Rate sleep from 1 to 5');
+    expect(validateRatings({ ...valid, productivity: '4' }).error).toBe('Rate productivity from 1 to 5');
+    const { sleep, ...missing } = valid;
+    expect(validateRatings(missing).error).toBe('Rate sleep from 1 to 5');
+    expect(validateRatings(undefined).error).toBe('Ratings are required');
+  });
+});
