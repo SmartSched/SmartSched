@@ -15,6 +15,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost } from '../lib/api';
+import { useSelectedDay } from '../lib/today';
 
 const CRITERIA = [
   { key: 'productivity', label: 'Productivity' },
@@ -27,11 +28,6 @@ type Ratings = Record<(typeof CRITERIA)[number]['key'], number>;
 
 const EMPTY_RATINGS: Ratings = { productivity: 0, mood: 0, energy: 0, sleep: 0 };
 
-// Worked out when it's needed, not once when the app loads, so a tab left open overnight moves on to the new day.
-function todayIso() {
-  return format(new Date(), 'yyyy-MM-dd');
-}
-
 function formatDay(date: string) {
   const day = parseISO(date);
   return format(day, day.getFullYear() === new Date().getFullYear() ? 'EEEE, MMMM d' : 'EEEE, MMMM d, yyyy');
@@ -39,7 +35,7 @@ function formatDay(date: string) {
 
 export function DayReflection() {
   const { user } = useAuth();
-  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const { today, selectedDate, setSelectedDate } = useSelectedDay();
   const [ratings, setRatings] = useState<Ratings>(EMPTY_RATINGS);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -68,7 +64,6 @@ export function DayReflection() {
     };
   }, [user, selectedDate]);
 
-  const today = todayIso();
   const isToday = selectedDate === today;
   const unrated = CRITERIA.filter(({ key }) => !ratings[key]);
 

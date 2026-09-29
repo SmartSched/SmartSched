@@ -28,6 +28,7 @@ import { addDays, format, parseISO, startOfWeek } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
+import { useSelectedDay } from '../lib/today';
 
 export interface TimeBlock {
   id: string;
@@ -46,10 +47,6 @@ const MIN_BLOCK_HEIGHT = 26; // px, so very short blocks stay readable and click
 const DEFAULT_START_HOUR = 7;
 const DEFAULT_END_HOUR = 22; // grid runs until 10 PM unless a block goes later
 const WEEK_STARTS_ON = 0; // 0 = Sunday
-
-function todayIso() {
-  return format(new Date(), 'yyyy-MM-dd');
-}
 
 // "09:30" or "09:30:00" -> minutes since midnight
 function toMinutes(time: string) {
@@ -352,7 +349,7 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick }: Ti
 export function DailyPlanner() {
   const { user } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const { today, selectedDate, setSelectedDate } = useSelectedDay();
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -466,8 +463,8 @@ export function DailyPlanner() {
     );
   }
 
-  const isToday = selectedDate === todayIso();
-  const isCurrentWeek = weekDates.includes(todayIso());
+  const isToday = selectedDate === today;
+  const isCurrentWeek = weekDates.includes(today);
 
   return (
     <Box>
@@ -508,7 +505,7 @@ export function DailyPlanner() {
         </IconButton>
         <Button
           size="small"
-          onClick={() => setSelectedDate(todayIso())}
+          onClick={() => setSelectedDate(today)}
           disabled={viewMode === 'day' ? isToday : isCurrentWeek}
         >
           Today
@@ -519,7 +516,7 @@ export function DailyPlanner() {
         <Card sx={{ mb: 3, borderRadius: '16px' }}>
           <CardContent>
             <BlockForm
-              initial={emptyForm(viewMode === 'day' ? selectedDate : todayIso())}
+              initial={emptyForm(viewMode === 'day' ? selectedDate : today)}
               submitLabel="Add Block"
               submittingLabel="Adding..."
               onSubmit={handleAddBlock}
@@ -583,7 +580,7 @@ export function DailyPlanner() {
                 <Box sx={{ width: '56px', flexShrink: 0 }} />
                 {weekDates.map((date) => {
                   const day = parseISO(date);
-                  const isDayToday = date === todayIso();
+                  const isDayToday = date === today;
                   return (
                     <Box key={date} sx={{ flex: 1, textAlign: 'center', pb: 1 }}>
                       <Typography

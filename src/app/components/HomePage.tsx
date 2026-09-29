@@ -1,14 +1,16 @@
 import { Card, CardContent, Typography, Box, Grid } from '@mui/material';
 import { CalendarMonth, Schedule, NightsStay } from '@mui/icons-material';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet } from '../lib/api';
+import { useToday } from '../lib/today';
 import type { Task } from './TaskList'; // adjust path if TaskList lives elsewhere
 
 export function HomePage() {
   const { user, profile } = useAuth();
+  const today = useToday();
   const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export function HomePage() {
           {greeting()}, {displayName}!
         </Typography>
         <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 400, mb: 3 }}>
-          {format(new Date(), 'EEEE, MMMM d, yyyy')}
+          {format(parseISO(today), 'EEEE, MMMM d, yyyy')}
         </Typography>
       </Box>
 

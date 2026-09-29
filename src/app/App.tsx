@@ -142,7 +142,7 @@ function AppShell() {
       <AppBar position="static" elevation={0} sx={{ backgroundColor: 'white', borderBottom: '2px solid #e9d5ff' }}>
         <Toolbar sx={{ gap: 1 }}>
           <Typography variant="h5" sx={{ flexGrow: 1, color: '#8b5cf6', fontWeight: 700 }}>
-            StudyBalance
+            SmartSched
           </Typography>
 
           {isMobile ? (

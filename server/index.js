@@ -34,6 +34,13 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// Database errors are raw Postgres text ("violates check constraint ..."), so log the details for us
+// and send the user a plain message.
+function serverError(res, error) {
+  console.error(error);
+  res.status(500).json({ error: 'Something went wrong on our end. Try again in a moment.' });
+}
+
 // Keys must match src/app/lib/survey.ts.
 const SURVEY_OPTIONS = {
   commitments: ['classes', 'work', 'commute', 'standing'],
@@ -90,7 +97,7 @@ app.get('/api/profile', requireAuth, async (req, res) => {
     .select(PROFILE_COLUMNS)
     .eq('id', req.userId)
     .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   res.json(data);
 });
 
@@ -102,13 +109,13 @@ app.put('/api/profile/survey', requireAuth, async (req, res) => {
     .from('profiles')
     .upsert({ id: req.userId, survey, survey_updated_at: new Date().toISOString() }, { onConflict: 'id' })
     .select(PROFILE_COLUMNS);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   res.json(data[0]);
 });
 
 app.get('/api/tasks', requireAuth, async (req, res) => {
   const { data, error } = await req.supabase.from('tasks').select('*').order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   res.json(data);
 });
 
@@ -121,7 +128,7 @@ app.post('/api/tasks', requireAuth, async (req, res) => {
     .from('tasks')
     .insert({ user_id: req.userId, title: title.trim(), description, type, priority, due_date, estimated_time })
     .select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   res.status(201).json(data[0]);
 });
 
@@ -149,7 +156,7 @@ app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
     .update(updates)
     .eq('id', req.params.id)
     .select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Task not found' });
   res.json(data[0]);
 });
@@ -160,25 +167,9 @@ app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
     .delete()
     .eq('id', req.params.id)
     .select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Task not found' });
   res.status(204).end();
-});
-
-app.get('/api/habits', requireAuth, async (req, res) => {
-  const { data, error } = await req.supabase.from('habits').select('*').order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-app.post('/api/habits', requireAuth, async (req, res) => {
-  const { name, icon, goal } = req.body;
-  const { data, error } = await req.supabase
-    .from('habits')
-    .insert({ user_id: req.userId, name, icon, goal })
-    .select();
-  if (error) return res.status(500).json({ error: error.message });
-  res.status(201).json(data[0]);
 });
 
 const TIME_BLOCK_TYPES = ['class', 'study', 'break', 'personal', 'commute', 'meal', 'work'];
@@ -231,7 +222,7 @@ app.get('/api/time-blocks', requireAuth, async (req, res) => {
   }
 
   const { data, error } = await query.order('date', { ascending: true }).order('start_time', { ascending: true });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   res.json(data);
 });
 
@@ -242,7 +233,7 @@ app.post('/api/time-blocks', requireAuth, async (req, res) => {
     .from('time_blocks')
     .insert({ user_id: req.userId, ...block })
     .select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   res.status(201).json(data[0]);
 });
 
@@ -253,7 +244,7 @@ app.patch('/api/time-blocks/:id', requireAuth, async (req, res) => {
     .select('*')
     .eq('id', req.params.id)
     .maybeSingle();
-  if (fetchError) return res.status(500).json({ error: fetchError.message });
+  if (fetchError) return serverError(res, fetchError);
   if (!existing) return res.status(404).json({ error: 'Time block not found' });
 
   const { block, error: validationError } = validateTimeBlock({ ...existing, ...req.body });
@@ -263,7 +254,7 @@ app.patch('/api/time-blocks/:id', requireAuth, async (req, res) => {
     .update(block)
     .eq('id', req.params.id)
     .select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Time block not found' });
   res.json(data[0]);
 });
@@ -274,7 +265,7 @@ app.delete('/api/time-blocks/:id', requireAuth, async (req, res) => {
     .delete()
     .eq('id', req.params.id)
     .select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Time block not found' });
   res.status(204).end();
 });
@@ -300,7 +291,7 @@ app.get('/api/reflections/:date', requireAuth, async (req, res) => {
     .select('*')
     .eq('date', req.params.date)
     .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   res.json(data);
 });
 
@@ -313,8 +304,19 @@ app.post('/api/reflections', requireAuth, async (req, res) => {
     .from('reflections')
     .upsert({ user_id: req.userId, date, ratings }, { onConflict: 'user_id,date' })
     .select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return serverError(res, error);
   res.status(201).json(data[0]);
+});
+
+// Unknown API routes and anything thrown (like a request body that isn't valid JSON) get a JSON error
+// instead of Express's default HTML page.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request was not valid JSON' });
+  serverError(res, err);
 });
 
 app.listen(PORT, () => {
