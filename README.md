@@ -40,7 +40,11 @@ Students who try to fit everything in without a thoughtful system often end up s
 What we don't want to become: A rigid productivity optimizer, class registration tool. habit tracker with streaks and gamification pressure, Google Calendar clone
 
 ## Target Users
-
+College students — especially those who:
+- Commute to campus
+- Hold part-time or full-time jobs alongside their studies
+- Are trying to maintain a social life and physical health
+- Have struggled with burnout, overwhelm, or inconsistent routines
 
 ## Development
 ```
@@ -48,9 +52,3 @@ npx supabase db push
 npm install && npm run dev
 cd server && npm install && npm start
 ```
-
-College students — especially those who:
-- Commute to campus
-- Hold part-time or full-time jobs alongside their studies
-- Are trying to maintain a social life and physical health
-- Have struggled with burnout, overwhelm, or inconsistent routines
