@@ -1,13 +1,5 @@
-
-# TEMP
-```
-npx supabase db push
-npm install && npm run dev
-cd server && npm install && npm start
-```
-
-# SmartSched  
-## Student Life Scheduler Built for Balance
+# SmartSched: Student Life Scheduler Built for Balance
+Link: https://smart-sched-pi.vercel.app/
 
 ## Overview
 
@@ -48,6 +40,14 @@ Students who try to fit everything in without a thoughtful system often end up s
 What we don't want to become: A rigid productivity optimizer, class registration tool. habit tracker with streaks and gamification pressure, Google Calendar clone
 
 ## Target Users
+
+
+## Development
+```
+npx supabase db push
+npm install && npm run dev
+cd server && npm install && npm start
+```
 
 College students — especially those who:
 - Commute to campus
