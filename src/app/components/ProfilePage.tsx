@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { useProfile } from '../lib/ProfileContext';
 import { CalendarImage } from './SurveyPage';
+import { TravelTimes } from './TravelTimes';
 import {
   COMMITMENTS,
   FOCUS_TIMES,
@@ -107,6 +108,8 @@ export function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {profile && <TravelTimes />}
     </Box>
   );
 }

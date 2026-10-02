@@ -21,6 +21,19 @@ export interface TimeBlock {
   type: 'class' | 'study' | 'break' | 'personal' | 'commute' | 'meal' | 'work' | 'task';
   task_id: string | null;
   task?: BlockTask | null;
+  location?: string | null; // lowercase place name, see places.ts
+  series_id?: string | null; // set when the block is one of a repeat
+  series?: BlockSeries | null;
+  auto?: boolean; // a commute the app added (it's recalculated when the day changes)
+}
+
+// The repeat rule a block came from, as the server attaches it.
+export interface BlockSeries {
+  id: string;
+  days_of_week: number[]; // 0 = Sunday
+  interval_weeks: 1 | 2;
+  start_date: string;
+  end_date: string;
 }
 
 export interface PlacedBlock {

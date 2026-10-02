@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { isValidDate, isValidTimeSpent, validateRatings, validateSurvey, validateTimeBlock } from '../validation.js';
+import {
+  isValidDate,
+  isValidTimeSpent,
+  pairKey,
+  validateRatings,
+  validateSeries,
+  validateSurvey,
+  validateTimeBlock,
+  validateTravel,
+} from '../validation.js';
 
 describe('isValidDate', () => {
   it('accepts real YYYY-MM-DD dates', () => {
@@ -30,6 +39,7 @@ describe('validateTimeBlock', () => {
         end_time: '10:45:00',
         type: 'class',
         task_id: null,
+        location: null,
       },
     });
   });
@@ -132,5 +142,72 @@ describe('validateRatings', () => {
     const { sleep, ...missing } = valid;
     expect(validateRatings(missing).error).toBe('Rate sleep from 1 to 5');
     expect(validateRatings(undefined).error).toBe('Ratings are required');
+  });
+});
+
+describe('block locations', () => {
+  const valid = { activity: 'Lecture', date: '2026-09-29', start_time: '09:30', end_time: '10:45', type: 'class' };
+
+  it('stores places lowercase and trimmed, and treats blank as none', () => {
+    expect(validateTimeBlock({ ...valid, location: '  Campus ' }).block?.location).toBe('campus');
+    expect(validateTimeBlock({ ...valid, location: 'Library 2nd floor' }).block?.location).toBe('library 2nd floor');
+    expect(validateTimeBlock({ ...valid, location: '' }).block?.location).toBeNull();
+    expect(validateTimeBlock({ ...valid, location: null }).block?.location).toBeNull();
+  });
+
+  it('rejects something that isn\'t a short place name', () => {
+    expect(validateTimeBlock({ ...valid, location: 42 }).error).toBe('Location must be a short place name');
+    expect(validateTimeBlock({ ...valid, location: 'x'.repeat(41) }).error).toBe('Location must be a short place name');
+  });
+});
+
+describe('validateSeries', () => {
+  const valid = {
+    activity: 'CSC 453', type: 'class', location: 'Campus', start_time: '10:00', end_time: '11:15',
+    days_of_week: [3, 1, 1, 5], interval_weeks: 1, start_date: '2026-09-28', end_date: '2026-12-11',
+  };
+
+  it('returns a clean rule with days sorted and deduplicated', () => {
+    expect(validateSeries(valid)).toEqual({
+      series: {
+        activity: 'CSC 453', type: 'class', location: 'campus', start_time: '10:00:00', end_time: '11:15:00',
+        days_of_week: [1, 3, 5], interval_weeks: 1, start_date: '2026-09-28', end_date: '2026-12-11',
+      },
+    });
+  });
+
+  it('defaults to every week', () => {
+    const { interval_weeks, ...rest } = valid;
+    expect(validateSeries(rest).series?.interval_weeks).toBe(1);
+  });
+
+  it('explains what\'s wrong', () => {
+    expect(validateSeries({ ...valid, days_of_week: [] }).error).toBe('Pick at least one day of the week');
+    expect(validateSeries({ ...valid, days_of_week: [7] }).error).toBe('Pick at least one day of the week');
+    expect(validateSeries({ ...valid, interval_weeks: 3 }).error).toBe('Repeat every week or every other week');
+    expect(validateSeries({ ...valid, end_date: '2026-09-01' }).error).toMatch(/end on or after/);
+    expect(validateSeries({ ...valid, end_date: '2027-12-01' }).error).toBe('A repeat can last up to a year');
+    expect(validateSeries({ ...valid, type: 'task', task_id: 'x' }).error).toBe('Task blocks can\'t repeat');
+    expect(validateSeries({ ...valid, end_time: '09:00' }).error).toBe('End time must be after start time');
+  });
+});
+
+describe('validateTravel', () => {
+  it('keeps custom places and minutes between known places, with pair keys sorted', () => {
+    expect(validateTravel({ places: ['Library', 'campus', 'library'], minutes: { 'work|campus': 20, 'home|library': 15 } })).toEqual({
+      travel: { places: ['library'], minutes: { 'campus|work': 20, 'home|library': 15 } },
+    });
+  });
+
+  it('rejects unknown places and silly times', () => {
+    expect(validateTravel({ places: [], minutes: { 'home|mars': 10 } }).error).toBe('Unknown trip: home|mars');
+    expect(validateTravel({ places: [], minutes: { 'home|home': 10 } }).error).toBe('Unknown trip: home|home');
+    expect(validateTravel({ places: [], minutes: { 'home|work': 0 } }).error).toMatch(/1 to 240/);
+    expect(validateTravel({ places: [], minutes: { 'home|work': 300 } }).error).toMatch(/1 to 240/);
+    expect(validateTravel({ places: ['a|b'], minutes: {} }).error).toMatch(/without \|/);
+  });
+
+  it('pairKey is the same both ways', () => {
+    expect(pairKey('work', 'campus')).toBe(pairKey('campus', 'work'));
   });
 });

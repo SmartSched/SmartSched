@@ -7,6 +7,7 @@ import {
   Button,
   ButtonBase,
   Checkbox,
+  FormControlLabel,
   IconButton,
   TextField,
   Select,
@@ -28,16 +29,25 @@ import { Add, ChevronLeft, ChevronRight } from '@mui/icons-material';
 import { addDays, format, parseISO, startOfWeek, subDays } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
-import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
+import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '../lib/api';
 import { useSelectedDay } from '../lib/today';
 import { layoutBlocks, toMinutes, type BlockTask, type TimeBlock } from '../lib/planner';
 import { burnoutWarnings } from '../lib/burnout';
 import { findOpenSlot, missedTaskBlocks, type Slot } from '../lib/reschedule';
 import type { Task } from '../lib/tasks';
+import { allPlaces, placeLabel } from '../lib/places';
+import { useProfile } from '../lib/ProfileContext';
 import { BurnoutBanner } from './BurnoutBanner';
 import { TimeSpentDialog } from './TimeSpentDialog';
 
-type BlockPayload = Omit<TimeBlock, 'id' | 'task'>;
+type BlockPayload = Omit<TimeBlock, 'id' | 'task' | 'series' | 'series_id' | 'auto'>;
+
+// What the server says about commutes after a save (see server/commute.js).
+interface CommuteReport {
+  failed?: boolean; // the block saved, but working out commutes didn't
+  added: { activity: string; start_time: string }[];
+  tight: { date: string; from: string; to: string; gap: number; needed: number; after: string; before: string }[];
+}
 type ViewMode = 'day' | 'week';
 
 const HOUR_HEIGHT = 64; // px per hour on the grid
@@ -93,6 +103,19 @@ const getTypeColor = (type: string) => {
   }
 };
 
+// A new repeat runs about a semester unless the user changes it.
+const REPEAT_WEEKS = 15;
+const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+interface RepeatValues {
+  enabled: boolean;
+  days: number[]; // 0 = Sunday
+  interval: 1 | 2;
+  start_date: string;
+  end_date: string;
+}
+
 interface BlockFormValues {
   activity: string;
   date: string;
@@ -100,10 +123,46 @@ interface BlockFormValues {
   end_time: string; // HH:MM
   type: string;
   task_id: string; // '' unless type is 'task'
+  location: string; // '' = not set
+  repeat: RepeatValues;
+}
+
+type SeriesPayload = Omit<BlockPayload, 'date' | 'task_id'> & {
+  days_of_week: number[];
+  interval_weeks: 1 | 2;
+  start_date: string;
+  end_date: string;
+};
+
+// What the form hands back: this block's fields, the repeat rule when it repeats, and, for a block that's
+// part of a repeat, whether the change is for just this one or all of them.
+interface BlockSubmission {
+  block: BlockPayload;
+  repeat: SeriesPayload | null;
+  scope: 'one' | 'all';
+}
+
+function defaultRepeat(date: string): RepeatValues {
+  return {
+    enabled: false,
+    days: [parseISO(date).getDay()],
+    interval: 1,
+    start_date: date,
+    end_date: format(addDays(parseISO(date), REPEAT_WEEKS * 7 - 1), 'yyyy-MM-dd'),
+  };
 }
 
 function emptyForm(date: string): BlockFormValues {
-  return { activity: '', date, start_time: '09:00', end_time: '10:00', type: 'study', task_id: '' };
+  return {
+    activity: '',
+    date,
+    start_time: '09:00',
+    end_time: '10:00',
+    type: 'study',
+    task_id: '',
+    location: '',
+    repeat: defaultRepeat(date),
+  };
 }
 
 function toFormValues(block: TimeBlock): BlockFormValues {
@@ -114,6 +173,16 @@ function toFormValues(block: TimeBlock): BlockFormValues {
     end_time: block.end_time.slice(0, 5),
     type: block.type,
     task_id: block.task_id ?? '',
+    location: block.location ?? '',
+    repeat: block.series
+      ? {
+          enabled: true,
+          days: block.series.days_of_week,
+          interval: block.series.interval_weeks,
+          start_date: block.series.start_date,
+          end_date: block.series.end_date,
+        }
+      : defaultRepeat(block.date),
   };
 }
 
@@ -122,12 +191,27 @@ interface BlockFormProps {
   submitLabel: string;
   submittingLabel: string;
   tasks: Task[];
-  onSubmit: (payload: BlockPayload) => Promise<void>;
+  places: string[];
+  // Adding: the block can be set to repeat. Editing one from a repeat: save just it, or all of them.
+  mode: 'add' | 'edit';
+  inSeries?: boolean;
+  onSubmit: (submission: BlockSubmission) => Promise<void>;
   onCancel: () => void;
   onDelete?: () => void;
 }
 
-function BlockForm({ initial, submitLabel, submittingLabel, tasks, onSubmit, onCancel, onDelete }: BlockFormProps) {
+function BlockForm({
+  initial,
+  submitLabel,
+  submittingLabel,
+  tasks,
+  places,
+  mode,
+  inSeries = false,
+  onSubmit,
+  onCancel,
+  onDelete,
+}: BlockFormProps) {
   const [values, setValues] = useState(initial);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,9 +221,13 @@ function BlockForm({ initial, submitLabel, submittingLabel, tasks, onSubmit, onC
   // Open tasks, plus this block's own task even if it's been finished since.
   const taskOptions = tasks.filter((t) => !t.completed || t.id === values.task_id);
   const pickedTask = tasks.find((t) => t.id === values.task_id);
+  // Task blocks are one-offs; anything else can repeat when it's being added.
+  const canRepeat = !isTask && (mode === 'add' || inSeries);
+  const repeating = canRepeat && values.repeat.enabled;
+  const placeOptions = values.location && !places.includes(values.location) ? [...places, values.location] : places;
+  const setRepeat = (changes: Partial<RepeatValues>) => setValues({ ...values, repeat: { ...values.repeat, ...changes } });
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const submit = async (scope: 'one' | 'all') => {
     if (isTask && !pickedTask) {
       setError('Pick the task this time is for.');
       return;
@@ -148,7 +236,7 @@ function BlockForm({ initial, submitLabel, submittingLabel, tasks, onSubmit, onC
       setError('Give the block an activity name.');
       return;
     }
-    if (!values.date || !values.start_time || !values.end_time) {
+    if (!values.start_time || !values.end_time || (!repeating && !values.date)) {
       setError('Pick a date, start time, and end time.');
       return;
     }
@@ -156,22 +244,47 @@ function BlockForm({ initial, submitLabel, submittingLabel, tasks, onSubmit, onC
       setError('End time must be after the start time.');
       return;
     }
+    if (repeating && (values.repeat.days.length === 0 || !values.repeat.start_date || !values.repeat.end_date)) {
+      setError('Pick the days it repeats on, and when it starts and ends.');
+      return;
+    }
+    if (repeating && values.repeat.end_date < values.repeat.start_date) {
+      setError('The repeat has to end on or after the day it starts.');
+      return;
+    }
+    const block: BlockPayload = {
+      // A task block is named after its task, so it still reads sensibly anywhere the task isn't attached.
+      activity: isTask && pickedTask ? pickedTask.title : values.activity.trim(),
+      date: repeating && mode === 'add' ? values.repeat.start_date : values.date,
+      start_time: values.start_time,
+      end_time: values.end_time,
+      type: values.type as TimeBlock['type'],
+      task_id: isTask ? values.task_id : null,
+      location: values.location || null,
+    };
+    const { date, task_id, ...fields } = block;
+    const repeat: SeriesPayload | null = repeating
+      ? {
+          ...fields,
+          days_of_week: values.repeat.days,
+          interval_weeks: values.repeat.interval,
+          start_date: values.repeat.start_date,
+          end_date: values.repeat.end_date,
+        }
+      : null;
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({
-        // A task block is named after its task, so it still reads sensibly anywhere the task isn't attached.
-        activity: isTask && pickedTask ? pickedTask.title : values.activity.trim(),
-        date: values.date,
-        start_time: values.start_time,
-        end_time: values.end_time,
-        type: values.type as TimeBlock['type'],
-        task_id: isTask ? values.task_id : null,
-      });
+      await onSubmit({ block, repeat, scope });
     } catch (err: any) {
       setError(err.message);
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    submit('one');
   };
 
   return (
@@ -219,14 +332,33 @@ function BlockForm({ initial, submitLabel, submittingLabel, tasks, onSubmit, onC
           autoFocus
         />
       )}
-      <TextField
-        fullWidth
-        label="Date"
-        type="date"
-        value={values.date}
-        onChange={(e) => setValues({ ...values, date: e.target.value })}
-        slotProps={{ inputLabel: { shrink: true } }}
-      />
+      <FormControl fullWidth>
+        <InputLabel>Where (optional)</InputLabel>
+        <Select
+          value={values.location}
+          label="Where (optional)"
+          onChange={(e) => setValues({ ...values, location: e.target.value })}
+        >
+          <MenuItem value="">
+            <em>Not set</em>
+          </MenuItem>
+          {placeOptions.map((place) => (
+            <MenuItem key={place} value={place}>
+              {placeLabel(place)}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      {!(repeating && mode === 'add') && (
+        <TextField
+          fullWidth
+          label="Date"
+          type="date"
+          value={values.date}
+          onChange={(e) => setValues({ ...values, date: e.target.value })}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
+      )}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
         <TextField
           fullWidth
@@ -247,12 +379,79 @@ function BlockForm({ initial, submitLabel, submittingLabel, tasks, onSubmit, onC
           slotProps={{ inputLabel: { shrink: true } }}
         />
       </Box>
+
+      {canRepeat && (
+        <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={values.repeat.enabled}
+                disabled={inSeries}
+                onChange={(e) => setRepeat({ enabled: e.target.checked })}
+              />
+            }
+            label={inSeries ? 'Repeats' : 'Repeat weekly'}
+            sx={{ m: 0 }}
+          />
+          {values.repeat.enabled && (
+            <>
+              {inSeries && (
+                <Typography variant="caption" color="text.secondary">
+                  Changes here only apply if you save all in the series.
+                </Typography>
+              )}
+              <ToggleButtonGroup
+                size="small"
+                value={values.repeat.days}
+                onChange={(_, days: number[]) => setRepeat({ days: [...days].sort((a, b) => a - b) })}
+                aria-label="Days it repeats on"
+              >
+                {WEEKDAY_LETTERS.map((letter, day) => (
+                  <ToggleButton key={day} value={day} aria-label={WEEKDAY_NAMES[day]} sx={{ width: 40 }}>
+                    {letter}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+              <FormControl fullWidth size="small">
+                <InputLabel>How often</InputLabel>
+                <Select
+                  value={values.repeat.interval}
+                  label="How often"
+                  onChange={(e) => setRepeat({ interval: Number(e.target.value) as 1 | 2 })}
+                >
+                  <MenuItem value={1}>Every week</MenuItem>
+                  <MenuItem value={2}>Every other week</MenuItem>
+                </Select>
+              </FormControl>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <TextField
+                  size="small"
+                  label="From"
+                  type="date"
+                  value={values.repeat.start_date}
+                  onChange={(e) => setRepeat({ start_date: e.target.value })}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+                <TextField
+                  size="small"
+                  label="Until"
+                  type="date"
+                  value={values.repeat.end_date}
+                  onChange={(e) => setRepeat({ end_date: e.target.value })}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+              </Box>
+            </>
+          )}
+        </Box>
+      )}
+
       {error && (
         <Typography variant="body2" color="error">
           {error}
         </Typography>
       )}
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
         {onDelete && (
           <Button color="error" onClick={onDelete} disabled={submitting}>
             Delete
@@ -262,14 +461,30 @@ function BlockForm({ initial, submitLabel, submittingLabel, tasks, onSubmit, onC
         <Button onClick={onCancel} disabled={submitting}>
           Cancel
         </Button>
-        <Button
-          type="submit"
-          variant="contained"
-          disabled={submitting || endBeforeStart}
-          sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
-        >
-          {submitting ? submittingLabel : submitLabel}
-        </Button>
+        {inSeries ? (
+          <>
+            <Button variant="outlined" disabled={submitting || endBeforeStart} onClick={() => submit('one')}>
+              Save just this one
+            </Button>
+            <Button
+              variant="contained"
+              disabled={submitting || endBeforeStart}
+              onClick={() => submit('all')}
+              sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
+            >
+              {submitting ? submittingLabel : 'Save all in the series'}
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={submitting || endBeforeStart}
+            sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
+          >
+            {submitting ? submittingLabel : submitLabel}
+          </Button>
+        )}
       </Box>
     </Box>
   );
@@ -340,7 +555,8 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
         left: `calc(${(column * 100) / columns}% + ${gap}px)`,
         width: `calc(${100 / columns}% - ${gap * 2}px)`,
         backgroundColor: color + '20',
-        border: `2px solid ${color}`,
+        // Commutes the app added itself get a dashed border.
+        border: `2px ${block.auto ? 'dashed' : 'solid'} ${color}`,
         borderRadius: dense ? '6px' : '10px',
         display: 'flex',
         alignItems: compact ? 'center' : 'flex-start',
@@ -387,6 +603,7 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
           <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
             {timeRange}
             {task ? ` · ${task.priority} priority` : ''}
+            {block.location ? ` · ${placeLabel(block.location)}` : ''}
           </Typography>
         )}
       </ButtonBase>
@@ -406,7 +623,11 @@ export function DailyPlanner() {
   const [deletingBlock, setDeletingBlock] = useState<TimeBlock | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; severity: 'success' | 'info' | 'warning' } | null>(null);
+  const { profile } = useProfile();
+  const places = allPlaces(profile?.travel);
+  // Saving can add or remove automatic commutes elsewhere on the day, so the view reloads after each change.
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
   // Blocks from two weeks back to two weeks ahead, for spotting missed task blocks (#9) and finding room.
   const [nearbyBlocks, setNearbyBlocks] = useState<TimeBlock[]>([]);
@@ -445,7 +666,7 @@ export function DailyPlanner() {
     return () => {
       cancelled = true;
     };
-  }, [user, viewMode, selectedDate, weekDates]);
+  }, [user, viewMode, selectedDate, weekDates, reloadVersion]);
 
   useEffect(() => {
     if (!user) return;
@@ -528,19 +749,64 @@ export function DailyPlanner() {
     }
   };
 
-  const handleAddBlock = async (payload: BlockPayload) => {
-    const created = await apiPost('/api/time-blocks', payload);
-    showSavedBlock(created);
-    setShowForm(false);
+  const reload = () => {
+    setReloadVersion((v) => v + 1);
     setNearbyVersion((v) => v + 1);
   };
 
-  const handleEditBlock = async (payload: BlockPayload) => {
+  // What the server did about commutes after a save: a trip that doesn't fit matters more than one added.
+  const reportCommutes = (commutes: CommuteReport | undefined, fallback: string | null = null) => {
+    const [tight] = commutes?.tight ?? [];
+    const added = commutes?.added ?? [];
+    if (commutes?.failed) {
+      setNotice({ severity: 'warning', text: "Saved, but commutes for that day couldn't be worked out. Try saving again." });
+    } else if (tight) {
+      const more = commutes!.tight.length > 1 ? ` (and ${commutes!.tight.length - 1} more like it)` : '';
+      const day = format(parseISO(tight.date), 'EEE, MMM d');
+      const trip = `${placeLabel(tight.from)} to ${placeLabel(tight.to)}`;
+      setNotice({
+        severity: 'warning',
+        text:
+          tight.gap <= 0
+            ? `On ${day}, “${tight.before}” starts before “${tight.after}” ends, so there's no time to get from ${trip}.${more}`
+            : `Only ${tight.gap} min to get from ${trip} before “${tight.before}” on ${day}. ` +
+              `The trip usually takes ${tight.needed}.${more}`,
+      });
+    } else if (added.length === 1) {
+      setNotice({ severity: 'info', text: `Added “${added[0].activity}” at ${formatTime(added[0].start_time)}.` });
+    } else if (added.length > 1) {
+      setNotice({ severity: 'info', text: `Added ${added.length} commutes.` });
+    } else if (fallback) {
+      setNotice({ severity: 'success', text: fallback });
+    }
+  };
+
+  const handleAddBlock = async ({ block, repeat }: BlockSubmission) => {
+    if (repeat) {
+      const created = await apiPost('/api/block-series', repeat);
+      showSavedBlock(created.blocks[0]);
+      reportCommutes(created.commutes, `Added ${created.blocks.length} blocks.`);
+    } else {
+      const created = await apiPost('/api/time-blocks', block);
+      showSavedBlock(created.block);
+      reportCommutes(created.commutes);
+    }
+    setShowForm(false);
+    reload();
+  };
+
+  const handleEditBlock = async ({ block, repeat, scope }: BlockSubmission) => {
     if (!editingBlock) return;
-    const updated = await apiPatch(`/api/time-blocks/${editingBlock.id}`, payload);
-    showSavedBlock(updated);
+    if (scope === 'all' && editingBlock.series_id && repeat) {
+      const updated = await apiPut(`/api/block-series/${editingBlock.series_id}`, repeat);
+      reportCommutes(updated.commutes, `Updated all ${updated.blocks.length} blocks.`);
+    } else {
+      const updated = await apiPatch(`/api/time-blocks/${editingBlock.id}`, block);
+      showSavedBlock(updated.block);
+      reportCommutes(updated.commutes);
+    }
     setEditingBlock(null);
-    setNearbyVersion((v) => v + 1);
+    reload();
   };
 
   // Every block for a task shows the task's latest state (checked or not).
@@ -578,10 +844,14 @@ export function DailyPlanner() {
 
   const moveBlock = async (block: TimeBlock, slot: Slot) => {
     try {
-      const moved: TimeBlock = await apiPatch(`/api/time-blocks/${block.id}`, slot);
+      const { block: moved, commutes }: { block: TimeBlock; commutes: CommuteReport } = await apiPatch(
+        `/api/time-blocks/${block.id}`,
+        slot,
+      );
       setNearbyBlocks((current) => current.map((b) => (b.id === moved.id ? moved : b)));
       setTimeBlocks((current) => [...current.filter((b) => b.id !== moved.id), ...(isShown(moved.date) ? [moved] : [])]);
-      setNotice(`Moved “${moved.task?.title ?? moved.activity}” to ${formatSlot(moved)}.`);
+      reportCommutes(commutes, `Moved “${moved.task?.title ?? moved.activity}” to ${formatSlot(moved)}.`);
+      reload();
     } catch {
       setActionError("Couldn't move the block. Try again.");
     }
@@ -593,14 +863,20 @@ export function DailyPlanner() {
     saveLeftBlocks(next);
   };
 
-  const handleDeleteBlock = async () => {
+  // scope 'all' deletes every block in the block's repeat.
+  const handleDeleteBlock = async (scope: 'one' | 'all' = 'one') => {
     if (!deletingBlock) return;
     setDeleteInProgress(true);
     try {
-      await apiDelete(`/api/time-blocks/${deletingBlock.id}`);
+      if (scope === 'all' && deletingBlock.series_id) {
+        await apiDelete(`/api/block-series/${deletingBlock.series_id}`);
+      } else {
+        await apiDelete(`/api/time-blocks/${deletingBlock.id}`);
+      }
       setTimeBlocks((current) => current.filter((b) => b.id !== deletingBlock.id));
       setNearbyBlocks((current) => current.filter((b) => b.id !== deletingBlock.id));
       setDeletingBlock(null);
+      reload();
     } catch {
       setActionError("Couldn't delete time block. Try again.");
     } finally {
@@ -719,6 +995,8 @@ export function DailyPlanner() {
               submitLabel="Add Block"
               submittingLabel="Adding..."
               tasks={tasks}
+              places={places}
+              mode="add"
               onSubmit={handleAddBlock}
               onCancel={() => setShowForm(false)}
             />
@@ -849,6 +1127,9 @@ export function DailyPlanner() {
                 submitLabel="Save"
                 submittingLabel="Saving..."
                 tasks={tasks}
+                places={places}
+                mode="edit"
+                inSeries={Boolean(editingBlock.series_id)}
                 onSubmit={handleEditBlock}
                 onCancel={() => setEditingBlock(null)}
                 onDelete={() => {
@@ -864,15 +1145,30 @@ export function DailyPlanner() {
       <Dialog open={deletingBlock !== null} onClose={() => !deleteInProgress && setDeletingBlock(null)}>
         <DialogTitle>Delete time block?</DialogTitle>
         <DialogContent>
-          <DialogContentText>Delete "{deletingBlock?.activity}"? This can't be undone.</DialogContentText>
+          <DialogContentText>
+            {deletingBlock?.series_id
+              ? `"${deletingBlock.activity}" repeats. Delete just this one, or every block in the series? This can't be undone.`
+              : `Delete "${deletingBlock?.activity}"? This can't be undone.`}
+          </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeletingBlock(null)} disabled={deleteInProgress}>
             Cancel
           </Button>
-          <Button color="error" variant="contained" onClick={handleDeleteBlock} disabled={deleteInProgress}>
-            {deleteInProgress ? 'Deleting...' : 'Delete'}
-          </Button>
+          {deletingBlock?.series_id ? (
+            <>
+              <Button color="error" onClick={() => handleDeleteBlock('one')} disabled={deleteInProgress}>
+                Just this one
+              </Button>
+              <Button color="error" variant="contained" onClick={() => handleDeleteBlock('all')} disabled={deleteInProgress}>
+                {deleteInProgress ? 'Deleting...' : 'All in the series'}
+              </Button>
+            </>
+          ) : (
+            <Button color="error" variant="contained" onClick={() => handleDeleteBlock()} disabled={deleteInProgress}>
+              {deleteInProgress ? 'Deleting...' : 'Delete'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -880,12 +1176,12 @@ export function DailyPlanner() {
 
       <Snackbar
         open={notice !== null}
-        autoHideDuration={5000}
+        autoHideDuration={notice?.severity === 'warning' ? 10000 : 5000}
         onClose={() => setNotice(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity="success" onClose={() => setNotice(null)} sx={{ width: '100%' }}>
-          {notice}
+        <Alert severity={notice?.severity ?? 'success'} onClose={() => setNotice(null)} sx={{ width: '100%' }}>
+          {notice?.text}
         </Alert>
       </Snackbar>
 

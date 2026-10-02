@@ -68,6 +68,14 @@ export function normalizeTime(value) {
   return value.length === 5 ? `${value}:00` : value;
 }
 
+export const BUILT_IN_PLACES = ['home', 'campus', 'work', 'gym'];
+const MAX_PLACE_LENGTH = 40;
+
+// Places are compared and stored lowercase ("Campus" and "campus" are the same place).
+function normalizePlace(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
 // Returns { block } with only known fields, or { error } describing the first problem.
 export function validateTimeBlock(input) {
   const activity = typeof input.activity === 'string' ? input.activity.trim() : '';
@@ -86,7 +94,74 @@ export function validateTimeBlock(input) {
   // Task blocks point at their task; any other type drops a leftover task_id (e.g. after changing the type).
   if (input.type === 'task' && !isUuid(input.task_id)) return { error: 'Pick a task for this block' };
   const task_id = input.type === 'task' ? input.task_id : null;
-  return { block: { activity, date: input.date, start_time, end_time, type: input.type, task_id } };
+  const location = input.location == null ? '' : normalizePlace(input.location);
+  if (typeof input.location === 'number' || location.length > MAX_PLACE_LENGTH) {
+    return { error: 'Location must be a short place name' };
+  }
+  return {
+    block: { activity, date: input.date, start_time, end_time, type: input.type, task_id, location: location || null },
+  };
+}
+
+const MAX_SERIES_DAYS = 366;
+
+function daysBetween(start, end) {
+  return (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000;
+}
+
+// A repeating block: the block's own fields plus which weekdays (0 = Sunday), every 1 or 2 weeks, and the
+// first and last dates. Returns { series } or { error }.
+export function validateSeries(input) {
+  if (!input || typeof input !== 'object') return { error: 'Repeat details are required' };
+  if (input.type === 'task') return { error: 'Task blocks can\'t repeat' };
+  if (!isValidDate(input.start_date)) return { error: 'Start date must be a valid YYYY-MM-DD date' };
+  if (!isValidDate(input.end_date)) return { error: 'End date must be a valid YYYY-MM-DD date' };
+  if (input.end_date < input.start_date) return { error: 'The repeat has to end on or after the day it starts' };
+  if (daysBetween(input.start_date, input.end_date) > MAX_SERIES_DAYS) return { error: 'A repeat can last up to a year' };
+  const { block, error } = validateTimeBlock({ ...input, date: input.start_date });
+  if (error) return { error };
+  const days = input.days_of_week;
+  if (!Array.isArray(days) || days.length === 0 || !days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) {
+    return { error: 'Pick at least one day of the week' };
+  }
+  const interval = input.interval_weeks ?? 1;
+  if (interval !== 1 && interval !== 2) return { error: 'Repeat every week or every other week' };
+  const { date, task_id, ...fields } = block;
+  return {
+    series: {
+      ...fields,
+      days_of_week: [...new Set(days)].sort((a, b) => a - b),
+      interval_weeks: interval,
+      start_date: input.start_date,
+      end_date: input.end_date,
+    },
+  };
+}
+
+// Pair keys put the two place names in sorted order, so campus|work and work|campus are the same trip.
+export function pairKey(a, b) {
+  return [a, b].sort().join('|');
+}
+
+// The user's own places and minutes between pairs of places. Returns { travel } or { error }.
+export function validateTravel(input) {
+  if (!input || typeof input !== 'object') return { error: 'Travel times are required' };
+  const places = [];
+  for (const raw of input.places ?? []) {
+    const place = normalizePlace(raw);
+    if (!place || place.length > MAX_PLACE_LENGTH || place.includes('|')) return { error: 'Place names must be short, without |' };
+    if (!BUILT_IN_PLACES.includes(place) && !places.includes(place)) places.push(place);
+  }
+  if (places.length > 12) return { error: 'Add up to 12 of your own places' };
+  const known = [...BUILT_IN_PLACES, ...places];
+  const minutes = {};
+  for (const [key, value] of Object.entries(input.minutes ?? {})) {
+    const [a, b, extra] = key.split('|');
+    if (extra !== undefined || !known.includes(a) || !known.includes(b) || a === b) return { error: `Unknown trip: ${key}` };
+    if (!Number.isInteger(value) || value < 1 || value > 240) return { error: 'Travel times must be 1 to 240 minutes' };
+    minutes[pairKey(a, b)] = value;
+  }
+  return { travel: { places, minutes } };
 }
 
 // Minutes a finished task actually took: a whole number from 0 up to a week.

@@ -45,11 +45,18 @@ const { app } = await import('../app.js');
 const AUTH = { Authorization: 'Bearer test-token' };
 const TASK_ID = '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b';
 
-// The calls made on the one query sent to `table`, e.g. [['insert', {...}], ['select']].
+// Every call made on queries sent to `table`, in order, e.g. [['insert', {...}], ['select'], ['in', ...]].
 function callsOn(table) {
   const queries = fake.state.queries.filter((q) => q.table === table);
-  expect(queries).toHaveLength(1);
-  return queries[0].calls;
+  expect(queries.length).toBeGreaterThan(0);
+  return queries.flatMap((q) => q.calls);
+}
+
+// The rows passed to each insert on `table`.
+function inserted(table) {
+  return callsOn(table)
+    .filter(([method]) => method === 'insert')
+    .map(([, rows]) => rows);
 }
 
 beforeEach(() => {
@@ -197,7 +204,7 @@ describe('time blocks', () => {
     const res = await request(app).post('/api/time-blocks').set(AUTH).send(block);
     expect(res.status).toBe(201);
     const [, row] = callsOn('time_blocks').find(([method]) => method === 'insert');
-    expect(row).toEqual({ user_id: 'user-1', ...block, start_time: '17:00:00', end_time: '18:00:00', task_id: null });
+    expect(row).toEqual({ user_id: 'user-1', ...block, start_time: '17:00:00', end_time: '18:00:00', task_id: null, location: null });
   });
 
   it('returns each block with its task attached', async () => {
@@ -294,5 +301,116 @@ describe('reflections', () => {
   it('rejects a bad date', async () => {
     expect((await request(app).get('/api/reflections/yesterday').set(AUTH)).status).toBe(400);
     expect((await request(app).post('/api/reflections').set(AUTH).send({ date: '2026-02-30', ratings })).status).toBe(400);
+  });
+});
+
+describe('commutes', () => {
+  const campus = { id: 'c', date: '2026-09-29', start_time: '09:00:00', end_time: '12:00:00', activity: 'Class', type: 'class', location: 'campus', auto: false };
+  const work = { id: 'w', date: '2026-09-29', start_time: '13:00:00', end_time: '17:00:00', activity: 'Shift', type: 'work', location: 'work', auto: false };
+  const travel = { data: { travel: { places: [], minutes: { 'campus|work': 20 } } }, error: null };
+
+  it('adds a commute before the next block when a saved block is somewhere else', async () => {
+    // insert the work block, then: the profile's travel times, the day's blocks, the commute insert
+    fake.state.results = [{ data: [work], error: null }, travel, { data: [campus, work], error: null }];
+    const res = await request(app)
+      .post('/api/time-blocks')
+      .set(AUTH)
+      .send({ activity: 'Shift', date: '2026-09-29', start_time: '13:00', end_time: '17:00', type: 'work', location: 'Work' });
+    expect(res.status).toBe(201);
+    expect(res.body.block).toEqual(work);
+    const commute = { date: '2026-09-29', start_time: '12:40:00', end_time: '13:00:00', activity: 'Commute: Campus → Work', type: 'commute', location: null, task_id: null, series_id: null, auto: true };
+    expect(res.body.commutes).toEqual({ added: [commute], tight: [] });
+    expect(inserted('time_blocks')).toContainEqual([{ user_id: 'user-1', ...commute }]);
+  });
+
+  it('reports a gap too short for the trip instead of squeezing a commute in', async () => {
+    const tightWork = { ...work, start_time: '12:10:00' };
+    fake.state.results = [{ data: [tightWork], error: null }, travel, { data: [campus, tightWork], error: null }];
+    const res = await request(app)
+      .post('/api/time-blocks')
+      .set(AUTH)
+      .send({ activity: 'Shift', date: '2026-09-29', start_time: '12:10', end_time: '17:00', type: 'work', location: 'work' });
+    expect(res.body.commutes).toEqual({
+      added: [],
+      tight: [{ date: '2026-09-29', from: 'campus', to: 'work', gap: 10, needed: 20, after: 'Class', before: 'Shift' }],
+    });
+    expect(inserted('time_blocks')).toHaveLength(1); // just the block itself
+  });
+
+  it('clears the day\'s old automatic commutes before working them out again', async () => {
+    const oldCommute = { id: 'old', date: '2026-09-29', start_time: '12:30:00', end_time: '12:50:00', activity: 'Commute: Campus → Work', type: 'commute', location: null, auto: true };
+    fake.state.results = [{ data: [work], error: null }, travel, { data: [campus, work, oldCommute], error: null }];
+    await request(app)
+      .post('/api/time-blocks')
+      .set(AUTH)
+      .send({ activity: 'Shift', date: '2026-09-29', start_time: '13:00', end_time: '17:00', type: 'work', location: 'work' });
+    expect(callsOn('time_blocks')).toContainEqual(['in', 'id', ['old']]);
+  });
+
+  it('editing one block from a repeat detaches it, and an edited automatic commute becomes the user\'s own', async () => {
+    fake.state.results = [{ data: { ...campus, series_id: 's1', auto: true }, error: null }, { data: [campus], error: null }];
+    const res = await request(app).patch('/api/time-blocks/c').set(AUTH).send({ end_time: '12:30' });
+    expect(res.status).toBe(200);
+    const [, updates] = callsOn('time_blocks').find(([method]) => method === 'update');
+    expect(updates).toMatchObject({ series_id: null, auto: false, end_time: '12:30:00' });
+  });
+
+  it('saves travel times', async () => {
+    fake.state.results = [{ data: [{ id: 'user-1', travel: { places: [], minutes: { 'campus|work': 20 } } }], error: null }];
+    const res = await request(app).put('/api/profile/travel').set(AUTH).send({ travel: { places: [], minutes: { 'work|campus': 20 } } });
+    expect(res.status).toBe(200);
+    const [, updates] = callsOn('profiles').find(([method]) => method === 'update');
+    expect(updates).toEqual({ travel: { places: [], minutes: { 'campus|work': 20 } } });
+
+    const bad = await request(app).put('/api/profile/travel').set(AUTH).send({ travel: { minutes: { 'home|mars': 5 } } });
+    expect(bad.status).toBe(400);
+  });
+});
+
+describe('repeating blocks', () => {
+  const rule = {
+    activity: 'CSC 453', type: 'class', location: 'campus', start_time: '10:00', end_time: '11:15',
+    days_of_week: [1, 3], interval_weeks: 1, start_date: '2026-09-28', end_date: '2026-10-09',
+  };
+
+  it('saves the rule once and writes out a block for each date', async () => {
+    fake.state.results = [{ data: [{ id: 's1', user_id: 'user-1', ...rule }], error: null }];
+    const res = await request(app).post('/api/block-series').set(AUTH).send(rule);
+    expect(res.status).toBe(201);
+    const [rows] = inserted('time_blocks');
+    expect(rows.map((r) => r.date)).toEqual(['2026-09-28', '2026-09-30', '2026-10-05', '2026-10-07']);
+    expect(rows[0]).toMatchObject({ user_id: 'user-1', series_id: 's1', activity: 'CSC 453', location: 'campus', task_id: null });
+  });
+
+  it('rejects a rule that never happens, or can\'t be saved', async () => {
+    const never = await request(app).post('/api/block-series').set(AUTH).send({ ...rule, days_of_week: [6], end_date: '2026-10-02' });
+    expect(never.status).toBe(400);
+    expect(never.body.error).toMatch(/None of those days/);
+    expect((await request(app).post('/api/block-series').set(AUTH).send({ ...rule, days_of_week: [] })).status).toBe(400);
+    expect(fake.state.queries).toHaveLength(0);
+  });
+
+  it('changing all of them rewrites the blocks from the new rule', async () => {
+    fake.state.results = [
+      { data: [{ id: 's1', user_id: 'user-1', ...rule, days_of_week: [2] }], error: null }, // update the rule
+      { data: [{ date: '2026-09-28' }, { date: '2026-09-30' }], error: null }, // delete the old blocks
+    ];
+    const res = await request(app).put('/api/block-series/s1').set(AUTH).send({ ...rule, days_of_week: [2] });
+    expect(res.status).toBe(200);
+    expect(callsOn('time_blocks')).toContainEqual(['eq', 'series_id', 's1']);
+    const [rows] = inserted('time_blocks');
+    expect(rows.map((r) => r.date)).toEqual(['2026-09-29', '2026-10-06']);
+  });
+
+  it('deleting all of them removes the rule (its blocks go with it)', async () => {
+    fake.state.results = [{ data: [{ date: '2026-09-28' }], error: null }, { data: [{ id: 's1' }], error: null }];
+    const res = await request(app).delete('/api/block-series/s1').set(AUTH);
+    expect(res.status).toBe(204);
+    expect(callsOn('time_block_series')).toContainEqual(['eq', 'id', 's1']);
+  });
+
+  it('says 404 for a repeat that isn\'t there', async () => {
+    fake.state.results = [{ data: [], error: null }];
+    expect((await request(app).put('/api/block-series/nope').set(AUTH).send(rule)).status).toBe(404);
   });
 });

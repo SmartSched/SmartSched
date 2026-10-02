@@ -2,7 +2,18 @@ import express from 'express';
 import cors from 'cors';
 import ws from 'ws';
 import { createClient } from '@supabase/supabase-js';
-import { isUuid, isValidDate, isValidTimeSpent, validateRatings, validateSurvey, validateTimeBlock } from './validation.js';
+import {
+  isUuid,
+  isValidDate,
+  isValidTimeSpent,
+  validateRatings,
+  validateSeries,
+  validateSurvey,
+  validateTimeBlock,
+  validateTravel,
+} from './validation.js';
+import { expandSeries } from './series.js';
+import { planCommutes } from './commute.js';
 
 // The Express app with every route. index.js starts it; the tests use it directly.
 export const app = express();
@@ -45,7 +56,7 @@ function serverError(res, error) {
   res.status(500).json({ error: 'Something went wrong on our end. Try again in a moment.' });
 }
 
-const PROFILE_COLUMNS = 'id, name, survey, survey_updated_at';
+const PROFILE_COLUMNS = 'id, name, survey, survey_updated_at, travel';
 
 app.get('/api/profile', requireAuth, async (req, res) => {
   const { data, error } = await req.supabase
@@ -66,6 +77,32 @@ app.put('/api/profile/survey', requireAuth, async (req, res) => {
     .upsert({ id: req.userId, survey, survey_updated_at: new Date().toISOString() }, { onConflict: 'id' })
     .select(PROFILE_COLUMNS);
   if (error) return serverError(res, error);
+  res.json(data[0]);
+});
+
+// Saving travel times also rebuilds the automatic commutes for the next eight weeks, so they show up
+// without having to touch each day.
+app.put('/api/profile/travel', requireAuth, async (req, res) => {
+  const { travel, error: validationError } = validateTravel(req.body.travel);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const { data, error } = await req.supabase
+    .from('profiles')
+    .update({ travel })
+    .eq('id', req.userId)
+    .select(PROFILE_COLUMNS);
+  if (error) return serverError(res, error);
+  if (data.length === 0) return res.status(404).json({ error: 'Profile not found' });
+
+  // From yesterday (UTC), so the user's own "today" is covered in any time zone.
+  const today = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const until = new Date(Date.now() + 56 * 86_400_000).toISOString().slice(0, 10);
+  const { data: upcoming } = await req.supabase
+    .from('time_blocks')
+    .select('date')
+    .gte('date', today)
+    .lte('date', until)
+    .not('location', 'is', null);
+  await recalcCommutes(req, (upcoming ?? []).map((b) => b.date));
   res.json(data[0]);
 });
 
@@ -132,7 +169,9 @@ app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
 });
 
 // Task blocks come back with their task, so the planner can show its title, priority and checkbox.
-const BLOCK_COLUMNS = '*, task:tasks(id, title, priority, type, completed, due_date, estimated_time, time_spent)';
+const BLOCK_COLUMNS =
+  '*, task:tasks(id, title, priority, type, completed, due_date, estimated_time, time_spent), ' +
+  'series:time_block_series(id, days_of_week, interval_weeks, start_date, end_date)';
 
 // A task block has to point at one of the user's own tasks. Row-level security hides everyone else's,
 // so "not found" covers both a deleted task and someone else's.
@@ -174,6 +213,51 @@ app.get('/api/time-blocks', requireAuth, async (req, res) => {
   res.json(data);
 });
 
+// Rebuilds the automatic commutes on the given dates (the user's own blocks never change) and reports
+// what it added and where a trip doesn't fit. A failure here doesn't undo the save that triggered it.
+async function recalcCommutes(req, dates) {
+  const days = [...new Set(dates)];
+  if (days.length === 0) return { added: [], tight: [] };
+  try {
+    const { data: profile, error: profileError } = await req.supabase
+      .from('profiles')
+      .select('travel')
+      .eq('id', req.userId)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    const { data: blocks, error } = await req.supabase.from('time_blocks').select('*').in('date', days);
+    if (error) throw error;
+
+    const add = [];
+    const tight = [];
+    for (const date of days) {
+      const plan = planCommutes(blocks.filter((b) => b.date === date), profile?.travel?.minutes ?? {});
+      add.push(...plan.add);
+      tight.push(...plan.tight);
+    }
+    const stale = blocks.filter((b) => b.auto).map((b) => b.id);
+    if (stale.length) {
+      const { error: deleteError } = await req.supabase.from('time_blocks').delete().in('id', stale);
+      if (deleteError) throw deleteError;
+    }
+    if (add.length) {
+      const { error: insertError } = await req.supabase
+        .from('time_blocks')
+        .insert(add.map((row) => ({ user_id: req.userId, ...row })));
+      if (insertError) throw insertError;
+    }
+    // "added" is only what's new, so a save that leaves an existing commute in place doesn't announce it again.
+    const existed = (row) =>
+      blocks.some(
+        (b) => b.auto && b.date === row.date && b.start_time === row.start_time && b.end_time === row.end_time && b.activity === row.activity,
+      );
+    return { added: add.filter((row) => !existed(row)), tight };
+  } catch (error) {
+    console.error(error);
+    return { added: [], tight: [], failed: true };
+  }
+}
+
 app.post('/api/time-blocks', requireAuth, async (req, res) => {
   const { block, error: validationError } = validateTimeBlock(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
@@ -183,9 +267,12 @@ app.post('/api/time-blocks', requireAuth, async (req, res) => {
     .insert({ user_id: req.userId, ...block })
     .select(BLOCK_COLUMNS);
   if (error) return serverError(res, error);
-  res.status(201).json(data[0]);
+  const commutes = await recalcCommutes(req, [block.date]);
+  res.status(201).json({ block: data[0], commutes });
 });
 
+// Edits one block. A block from a repeat is detached from it (editing every block in a repeat goes through
+// /api/block-series), and a commute the app added becomes the user's own once they change it.
 app.patch('/api/time-blocks/:id', requireAuth, async (req, res) => {
   // Merge onto the saved row so the start/end check still works when only one of them is sent.
   const { data: existing, error: fetchError } = await req.supabase
@@ -201,12 +288,13 @@ app.patch('/api/time-blocks/:id', requireAuth, async (req, res) => {
   if (block.task_id && block.task_id !== existing.task_id && !(await checkTask(req, res, block.task_id))) return;
   const { data, error } = await req.supabase
     .from('time_blocks')
-    .update(block)
+    .update({ ...block, series_id: null, auto: false })
     .eq('id', req.params.id)
     .select(BLOCK_COLUMNS);
   if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Time block not found' });
-  res.json(data[0]);
+  const commutes = await recalcCommutes(req, [existing.date, block.date]);
+  res.json({ block: data[0], commutes });
 });
 
 app.delete('/api/time-blocks/:id', requireAuth, async (req, res) => {
@@ -217,6 +305,72 @@ app.delete('/api/time-blocks/:id', requireAuth, async (req, res) => {
     .select();
   if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Time block not found' });
+  await recalcCommutes(req, [data[0].date]);
+  res.status(204).end();
+});
+
+// Writes out one block per date of a repeat.
+async function insertOccurrences(req, series) {
+  const { id, user_id, days_of_week, interval_weeks, start_date, end_date, created_at, ...fields } = series;
+  const rows = expandSeries(series).map((date) => ({ user_id: req.userId, ...fields, date, task_id: null, series_id: id }));
+  return req.supabase.from('time_blocks').insert(rows).select(BLOCK_COLUMNS);
+}
+
+app.post('/api/block-series', requireAuth, async (req, res) => {
+  const { series, error: validationError } = validateSeries(req.body);
+  if (validationError) return res.status(400).json({ error: validationError });
+  if (expandSeries(series).length === 0) {
+    return res.status(400).json({ error: 'None of those days fall between the start and end dates' });
+  }
+  const { data, error } = await req.supabase
+    .from('time_block_series')
+    .insert({ user_id: req.userId, ...series })
+    .select();
+  if (error) return serverError(res, error);
+  const { data: blocks, error: blocksError } = await insertOccurrences(req, data[0]);
+  if (blocksError) return serverError(res, blocksError);
+  const commutes = await recalcCommutes(req, blocks.map((b) => b.date));
+  res.status(201).json({ series: data[0], blocks, commutes });
+});
+
+// Changes every block in a repeat: the rule is updated and its blocks are written out again. Blocks
+// edited on their own ("just this one") were detached earlier, so they stay as they are.
+app.put('/api/block-series/:id', requireAuth, async (req, res) => {
+  const { series, error: validationError } = validateSeries(req.body);
+  if (validationError) return res.status(400).json({ error: validationError });
+  if (expandSeries(series).length === 0) {
+    return res.status(400).json({ error: 'None of those days fall between the start and end dates' });
+  }
+  const { data, error } = await req.supabase
+    .from('time_block_series')
+    .update(series)
+    .eq('id', req.params.id)
+    .select();
+  if (error) return serverError(res, error);
+  if (data.length === 0) return res.status(404).json({ error: 'Repeat not found' });
+
+  const { data: old, error: deleteError } = await req.supabase
+    .from('time_blocks')
+    .delete()
+    .eq('series_id', req.params.id)
+    .select('date');
+  if (deleteError) return serverError(res, deleteError);
+  const { data: blocks, error: blocksError } = await insertOccurrences(req, data[0]);
+  if (blocksError) return serverError(res, blocksError);
+  const commutes = await recalcCommutes(req, [...old.map((b) => b.date), ...blocks.map((b) => b.date)]);
+  res.json({ series: data[0], blocks, commutes });
+});
+
+app.delete('/api/block-series/:id', requireAuth, async (req, res) => {
+  const { data: old, error: fetchError } = await req.supabase
+    .from('time_blocks')
+    .select('date')
+    .eq('series_id', req.params.id);
+  if (fetchError) return serverError(res, fetchError);
+  const { data, error } = await req.supabase.from('time_block_series').delete().eq('id', req.params.id).select();
+  if (error) return serverError(res, error);
+  if (data.length === 0) return res.status(404).json({ error: 'Repeat not found' });
+  await recalcCommutes(req, old.map((b) => b.date));
   res.status(204).end();
 });
 

@@ -2,12 +2,14 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { useAuth } from './AuthContext';
 import { apiGet, apiPut } from './api';
 import type { SurveyAnswers } from './survey';
+import type { Travel } from './places';
 
 export interface Profile {
   id: string;
   name: string | null;
   survey: SurveyAnswers | null;
   survey_updated_at: string | null;
+  travel: Travel;
 }
 
 interface ProfileContextValue {
@@ -15,6 +17,7 @@ interface ProfileContextValue {
   loading: boolean;
   error: string | null;
   saveSurvey: (survey: SurveyAnswers) => Promise<void>;
+  saveTravel: (travel: Travel) => Promise<void>;
 }
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
@@ -47,9 +50,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     setState({ userId: profile.id, profile, error: null });
   };
 
+  const saveTravel = async (travel: Travel) => {
+    const profile = await apiPut('/api/profile/travel', { travel });
+    setState({ userId: profile.id, profile, error: null });
+  };
+
   return (
     <ProfileContext.Provider
-      value={{ profile: user ? state.profile : null, loading, error: state.error, saveSurvey }}
+      value={{ profile: user ? state.profile : null, loading, error: state.error, saveSurvey, saveTravel }}
     >
       {children}
     </ProfileContext.Provider>
