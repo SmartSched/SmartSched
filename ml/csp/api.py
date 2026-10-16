@@ -5,6 +5,12 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+import os
+import secrets
+from fastapi import Header
+
+SERVICE_API_KEY = os.environ.get("SERVICE_API_KEY")
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CSP_DIR = PROJECT_ROOT / "ml" / "csp"
 EVAL_DIR = PROJECT_ROOT / "ml" / "eval"
@@ -32,7 +38,9 @@ def health():
 
 
 @app.post("/schedule")
-def schedule(request: ScheduleRequest):
+def schedule(request: ScheduleRequest, x_api_key: str | None = Header(default=None)):
+    if SERVICE_API_KEY and not secrets.compare_digest(x_api_key or "", SERVICE_API_KEY):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     inp = request.input
 
     try:

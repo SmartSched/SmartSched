@@ -14,6 +14,7 @@ import {
 } from './validation.js';
 import { expandSeries } from './series.js';
 import { planCommutes } from './commute.js';
+import { buildSolverInput } from './solverInput.js';
 
 // The Express app with every route. index.js starts it; the tests use it directly.
 export const app = express();
@@ -396,6 +397,77 @@ app.post('/api/reflections', requireAuth, async (req, res) => {
     .select();
   if (error) return serverError(res, error);
   res.status(201).json(data[0]);
+});
+const SCHEDULER_URL = process.env.SCHEDULER_URL || 'http://localhost:8000';
+
+app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
+  const { now, weekStart } = req.body;
+  const tzOffset = Number.isInteger(req.body.tzOffset) ? req.body.tzOffset : 0;
+  if (typeof now !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(now)) {
+    return res.status(400).json({ error: 'now must be YYYY-MM-DDTHH:MM' });
+  }
+  if (!isValidDate(weekStart)) return res.status(400).json({ error: 'weekStart must be a valid YYYY-MM-DD date' });
+
+  const endDate = new Date(`${weekStart}T00:00:00Z`);
+  endDate.setUTCDate(endDate.getUTCDate() + 6);
+  const weekEnd = endDate.toISOString().slice(0, 10);
+  const sinceDate = new Date(`${weekStart}T00:00:00Z`);
+  sinceDate.setUTCDate(sinceDate.getUTCDate() - 7);
+  const since = sinceDate.toISOString().slice(0, 10);
+
+  const [tasks, blocks, profile, reflections] = await Promise.all([
+    req.supabase.from('tasks').select('*').eq('completed', false),
+    req.supabase.from('time_blocks').select('*').gte('date', weekStart).lte('date', weekEnd),
+    req.supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', req.userId).maybeSingle(),
+    req.supabase.from('reflections').select('date, ratings').gte('date', since).lte('date', weekEnd),
+  ]);
+  const failed = [tasks, blocks, profile, reflections].find((r) => r.error);
+  if (failed) return serverError(res, failed.error);
+
+  const survey = profile.data?.survey;
+  if (!survey) return res.status(409).json({ error: 'Finish the onboarding survey first' });
+
+  const input = buildSolverInput({
+    now,
+    weekStart,
+    survey,
+    tzOffset,
+    tasks: tasks.data,
+    blocks: blocks.data,
+    reflections: reflections.data,
+  });
+  if (input.tasks.length === 0) return res.json({ suggestions: [] });
+
+  let result;
+  try {
+    const r = await fetch(`${SCHEDULER_URL}/schedule`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.SERVICE_API_KEY || '',
+      },
+      body: JSON.stringify({ input, survey, limit: 50 }),
+    });
+    if (!r.ok) return res.status(502).json({ error: 'The scheduler could not build a plan' });
+    result = await r.json();
+  } catch (err) {
+    return serverError(res, err);
+  }
+
+  // Suggest only: nothing is saved until the user picks one.
+  const suggestions = result.calendars.slice(0, 3).map((c) => ({
+    id: c.id,
+    blocks: c.calendar.blocks.map((b) => ({
+      activity: input.tasks.find((t) => t.id === b.task)?.title ?? 'Study',
+      date: b.date,
+      start_time: `${b.start}:00`,
+      end_time: `${b.end}:00`,
+      type: 'task',
+      task_id: b.task,
+    })),
+    unscheduled: c.calendar.unscheduled,
+  }));
+  res.json({ suggestions });
 });
 
 // Unknown API routes and anything thrown (like a request body that isn't valid JSON) get a JSON error
