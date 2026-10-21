@@ -448,7 +448,10 @@ app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
       },
       body: JSON.stringify({ input, survey, limit: 50 }),
     });
-    if (!r.ok) return res.status(502).json({ error: 'The scheduler could not build a plan' });
+    if (!r.ok) {
+      console.error('Scheduler said', r.status, await r.text());
+      return res.status(502).json({ error: 'The scheduler could not build a plan' });
+    }
     result = await r.json();
   } catch (err) {
     return serverError(res, err);
@@ -468,6 +471,58 @@ app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
     unscheduled: c.calendar.unscheduled,
   }));
   res.json({ suggestions });
+});
+
+app.post('/api/schedule/accept', requireAuth, async (req, res) => {
+  const { weekStart, blocks } = req.body;
+  if (!isValidDate(weekStart)) return res.status(400).json({ error: 'weekStart must be a valid YYYY-MM-DD date' });
+  if (!Array.isArray(blocks) || blocks.length === 0 || blocks.length > 100) {
+    return res.status(400).json({ error: 'Pick a plan with at least one block' });
+  }
+
+  const endDate = new Date(`${weekStart}T00:00:00Z`);
+  endDate.setUTCDate(endDate.getUTCDate() + 6);
+  const weekEnd = endDate.toISOString().slice(0, 10);
+
+  // Validate every block first, so nothing is deleted if one is bad.
+  const rows = [];
+  for (const input of blocks) {
+    const { block, error: validationError } = validateTimeBlock({ ...input, type: 'task' });
+    if (validationError) return res.status(400).json({ error: validationError });
+    if (block.date < weekStart || block.date > weekEnd) {
+      return res.status(400).json({ error: 'Every block has to fall inside the week' });
+    }
+    rows.push(block);
+  }
+
+  // Every task referenced must belong to this user (row-level security hides the rest).
+  const taskIds = [...new Set(rows.map((b) => b.task_id))];
+  const { data: ownTasks, error: tasksError } = await req.supabase.from('tasks').select('id').in('id', taskIds);
+  if (tasksError) return serverError(res, tasksError);
+  if (ownTasks.length !== taskIds.length) return res.status(400).json({ error: 'A task in this plan no longer exists' });
+
+  // Replace the week's old, unfinished task blocks with the chosen plan. Blocks on completed tasks stay.
+  const { data: old, error: oldError } = await req.supabase
+    .from('time_blocks')
+    .select('id, date, task:tasks(completed)')
+    .eq('type', 'task')
+    .gte('date', weekStart)
+    .lte('date', weekEnd);
+  if (oldError) return serverError(res, oldError);
+  const staleIds = old.filter((b) => !b.task?.completed).map((b) => b.id);
+  if (staleIds.length) {
+    const { error: deleteError } = await req.supabase.from('time_blocks').delete().in('id', staleIds);
+    if (deleteError) return serverError(res, deleteError);
+  }
+
+  const { data, error } = await req.supabase
+    .from('time_blocks')
+    .insert(rows.map((b) => ({ user_id: req.userId, ...b })))
+    .select(BLOCK_COLUMNS);
+  if (error) return serverError(res, error);
+
+  const commutes = await recalcCommutes(req, [...old.map((b) => b.date), ...rows.map((b) => b.date)]);
+  res.status(201).json({ blocks: data, commutes });
 });
 
 // Unknown API routes and anything thrown (like a request body that isn't valid JSON) get a JSON error

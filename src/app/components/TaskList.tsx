@@ -26,7 +26,7 @@ import {
   Link as MuiLink,
 } from '@mui/material';
 import { Add, EditOutlined, DeleteOutline } from '@mui/icons-material';
-import { Link as RouterLink } from 'react-router';
+import { Link as RouterLink, useNavigate } from 'react-router';
 import { format } from 'date-fns';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
@@ -199,8 +199,23 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
   );
 }
 
+function localNow() {
+  const d = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function currentWeekStart() {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function TaskList() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -212,6 +227,9 @@ export function TaskList() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [finishingTask, setFinishingTask] = useState<Task | null>(null);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [acceptingPlanId, setAcceptingPlanId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -315,6 +333,42 @@ export function TaskList() {
     }
   };
 
+  const handleSuggestPlan = async () => {
+  setLoadingSuggestion(true);
+
+  try {
+    const data = await apiPost('/api/schedule/suggest', {
+      now: localNow(),
+      weekStart: currentWeekStart(),
+      tzOffset: new Date().getTimezoneOffset(),
+    });
+
+    setSuggestions(data.suggestions);
+  } catch (err: any) {
+    setActionError(err.message ?? "Couldn't build a plan. Try again.");
+  } finally {
+    setLoadingSuggestion(false);
+  }
+};
+
+const handleAcceptPlan = async (plan: any) => {
+  setAcceptingPlanId(plan.id);
+
+  try {
+    await apiPost('/api/schedule/accept', {
+      weekStart: currentWeekStart(),
+      blocks: plan.blocks,
+    });
+
+    setSuggestions([]);
+    navigate('/planner');
+  } catch (err: any) {
+    setActionError(err.message ?? "Couldn't save this plan. Try again.");
+  } finally {
+    setAcceptingPlanId(null);
+  }
+};
+
   if (!user) {
     return (
       <Card>
@@ -334,10 +388,50 @@ export function TaskList() {
           <Typography variant="h6" fontWeight="600">
             Your Tasks
           </Typography>
-          <Button startIcon={<Add />} size="small" onClick={() => setShowForm(!showForm)}>
-            Add
-          </Button>
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleSuggestPlan}
+              disabled={loadingSuggestion}
+            >
+              {loadingSuggestion ? 'Building plan…' : 'Suggest a plan'}
+            </Button>
+
+            <Button startIcon={<Add />} size="small" onClick={() => setShowForm(!showForm)}>
+              Add
+            </Button>
+          </Box>
         </Box>
+        {suggestions.length > 0 && (
+        <Box sx={{ mt: 2, display: 'grid', gap: 1 }}>
+          <Typography variant="subtitle2">Choose a suggested plan</Typography>
+
+          {suggestions.map((plan, index) => (
+            <Card key={plan.id} variant="outlined">
+              <CardContent sx={{ py: 1.5 }}>
+                <Typography fontWeight={600}>Option {index + 1}</Typography>
+
+                {plan.blocks.map((block: any) => (
+                  <Typography key={`${block.task_id}-${block.start_time}`} variant="body2" color="text.secondary">
+                    {block.activity} · {block.date} · {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
+                  </Typography>
+                ))}
+                <Button
+                  variant="contained"
+                  size="small"
+                  sx={{ mt: 1 }}
+                  onClick={() => handleAcceptPlan(plan)}
+                  disabled={acceptingPlanId !== null}
+                >
+                  {acceptingPlanId === plan.id ? 'Saving…' : 'Choose this plan'}
+              </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
 
         {ratioEntries.length > 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
