@@ -13,8 +13,16 @@ checking (after each placement, remove the options it rules out for every other 
 capacity bound (stop early when the free minutes left before a deadline can't hold the chunks due
 by then).
 
-If the tasks can't all fit, the solver leaves as few chunks unscheduled as it can. It tries 0
-unscheduled chunks, then 1, and so on. Only the last chunks of a task can be dropped.
+If the tasks can't all fit, the solver leaves as few chunks unscheduled as it can. Only the last
+chunks of a task can be dropped. Proving that a number of dropped chunks is too few can take a very
+long search, so it doesn't try 0, 1, 2, ... in turn. The first calendar a search reaches when it may
+drop anything is found in about one node per chunk and gives an upper bound; a binary search below it,
+with short capped probes, finds the fewest drops a probe can reach. A probe that runs out counts as
+"too few", so with a very full week a few more chunks may be dropped than strictly necessary. When
+everything fits, none of this runs and the result is the same as a plain search from 0.
+
+time_limit (seconds, off by default so offline runs stay repeatable) caps the whole search for the
+app's API: the listing and sampling stop when it runs out and return what they have.
 
 The number of valid calendars grows exponentially with tasks and free time (two tasks in an open
 week already have millions at a 15-minute grid), so "all" is only reachable for small, tight weeks.
@@ -32,6 +40,7 @@ ml/prefs/ uses for guidance from the preference JSON and for the meal rule.
 """
 
 import random
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -164,11 +173,13 @@ def domains(inp, chunks, free, step):
 
 
 class Search:
-    def __init__(self, chunks, doms, free_by_day, budget, max_nodes, rng=None, weight=None, check=None):
+    def __init__(self, chunks, doms, free_by_day, budget, max_nodes, rng=None, weight=None, check=None,
+                 deadline=None):
         self.chunks = chunks
         self.doms = doms
         self.budget = budget          # how many chunks may still be left unscheduled
         self.max_nodes = max_nodes
+        self.deadline = deadline      # None, or a time.monotonic() value: past it, stop like max_nodes
         self.rng = rng                # None = deterministic order, else randomized (for sampling)
         self.weight = weight          # with rng: favour start times by weight(start, chunk)
         self.check = check            # None, or check(day, [(start, end, chunk), ...]) -> bool
@@ -200,6 +211,8 @@ class Search:
     def _search(self, assigned, doms, budget):
         self.nodes += 1
         if self.nodes > self.max_nodes:
+            raise OutOfNodes
+        if self.deadline and self.nodes % 256 == 0 and time.monotonic() > self.deadline:
             raise OutOfNodes
         open_ = [c for c in self.chunks if c.index not in assigned]
         if not open_:
@@ -288,8 +301,19 @@ def key(assignment):
     return tuple(sorted(assignment.items()))
 
 
+def probe(chunks, doms, free, budget, max_nodes, check=None, deadline=None):
+    """One plain depth-first search: (the first calendar leaving at most `budget` chunks unscheduled,
+    or None when there is none or it ran out first; nodes used)."""
+    search = Search(chunks, doms, free, budget, max_nodes, check=check, deadline=deadline)
+    try:
+        found = next(search.run(), None)
+    except OutOfNodes:
+        found = None
+    return found, search.nodes
+
+
 def solve(inp, limit=200, step=15, max_nodes=300_000, attempt_nodes=20_000, seed=0, guided=True,
-          weight=None, check=None):
+          weight=None, check=None, time_limit=None):
     """guided=True makes every other sampled calendar favour the student's focus hours (see
     focus_weight), or `weight` when it's given; the rest stay uniformly random. Either way every
     calendar obeys the hard rules, plus `check` when it's given (see Search)."""
@@ -297,11 +321,31 @@ def solve(inp, limit=200, step=15, max_nodes=300_000, attempt_nodes=20_000, seed
     weight = (weight or focus_weight(inp)) if guided else None
     free = free_minutes(inp)
     doms = domains(inp, chunks, free, step)
-    total_nodes = 0
+    started = time.monotonic()
+    deadline = started + time_limit if time_limit else None
 
-    for budget in range(len(chunks) + 1):
+    # Fewest chunks to drop (see the module docstring). `fallback` is a calendar for budget `low`.
+    fallback, total_nodes = probe(chunks, doms, free, len(chunks), attempt_nodes, check, deadline)
+    low, high = 0, len(chunks) if fallback is None else sum(start is None for start in fallback.values())
+    while low < high:
+        mid = (low + high) // 2
+        found, nodes = probe(chunks, doms, free, mid, attempt_nodes, check, deadline)
+        total_nodes += nodes
+        if found:
+            high, fallback = mid, found
+        else:
+            low = mid + 1
+
+    for budget in range(low, len(chunks) + 1):
         # 1. Plain depth-first search. If it finishes under the limit, this is every calendar.
-        search = Search(chunks, doms, free, budget, max_nodes, check=check)
+        # With a time limit it gets the first third and sampling the rest, each at least a tenth even
+        # when the probes used it all up.
+        if deadline:
+            grace = time.monotonic() + time_limit / 10
+            list_until, sample_until = max(started + time_limit / 3, grace), max(deadline, grace)
+        else:
+            list_until = sample_until = None
+        search = Search(chunks, doms, free, budget, max_nodes, check=check, deadline=list_until)
         found, seen, complete = [], set(), True
         try:
             for a in search.run():
@@ -327,7 +371,10 @@ def solve(inp, limit=200, step=15, max_nodes=300_000, attempt_nodes=20_000, seed
         seen, sampled, kinds = set(), [], []
         for attempt in range(limit * 5):
             w = weight if attempt % 2 == 0 else None
-            search = Search(chunks, doms, free, budget, attempt_nodes, random.Random(seed + attempt), w, check)
+            if sample_until and time.monotonic() > sample_until:
+                break
+            search = Search(chunks, doms, free, budget, attempt_nodes, random.Random(seed + attempt), w, check,
+                            sample_until)
             try:
                 a = next(search.run(), None)
             except OutOfNodes:
@@ -343,6 +390,8 @@ def solve(inp, limit=200, step=15, max_nodes=300_000, attempt_nodes=20_000, seed
                 break  # nothing in 30 tries: this budget is probably infeasible, allow one more dropped chunk
         if not sampled:
             sampled, kinds = found[:limit], ["listed"] * len(found[:limit])
+        if not sampled and fallback is not None and sum(s is None for s in fallback.values()) <= budget:
+            sampled, kinds = [fallback], ["listed"]  # out of time: at least the probe's calendar
         if sampled:
             why = "more than" if len(found) > limit else "search budget ran out before listing all of"
             n_guided = kinds.count("guided")

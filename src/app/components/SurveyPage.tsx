@@ -13,6 +13,7 @@ import {
   TextField,
   LinearProgress,
   Alert,
+  MenuItem,
 } from '@mui/material';
 import { useNavigate } from 'react-router';
 import { useProfile } from '../lib/ProfileContext';
@@ -23,6 +24,8 @@ import {
   NON_NEGOTIABLES,
   DEADLINE_STYLES,
   CALENDAR_STYLES,
+  SLEEP_HOURS,
+  WAKE_TIME,
   EMPTY_SURVEY,
   SurveyAnswers,
 } from '../lib/survey';
@@ -96,6 +99,8 @@ export function SurveyPage() {
     non_negotiables: initial.non_negotiables,
     deadline_style: initial.deadline_style,
     calendar_style: initial.calendar_style,
+    sleep_hours: initial.sleep_hours ?? null,
+    wake_time: initial.wake_time ?? null,
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -105,11 +110,15 @@ export function SurveyPage() {
     checkedCommitments.length > 0 &&
     checkedCommitments.every(([, hours]) => Number(hours) > 0 && Number(hours) <= 168);
 
+  const wakeTimeValid =
+    !!answers.wake_time && answers.wake_time >= WAKE_TIME.earliest && answers.wake_time <= WAKE_TIME.latest;
+
   const answered = [
     commitmentsValid,
     !!answers.focus_time,
     !!answers.work_session,
     answers.non_negotiables.length > 0,
+    answers.sleep_hours != null && wakeTimeValid,
     !!answers.deadline_style,
     !!answers.calendar_style,
   ];
@@ -137,7 +146,9 @@ export function SurveyPage() {
       setError(
         !commitmentsValid && checkedCommitments.length > 0
           ? 'Add rough weekly hours (up to 168) for each commitment you checked in question 1.'
-          : `Please answer question${missing.length > 1 ? 's' : ''} ${missing.join(', ')}.`,
+          : answers.wake_time && !wakeTimeValid
+            ? 'Pick a wake-up time between 4:00 AM and noon in question 5.'
+            : `Please answer question${missing.length > 1 ? 's' : ''} ${missing.join(', ')}.`,
       );
       return;
     }
@@ -258,7 +269,42 @@ export function SurveyPage() {
           </Box>
         </Question>
 
-        <Question number={5} title="Be honest, how do you usually handle a deadline?">
+        <Question
+          number={5}
+          title="How much sleep do you need, and when do you usually wake up?"
+          hint="Your plans keep study out of your sleep, the hour before bed, and the 45 minutes after you wake up."
+        >
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <TextField
+              select
+              size="small"
+              label="Sleep a night"
+              value={answers.sleep_hours ?? ''}
+              onChange={(e) => setAnswers({ ...answers, sleep_hours: Number(e.target.value) })}
+              sx={{ width: '180px' }}
+            >
+              {SLEEP_HOURS.map((hours) => (
+                <MenuItem key={hours} value={hours}>
+                  {hours} hours
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small"
+              type="time"
+              label="Usual wake-up time"
+              value={answers.wake_time ?? ''}
+              onChange={(e) => setAnswers({ ...answers, wake_time: e.target.value || null })}
+              slotProps={{
+                inputLabel: { shrink: true },
+                htmlInput: { min: WAKE_TIME.earliest, max: WAKE_TIME.latest, step: 900 },
+              }}
+              sx={{ width: '180px' }}
+            />
+          </Box>
+        </Question>
+
+        <Question number={6} title="Be honest, how do you usually handle a deadline?">
           <RadioGroup
             value={answers.deadline_style ?? ''}
             onChange={(e) =>
@@ -271,7 +317,7 @@ export function SurveyPage() {
           </RadioGroup>
         </Question>
 
-        <Question number={6} title="Choose the calendar that describes you best.">
+        <Question number={7} title="Choose the calendar that describes you best.">
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             {CALENDAR_STYLES.map(({ key, label, image }) => {
               const selected = answers.calendar_style === key;

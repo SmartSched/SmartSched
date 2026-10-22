@@ -89,6 +89,8 @@ describe('validateSurvey', () => {
     non_negotiables: ['sleep', 'friends', 'sleep'],
     deadline_style: 'steady',
     calendar_style: 'calendar2',
+    sleep_hours: 7.5,
+    wake_time: '07:30',
   };
 
   it('keeps known answers and removes duplicate non-negotiables', () => {
@@ -108,6 +110,21 @@ describe('validateSurvey', () => {
     expect(validateSurvey({ ...valid, calendar_style: 'calendar9' }).error).toBe('Invalid answer for calendar_style');
     expect(validateSurvey({ ...valid, non_negotiables: [] }).error).toMatch(/at least one thing/);
     expect(validateSurvey({ ...valid, non_negotiables: ['sleep', 'naps'] }).error).toBe('Invalid answer for non_negotiables');
+  });
+
+  it('needs sleep hours in half hours from 6 to 10', () => {
+    expect(validateSurvey({ ...valid, sleep_hours: 10 }).survey.sleep_hours).toBe(10);
+    for (const hours of [5.5, 10.5, 7.25, '8', undefined]) {
+      expect(validateSurvey({ ...valid, sleep_hours: hours }).error).toMatch(/between 6 and 10 hours/);
+    }
+  });
+
+  it('needs a wake-up time between 4 AM and noon, stored as HH:MM', () => {
+    expect(validateSurvey({ ...valid, wake_time: '06:45:00' }).survey.wake_time).toBe('06:45');
+    expect(validateSurvey({ ...valid, wake_time: '12:00' }).survey.wake_time).toBe('12:00');
+    for (const time of ['03:59', '12:30', '19:00', '7:30', undefined]) {
+      expect(validateSurvey({ ...valid, wake_time: time }).error).toMatch(/between 4:00 AM and noon/);
+    }
   });
 
   it('needs an object', () => {

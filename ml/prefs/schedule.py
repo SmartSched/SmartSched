@@ -36,12 +36,13 @@ def cal_key(cal):
     return tuple(sorted((b["task"], b["date"], b["start"]) for b in cal["blocks"]))
 
 
-def plan_week(week, survey, prefs, limit=150, seed=0, improve_top=4, step=15):
-    """Returns {"inp", "note", "calendars", "scores", "picks": [{"index", "score", "rank", "why"}]}."""
+def plan_week(week, survey, prefs, limit=150, seed=0, improve_top=4, step=15, time_limit=None):
+    """Returns {"inp", "note", "calendars", "scores", "picks": [{"index", "score", "rank", "why"}]}.
+    time_limit caps the solver's search in seconds (see csp/solver.py); the app's API sets it."""
     inp = hard.build(week, survey, prefs)
     weight = score.guide_weight(inp, prefs)
     result = solve(inp, limit=limit, step=step, seed=seed, guided=weight is not None, weight=weight,
-                   check=hard.meal_check(inp))
+                   check=hard.meal_check(inp), time_limit=time_limit)
     cals = list(result.calendars)
     scores = [score.score(inp, prefs, c) for c in cals]
 

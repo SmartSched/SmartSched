@@ -270,6 +270,8 @@ describe('profile survey', () => {
       non_negotiables: ['sleep'],
       deadline_style: 'steady',
       calendar_style: 'calendar2',
+      sleep_hours: 8,
+      wake_time: '07:30',
     };
     fake.state.results = [{ data: [{ id: 'user-1', survey }], error: null }];
     expect((await request(app).put('/api/profile/survey').set(AUTH).send({ survey })).status).toBe(200);
@@ -288,7 +290,7 @@ describe('reflections', () => {
     const res = await request(app).post('/api/reflections').set(AUTH).send({ date: '2026-09-29', ratings });
     expect(res.status).toBe(201);
     const [, row, options] = callsOn('reflections').find(([method]) => method === 'upsert');
-    expect(row).toEqual({ user_id: 'user-1', date: '2026-09-29', ratings });
+    expect(row).toEqual({ user_id: 'user-1', date: '2026-09-29', ratings, bed_time: null, wake_time: null });
     expect(options).toEqual({ onConflict: 'user_id,date' });
 
     fake.state.queries = [];
@@ -296,6 +298,19 @@ describe('reflections', () => {
     expect(missing.status).toBe(400);
     expect(missing.body.error).toBe('Rate mood from 1 to 5');
     expect(fake.state.queries).toHaveLength(0);
+  });
+
+  it('saves optional bed and wake-up times as HH:MM', async () => {
+    fake.state.results = [{ data: [{ date: '2026-09-29', ratings }], error: null }];
+    const body = { date: '2026-09-29', ratings, bed_time: '23:40', wake_time: '07:15:00' };
+    expect((await request(app).post('/api/reflections').set(AUTH).send(body)).status).toBe(201);
+    const [, row] = callsOn('reflections').find(([method]) => method === 'upsert');
+    expect(row).toMatchObject({ bed_time: '23:40', wake_time: '07:15' });
+
+    fake.state.queries = [];
+    const bad = await request(app).post('/api/reflections').set(AUTH).send({ ...body, bed_time: '11pm' });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe('Bed time must be HH:MM');
   });
 
   it('rejects a bad date', async () => {
@@ -412,5 +427,226 @@ describe('repeating blocks', () => {
   it('says 404 for a repeat that isn\'t there', async () => {
     fake.state.results = [{ data: [], error: null }];
     expect((await request(app).put('/api/block-series/nope').set(AUTH).send(rule)).status).toBe(404);
+  });
+});
+
+describe('POST /api/schedule/accept', () => {
+  const PLAN = {
+    now: '2026-10-22T20:30',
+    weekStart: '2026-10-19',
+    blocks: [{ activity: 'Essay', date: '2026-10-23', start_time: '09:00:00', end_time: '09:45:00', type: 'task', task_id: TASK_ID }],
+  };
+
+  it('needs the local time', async () => {
+    const res = await request(app).post('/api/schedule/accept').set(AUTH).send({ ...PLAN, now: undefined });
+    expect(res.status).toBe(400);
+    expect(fake.state.queries).toHaveLength(0);
+  });
+
+  it('replaces only unfinished task blocks that start from now on', async () => {
+    fake.state.results = [
+      { data: [{ id: TASK_ID }], error: null }, // the plan's tasks belong to the user
+      {
+        data: [
+          { id: 'past', date: '2026-10-20', start_time: '10:00:00', task: { completed: false } },
+          { id: 'earlier-today', date: '2026-10-22', start_time: '20:00:00', task: { completed: false } },
+          { id: 'later-today', date: '2026-10-22', start_time: '21:00:00', task: { completed: false } },
+          { id: 'tomorrow', date: '2026-10-23', start_time: '14:00:00', task: { completed: false } },
+          { id: 'done', date: '2026-10-24', start_time: '10:00:00', task: { completed: true } },
+        ],
+        error: null,
+      },
+    ];
+    const res = await request(app).post('/api/schedule/accept').set(AUTH).send(PLAN);
+    expect(res.status).toBe(201);
+    const deletes = callsOn('time_blocks').filter(([method]) => method === 'delete');
+    expect(deletes).toHaveLength(1);
+    const deleted = callsOn('time_blocks').find(([method, column]) => method === 'in' && column === 'id');
+    expect(deleted).toEqual(['in', 'id', ['later-today', 'tomorrow']]);
+    expect(inserted('time_blocks')[0]).toEqual([expect.objectContaining({ user_id: 'user-1', date: '2026-10-23', task_id: TASK_ID })]);
+  });
+});
+
+// The scheduler service, faked: /history answers with `rules` (or fails), /schedule with one calendar.
+function fakeScheduler({ rules = { summary: 'From the rules.', preferences: [], adjustments: [] }, historyStatus = 200 } = {}) {
+  const calendar = { blocks: [{ task: TASK_ID, date: '2026-10-23', start: '19:00', end: '19:45' }], unscheduled: [] };
+  const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
+    url.endsWith('/history')
+      ? new Response(JSON.stringify({ bundle: 'TODAY: ...', rules }), { status: historyStatus })
+      : new Response(JSON.stringify({ calendars: [{ id: 'c001', why: 'Study sits in your evenings.', style: 'spaced', calendar }] }), { status: 200 }),
+  );
+  const call = (path) => spy.mock.calls.find(([url]) => url.endsWith(path));
+  return { sentTo: (path) => JSON.parse(call(path)[1].body), called: (path) => !!call(path) };
+}
+
+// The profile update a refresh makes, if any.
+function savedPreferenceUpdate() {
+  return callsOn('profiles').find(([method, row]) => method === 'update' && 'scheduler_preferences' in row)?.[1];
+}
+
+describe('POST /api/schedule/suggest', () => {
+  const survey = { focus_time: 'evening', work_session: '45', sleep_hours: 8, wake_time: '07:30' };
+  const prefs = { summary: 'Studies late.', preferences: [], adjustments: [] };
+  const task = { id: TASK_ID, title: 'Essay', type: 'homework', priority: 'high', due_date: '2026-10-25', estimated_time: 90, completed: false };
+  const BODY = { now: '2026-10-22T12:00', weekStart: '2026-10-19', tzOffset: 420 };
+  const fresh = { scheduler_preferences: prefs, preferences_updated_at: new Date().toISOString() };
+
+  // Queues the route's four loads, then `after` (the event count, or a refresh's reads and update).
+  function load(profile, after = []) {
+    fake.state.results = [
+      { data: [task], error: null },
+      { data: [], error: null },
+      { data: { survey, survey_updated_at: '2026-10-20T10:00:00Z', ...profile }, error: null },
+      { data: [], error: null },
+      ...after,
+    ];
+  }
+  const suggest = () => request(app).post('/api/schedule/suggest').set(AUTH).send(BODY);
+
+  it('sends fresh saved preferences as they are and returns the picks with their reasons', async () => {
+    load(fresh, [{ data: null, count: 3, error: null }]);
+    const scheduler = fakeScheduler();
+    const res = await suggest();
+    expect(res.status).toBe(200);
+    expect(scheduler.called('/history')).toBe(false);
+    expect(scheduler.sentTo('/schedule').prefs).toEqual(prefs);
+    expect(scheduler.sentTo('/schedule').survey).toEqual(survey);
+    expect(res.body.suggestions).toEqual([
+      expect.objectContaining({ id: 'c001', why: 'Study sits in your evenings.', style: 'spaced', blocks: [expect.objectContaining({ activity: 'Essay', start_time: '19:00:00', task_id: TASK_ID })] }),
+    ]);
+  });
+
+  it('works the preferences out first when none are saved, and saves them', async () => {
+    const rules = { summary: 'From the rules.', preferences: [{ kind: 'session_length', ideal: 45 }], adjustments: [] };
+    const refreshed = { survey, survey_updated_at: '2026-10-20T10:00:00Z', scheduler_preferences: rules, preferences_updated_at: new Date().toISOString() };
+    load({ scheduler_preferences: null, preferences_updated_at: null }, [...Array(5).fill({ data: [], error: null }), { data: [refreshed], error: null }]);
+    const scheduler = fakeScheduler({ rules });
+    expect((await suggest()).status).toBe(200);
+    expect(scheduler.sentTo('/history').rows).toMatchObject({ now: '2026-10-22T12:00', tz_offset: 420 });
+    expect(savedPreferenceUpdate()).toMatchObject({ scheduler_preferences: rules, preference_model_version: 'rules-v1' });
+    expect(scheduler.sentTo('/schedule').prefs).toEqual(rules);
+  });
+
+  it('refreshes after 10 new events', async () => {
+    load(fresh, [{ data: null, count: 12, error: null }]);
+    const scheduler = fakeScheduler();
+    expect((await suggest()).status).toBe(200);
+    expect(scheduler.called('/history')).toBe(true);
+  });
+
+  it('still plans, with what was saved, when the refresh fails', async () => {
+    load({ scheduler_preferences: null, preferences_updated_at: null });
+    const scheduler = fakeScheduler({ historyStatus: 500 });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await suggest()).status).toBe(200);
+    expect(savedPreferenceUpdate()).toBeUndefined();
+    expect(scheduler.sentTo('/schedule').prefs).toBeNull();
+  });
+});
+
+describe('preference refresh', () => {
+  const survey = {
+    commitments: { classes: 15 }, focus_time: 'morning', work_session: '45', non_negotiables: ['sleep'],
+    deadline_style: 'steady', calendar_style: 'calendar2', sleep_hours: 8, wake_time: '07:30',
+  };
+
+  it('runs when the survey is saved with the browser clock', async () => {
+    fake.state.results = [{ data: [{ id: 'user-1', survey }], error: null }];
+    const scheduler = fakeScheduler();
+    const res = await request(app).put('/api/profile/survey').set(AUTH).send({ survey, now: '2026-10-22T12:00', tzOffset: 420 });
+    expect(res.status).toBe(200);
+    expect(scheduler.called('/history')).toBe(true);
+    expect(savedPreferenceUpdate()).toMatchObject({ preference_model_version: 'rules-v1' });
+  });
+
+  it('is skipped on a survey save without the clock', async () => {
+    fake.state.results = [{ data: [{ id: 'user-1', survey }], error: null }];
+    const scheduler = fakeScheduler();
+    expect((await request(app).put('/api/profile/survey').set(AUTH).send({ survey })).status).toBe(200);
+    expect(scheduler.called('/history')).toBe(false);
+  });
+
+  it('can be asked for directly', async () => {
+    const rules = { summary: 'From the rules.', preferences: [], adjustments: [] };
+    fake.state.results = [...Array(5).fill({ data: [], error: null }), { data: [{ scheduler_preferences: rules, preferences_updated_at: '2026-10-22T19:00:00Z' }], error: null }];
+    fakeScheduler({ rules });
+    const res = await request(app).post('/api/preferences/refresh').set(AUTH).send({ now: '2026-10-22T12:00', tzOffset: 420 });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ preferences: rules, updatedAt: '2026-10-22T19:00:00Z', version: 'rules-v1' });
+    expect((await request(app).post('/api/preferences/refresh').set(AUTH).send({})).status).toBe(400);
+  });
+});
+
+// The events the preference model learns from (schedule_events).
+function loggedEvents() {
+  return inserted('schedule_events');
+}
+
+describe('schedule events', () => {
+  const taskBlock = { id: 'b1', date: '2026-10-23', start_time: '10:00:00', end_time: '10:45:00', type: 'task', activity: 'Essay', task_id: TASK_ID };
+
+  it('logs a task block that moves, and not other edits', async () => {
+    fake.state.results = [
+      { data: taskBlock, error: null },
+      { data: [{ ...taskBlock, start_time: '19:00:00', end_time: '19:45:00' }], error: null },
+    ];
+    expect((await request(app).patch('/api/time-blocks/b1').set(AUTH).send({ start_time: '19:00', end_time: '19:45' })).status).toBe(200);
+    expect(loggedEvents()).toEqual([
+      expect.objectContaining({
+        kind: 'block_moved', block_id: 'b1', task_id: TASK_ID,
+        details: { label: 'Essay', from: { date: '2026-10-23', start: '10:00', end: '10:45' }, to: { date: '2026-10-23', start: '19:00', end: '19:45' } },
+      }),
+    ]);
+
+    fake.state.queries = [];
+    fake.state.results = [{ data: taskBlock, error: null }, { data: [{ ...taskBlock, activity: 'Essay draft' }], error: null }];
+    expect((await request(app).patch('/api/time-blocks/b1').set(AUTH).send({ activity: 'Essay draft' })).status).toBe(200);
+    expect(fake.state.queries.some((q) => q.table === 'schedule_events')).toBe(false);
+  });
+
+  it('logs a deleted task block, and not a deleted class', async () => {
+    fake.state.results = [{ data: [taskBlock], error: null }];
+    expect((await request(app).delete('/api/time-blocks/b1').set(AUTH)).status).toBe(204);
+    expect(loggedEvents()).toEqual([
+      expect.objectContaining({ kind: 'block_deleted', block_id: 'b1', details: { label: 'Essay', date: '2026-10-23', start: '10:00', end: '10:45' } }),
+    ]);
+
+    fake.state.queries = [];
+    fake.state.results = [{ data: [{ ...taskBlock, type: 'class', task_id: null }], error: null }];
+    expect((await request(app).delete('/api/time-blocks/b1').set(AUTH)).status).toBe(204);
+    expect(fake.state.queries.some((q) => q.table === 'schedule_events')).toBe(false);
+  });
+
+  it('logs which plan was chosen, by style', async () => {
+    fake.state.results = [{ data: [{ id: TASK_ID }], error: null }];
+    const plan = {
+      now: '2026-10-22T12:00', weekStart: '2026-10-19', options: ['clustered', 'spaced', 'even'], chosen: 1, removed: 2,
+      blocks: [{ activity: 'Essay', date: '2026-10-23', start_time: '19:00:00', end_time: '19:45:00', type: 'task', task_id: TASK_ID }],
+    };
+    expect((await request(app).post('/api/schedule/accept').set(AUTH).send(plan)).status).toBe(201);
+    expect(loggedEvents()).toEqual([
+      expect.objectContaining({ kind: 'plan_accepted', details: { week_start: '2026-10-19', chosen: 1, options: ['clustered', 'spaced', 'even'], removed: 2 } }),
+    ]);
+  });
+});
+
+describe('GET /api/preferences/history', () => {
+  it('sends the last 21 days of rows to the scheduler and returns what it read', async () => {
+    fake.state.results = [{ data: { survey: { focus_time: 'evening' } }, error: null }];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ bundle: 'TODAY: 2026-10-22 Thu', rules: { preferences: [] } }), { status: 200 }),
+    );
+    const res = await request(app).get('/api/preferences/history?now=2026-10-22T12:00&tzOffset=420').set(AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body.bundle).toBe('TODAY: 2026-10-22 Thu');
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toMatch(/\/history$/);
+    expect(JSON.parse(init.body).rows).toMatchObject({ now: '2026-10-22T12:00', tz_offset: 420, survey: { focus_time: 'evening' } });
+    expect(callsOn('time_blocks')).toContainEqual(['gte', 'date', '2026-10-01']);
+  });
+
+  it('needs the local time and offset', async () => {
+    expect((await request(app).get('/api/preferences/history?tzOffset=420').set(AUTH)).status).toBe(400);
+    expect((await request(app).get('/api/preferences/history?now=2026-10-22T12:00').set(AUTH)).status).toBe(400);
   });
 });

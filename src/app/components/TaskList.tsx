@@ -25,11 +25,12 @@ import {
   Alert,
   Link as MuiLink,
 } from '@mui/material';
-import { Add, EditOutlined, DeleteOutline } from '@mui/icons-material';
+import { Add, Close, EditOutlined, DeleteOutline } from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
+import { localNow } from '../lib/today';
 import { estimateRatios, sortTasks, type EstimateRatio, type Task } from '../lib/tasks';
 import { TimeSpentDialog } from './TimeSpentDialog';
 
@@ -199,12 +200,6 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
   );
 }
 
-function localNow() {
-  const d = new Date();
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 function currentWeekStart() {
   const d = new Date();
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -229,6 +224,8 @@ export function TaskList() {
   const [finishingTask, setFinishingTask] = useState<Task | null>(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
+  // Shown instead of the options when there was nothing to plan.
+  const [suggestionNote, setSuggestionNote] = useState<string | null>(null);
   const [acceptingPlanId, setAcceptingPlanId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -335,6 +332,7 @@ export function TaskList() {
 
   const handleSuggestPlan = async () => {
   setLoadingSuggestion(true);
+  setSuggestionNote(null);
 
   try {
     const data = await apiPost('/api/schedule/suggest', {
@@ -344,6 +342,9 @@ export function TaskList() {
     });
 
     setSuggestions(data.suggestions);
+    if (data.suggestions.length === 0) {
+      setSuggestionNote('Nothing to plan this week. Plans include unfinished tasks with an estimate and a due date that is still ahead.');
+    }
   } catch (err: any) {
     setActionError(err.message ?? "Couldn't build a plan. Try again.");
   } finally {
@@ -351,13 +352,29 @@ export function TaskList() {
   }
 };
 
+// Takes one block out of an option before it's chosen.
+const removeSuggestedBlock = (planId: string, blockIndex: number) => {
+  setSuggestions((current) =>
+    current.map((plan) =>
+      plan.id === planId
+        ? { ...plan, blocks: plan.blocks.filter((_: any, i: number) => i !== blockIndex), removed: (plan.removed ?? 0) + 1 }
+        : plan,
+    ),
+  );
+};
+
 const handleAcceptPlan = async (plan: any) => {
   setAcceptingPlanId(plan.id);
 
   try {
     await apiPost('/api/schedule/accept', {
+      now: localNow(),
       weekStart: currentWeekStart(),
       blocks: plan.blocks,
+      // Which option was chosen out of which, recorded for the preference model.
+      options: suggestions.map((s) => s.style),
+      chosen: suggestions.indexOf(plan),
+      removed: plan.removed ?? 0,
     });
 
     setSuggestions([]);
@@ -404,34 +421,85 @@ const handleAcceptPlan = async (plan: any) => {
             </Button>
           </Box>
         </Box>
+        {suggestionNote && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            {suggestionNote}
+          </Typography>
+        )}
+
         {suggestions.length > 0 && (
-        <Box sx={{ mt: 2, display: 'grid', gap: 1 }}>
-          <Typography variant="subtitle2">Choose a suggested plan</Typography>
-
-          {suggestions.map((plan, index) => (
-            <Card key={plan.id} variant="outlined">
-              <CardContent sx={{ py: 1.5 }}>
-                <Typography fontWeight={600}>Option {index + 1}</Typography>
-
-                {plan.blocks.map((block: any) => (
-                  <Typography key={`${block.task_id}-${block.start_time}`} variant="body2" color="text.secondary">
-                    {block.activity} · {block.date} · {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
-                  </Typography>
-                ))}
-                <Button
-                  variant="contained"
-                  size="small"
-                  sx={{ mt: 1 }}
-                  onClick={() => handleAcceptPlan(plan)}
-                  disabled={acceptingPlanId !== null}
-                >
-                  {acceptingPlanId === plan.id ? 'Saving…' : 'Choose this plan'}
+          <Box sx={{ mt: 2, mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="subtitle2">Choose a suggested plan</Typography>
+              <Button size="small" onClick={() => setSuggestions([])} disabled={acceptingPlanId !== null}>
+                Dismiss
               </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </Box>
-      )}
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Remove any session you don't want before choosing. Nothing is saved until you choose a plan.
+            </Typography>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+              {suggestions.map((plan, index) => (
+                <Card key={plan.id} variant="outlined" sx={{ display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ py: 1.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <Typography fontWeight={600}>Option {index + 1}</Typography>
+                    {plan.why && (
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        {plan.why}
+                      </Typography>
+                    )}
+
+                    <Box sx={{ flex: 1 }}>
+                      {plan.blocks.map((block: any, blockIndex: number) => (
+                        <Box
+                          key={`${block.task_id}-${block.date}-${block.start_time}`}
+                          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
+                        >
+                          <Typography variant="body2" color="text.secondary">
+                            {block.activity} · {format(parseISO(block.date), 'EEE MMM d')} ·{' '}
+                            {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            aria-label={`Remove ${block.activity} on ${block.date} at ${block.start_time.slice(0, 5)}`}
+                            onClick={() => removeSuggestedBlock(plan.id, blockIndex)}
+                            disabled={acceptingPlanId !== null}
+                          >
+                            <Close fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      ))}
+                      {plan.blocks.length === 0 && (
+                        <Typography variant="body2" color="text.secondary">
+                          Every session was removed from this option.
+                        </Typography>
+                      )}
+                      {plan.unscheduled?.length > 0 && (
+                        <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
+                          Not enough time this week for:{' '}
+                          {plan.unscheduled
+                            .map((u: any) => `${tasks.find((t) => t.id === u.task)?.title ?? 'a task'} (${u.minutes} min)`)
+                            .join(', ')}
+                        </Typography>
+                      )}
+                    </Box>
+
+                    <Button
+                      variant="contained"
+                      size="small"
+                      sx={{ mt: 1.5, alignSelf: 'flex-start' }}
+                      onClick={() => handleAcceptPlan(plan)}
+                      disabled={acceptingPlanId !== null || plan.blocks.length === 0}
+                    >
+                      {acceptingPlanId === plan.id ? 'Saving…' : 'Choose this plan'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          </Box>
+        )}
 
         {ratioEntries.length > 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

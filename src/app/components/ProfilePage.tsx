@@ -13,6 +13,7 @@ import {
   NON_NEGOTIABLES,
   DEADLINE_STYLES,
   CALENDAR_STYLES,
+  formatWakeTime,
   labelFor,
 } from '../lib/survey';
 
@@ -88,6 +89,11 @@ export function ProfilePage() {
                 {NON_NEGOTIABLES.filter(({ key }) => survey.non_negotiables.includes(key))
                   .map(({ label }) => label)
                   .join(', ')}
+              </Answer>
+              <Answer question="How much sleep do you need, and when do you usually wake up?">
+                {survey.sleep_hours != null && survey.wake_time
+                  ? `${survey.sleep_hours} hours, up around ${formatWakeTime(survey.wake_time)}`
+                  : 'Not answered yet. Edit your responses to add it.'}
               </Answer>
               <Answer question="How do you usually handle a deadline?">
                 {labelFor(DEADLINE_STYLES, survey.deadline_style)}

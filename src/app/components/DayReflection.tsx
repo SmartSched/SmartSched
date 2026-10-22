@@ -28,6 +28,10 @@ type Ratings = Record<(typeof CRITERIA)[number]['key'], number>;
 
 const EMPTY_RATINGS: Ratings = { productivity: 0, mood: 0, energy: 0, sleep: 0 };
 
+// Optional; HH:MM, or '' when not filled in.
+type SleepTimes = { bed_time: string; wake_time: string };
+const EMPTY_SLEEP: SleepTimes = { bed_time: '', wake_time: '' };
+
 function formatDay(date: string) {
   const day = parseISO(date);
   return format(day, day.getFullYear() === new Date().getFullYear() ? 'EEEE, MMMM d' : 'EEEE, MMMM d, yyyy');
@@ -37,6 +41,7 @@ export function DayReflection() {
   const { user } = useAuth();
   const { today, selectedDate, setSelectedDate } = useSelectedDay();
   const [ratings, setRatings] = useState<Ratings>(EMPTY_RATINGS);
+  const [sleepTimes, setSleepTimes] = useState<SleepTimes>(EMPTY_SLEEP);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,10 +57,14 @@ export function DayReflection() {
     setError(null);
     setSaved(false);
     setRatings(EMPTY_RATINGS);
+    setSleepTimes(EMPTY_SLEEP);
 
     apiGet(`/api/reflections/${selectedDate}`)
       .then((existing) => {
-        if (!cancelled && existing) setRatings({ ...EMPTY_RATINGS, ...existing.ratings });
+        if (!cancelled && existing) {
+          setRatings({ ...EMPTY_RATINGS, ...existing.ratings });
+          setSleepTimes({ bed_time: existing.bed_time?.slice(0, 5) ?? '', wake_time: existing.wake_time?.slice(0, 5) ?? '' });
+        }
       })
       .catch((err) => !cancelled && setError(err.message))
       .finally(() => !cancelled && setLoading(false));
@@ -81,6 +90,11 @@ export function DayReflection() {
     setSaved(false);
   };
 
+  const setSleepTime = (key: keyof SleepTimes, value: string) => {
+    setSleepTimes({ ...sleepTimes, [key]: value });
+    setSaved(false);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (unrated.length) return;
@@ -88,7 +102,7 @@ export function DayReflection() {
     setSaved(false);
     setError(null);
     try {
-      await apiPost('/api/reflections', { date: selectedDate, ratings });
+      await apiPost('/api/reflections', { date: selectedDate, ratings, ...sleepTimes });
       setSaved(true);
     } catch (err: any) {
       setError(err.message);
@@ -149,6 +163,32 @@ export function DayReflection() {
                 <Rating value={ratings[key]} onChange={(_, newValue) => rate(key, newValue)} />
               </Box>
             ))}
+
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Sleep times (optional)
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <TextField
+                  size="small"
+                  type="time"
+                  label="Went to bed the night before"
+                  value={sleepTimes.bed_time}
+                  onChange={(e) => setSleepTime('bed_time', e.target.value)}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  size="small"
+                  type="time"
+                  label="Woke up"
+                  value={sleepTimes.wake_time}
+                  onChange={(e) => setSleepTime('wake_time', e.target.value)}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  sx={{ flex: 1 }}
+                />
+              </Box>
+            </Box>
 
             {error && (
               <Typography variant="body2" color="error">

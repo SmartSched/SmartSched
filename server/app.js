@@ -7,6 +7,7 @@ import {
   isValidDate,
   isValidTimeSpent,
   validateRatings,
+  validateSleepTimes,
   validateSeries,
   validateSurvey,
   validateTimeBlock,
@@ -14,7 +15,7 @@ import {
 } from './validation.js';
 import { expandSeries } from './series.js';
 import { planCommutes } from './commute.js';
-import { buildSolverInput } from './solverInput.js';
+import { buildSolverInput, preferencesOutOfDate, savedPreferences, startsBefore } from './solverInput.js';
 
 // The Express app with every route. index.js starts it; the tests use it directly.
 export const app = express();
@@ -78,6 +79,9 @@ app.put('/api/profile/survey', requireAuth, async (req, res) => {
     .upsert({ id: req.userId, survey, survey_updated_at: new Date().toISOString() }, { onConflict: 'id' })
     .select(PROFILE_COLUMNS);
   if (error) return serverError(res, error);
+  // New answers, new preferences. Needs the browser's clock; without it the next plan refreshes them.
+  const clock = localClock(req.body);
+  if (clock) await refreshPreferences(req, clock);
   res.json(data[0]);
 });
 
@@ -259,6 +263,15 @@ async function recalcCommutes(req, dates) {
   }
 }
 
+// Records what the user did with a plan, for the preference model (schedule_events; ml/prefs/history.py reads
+// it). Best effort: the user's change already succeeded, so a failure is logged, not returned.
+async function logEvent(req, kind, fields) {
+  const { error } = await req.supabase.from('schedule_events').insert({ user_id: req.userId, kind, ...fields });
+  if (error) console.error(`Could not record ${kind}`, error);
+}
+
+const blockTime = (b) => ({ date: b.date, start: b.start_time.slice(0, 5), end: b.end_time.slice(0, 5) });
+
 app.post('/api/time-blocks', requireAuth, async (req, res) => {
   const { block, error: validationError } = validateTimeBlock(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
@@ -295,6 +308,11 @@ app.patch('/api/time-blocks/:id', requireAuth, async (req, res) => {
   if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Time block not found' });
   const commutes = await recalcCommutes(req, [existing.date, block.date]);
+  const from = blockTime(existing);
+  const to = blockTime(data[0]);
+  if (existing.type === 'task' && data[0].type === 'task' && JSON.stringify(from) !== JSON.stringify(to)) {
+    await logEvent(req, 'block_moved', { block_id: existing.id, task_id: existing.task_id, details: { label: existing.activity, from, to } });
+  }
   res.json({ block: data[0], commutes });
 });
 
@@ -307,6 +325,10 @@ app.delete('/api/time-blocks/:id', requireAuth, async (req, res) => {
   if (error) return serverError(res, error);
   if (data.length === 0) return res.status(404).json({ error: 'Time block not found' });
   await recalcCommutes(req, [data[0].date]);
+  const deleted = data[0];
+  if (deleted.type === 'task') {
+    await logEvent(req, 'block_deleted', { block_id: deleted.id, task_id: deleted.task_id, details: { label: deleted.activity, ...blockTime(deleted) } });
+  }
   res.status(204).end();
 });
 
@@ -391,21 +413,41 @@ app.post('/api/reflections', requireAuth, async (req, res) => {
   if (!isValidDate(date)) return res.status(400).json({ error: 'Date must be a valid YYYY-MM-DD date' });
   const { ratings, error: validationError } = validateRatings(req.body.ratings);
   if (validationError) return res.status(400).json({ error: validationError });
+  const { times, error: timesError } = validateSleepTimes(req.body);
+  if (timesError) return res.status(400).json({ error: timesError });
   const { data, error } = await req.supabase
     .from('reflections')
-    .upsert({ user_id: req.userId, date, ratings }, { onConflict: 'user_id,date' })
+    .upsert({ user_id: req.userId, date, ratings, ...times }, { onConflict: 'user_id,date' })
     .select();
   if (error) return serverError(res, error);
   res.status(201).json(data[0]);
 });
 const SCHEDULER_URL = process.env.SCHEDULER_URL || 'http://localhost:8000';
 
+// POSTs to the Python scheduler service (ml/csp/api.py). Returns its JSON, or null after logging what it said.
+async function askScheduler(path, body) {
+  const r = await fetch(`${SCHEDULER_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.SERVICE_API_KEY || '' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    console.error('Scheduler said', r.status, await r.text());
+    return null;
+  }
+  return r.json();
+}
+
+// How a suggested plan spreads its work (ml/prefs/score.py style_of).
+const PLAN_STYLES = ['front_loaded', 'even', 'spaced', 'clustered'];
+
+// The browser's local time. The server doesn't know the user's time zone, so "now" comes from them.
+const isLocalNow = (now) => typeof now === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(now);
+
 app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
   const { now, weekStart } = req.body;
   const tzOffset = Number.isInteger(req.body.tzOffset) ? req.body.tzOffset : 0;
-  if (typeof now !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(now)) {
-    return res.status(400).json({ error: 'now must be YYYY-MM-DDTHH:MM' });
-  }
+  if (!isLocalNow(now)) return res.status(400).json({ error: 'now must be YYYY-MM-DDTHH:MM' });
   if (!isValidDate(weekStart)) return res.status(400).json({ error: 'weekStart must be a valid YYYY-MM-DD date' });
 
   const endDate = new Date(`${weekStart}T00:00:00Z`);
@@ -418,7 +460,11 @@ app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
   const [tasks, blocks, profile, reflections] = await Promise.all([
     req.supabase.from('tasks').select('*').eq('completed', false),
     req.supabase.from('time_blocks').select('*').gte('date', weekStart).lte('date', weekEnd),
-    req.supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', req.userId).maybeSingle(),
+    req.supabase
+      .from('profiles')
+      .select('survey, survey_updated_at, scheduler_preferences, preferences_updated_at')
+      .eq('id', req.userId)
+      .maybeSingle(),
     req.supabase.from('reflections').select('date, ratings').gte('date', since).lte('date', weekEnd),
   ]);
   const failed = [tasks, blocks, profile, reflections].find((r) => r.error);
@@ -426,11 +472,12 @@ app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
 
   const survey = profile.data?.survey;
   if (!survey) return res.status(409).json({ error: 'Finish the onboarding survey first' });
+  let saved = profile.data;
+  if (await preferencesNeedRefresh(req, saved)) saved = (await refreshPreferences(req, { now, tzOffset })) ?? saved;
 
   const input = buildSolverInput({
     now,
     weekStart,
-    survey,
     tzOffset,
     tasks: tasks.data,
     blocks: blocks.data,
@@ -440,26 +487,18 @@ app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
 
   let result;
   try {
-    const r = await fetch(`${SCHEDULER_URL}/schedule`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.SERVICE_API_KEY || '',
-      },
-      body: JSON.stringify({ input, survey, limit: 50 }),
-    });
-    if (!r.ok) {
-      console.error('Scheduler said', r.status, await r.text());
-      return res.status(502).json({ error: 'The scheduler could not build a plan' });
-    }
-    result = await r.json();
+    // prefs null: the scheduler derives them from the survey (ml/prefs/baseline.py).
+    result = await askScheduler('/schedule', { input, survey, prefs: savedPreferences(saved) });
   } catch (err) {
     return serverError(res, err);
   }
+  if (!result) return res.status(502).json({ error: 'The scheduler could not build a plan' });
 
-  // Suggest only: nothing is saved until the user picks one.
-  const suggestions = result.calendars.slice(0, 3).map((c) => ({
+  // Suggest only: nothing is saved until the user picks one. The scheduler sends its three picks, best first.
+  const suggestions = result.calendars.map((c) => ({
     id: c.id,
+    why: c.why,
+    style: c.style,
     blocks: c.calendar.blocks.map((b) => ({
       activity: input.tasks.find((t) => t.id === b.task)?.title ?? 'Study',
       date: b.date,
@@ -474,7 +513,8 @@ app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
 });
 
 app.post('/api/schedule/accept', requireAuth, async (req, res) => {
-  const { weekStart, blocks } = req.body;
+  const { now, weekStart, blocks } = req.body;
+  if (!isLocalNow(now)) return res.status(400).json({ error: 'now must be YYYY-MM-DDTHH:MM' });
   if (!isValidDate(weekStart)) return res.status(400).json({ error: 'weekStart must be a valid YYYY-MM-DD date' });
   if (!Array.isArray(blocks) || blocks.length === 0 || blocks.length > 100) {
     return res.status(400).json({ error: 'Pick a plan with at least one block' });
@@ -501,15 +541,17 @@ app.post('/api/schedule/accept', requireAuth, async (req, res) => {
   if (tasksError) return serverError(res, tasksError);
   if (ownTasks.length !== taskIds.length) return res.status(400).json({ error: 'A task in this plan no longer exists' });
 
-  // Replace the week's old, unfinished task blocks with the chosen plan. Blocks on completed tasks stay.
+  // Replace the week's unfinished task blocks from now on with the chosen plan. Blocks on completed tasks
+  // and blocks that already started stay: they're the record of what was planned (time spent, history).
   const { data: old, error: oldError } = await req.supabase
     .from('time_blocks')
-    .select('id, date, task:tasks(completed)')
+    .select('id, date, start_time, task:tasks(completed)')
     .eq('type', 'task')
     .gte('date', weekStart)
     .lte('date', weekEnd);
   if (oldError) return serverError(res, oldError);
-  const staleIds = old.filter((b) => !b.task?.completed).map((b) => b.id);
+  const stale = old.filter((b) => !b.task?.completed && !startsBefore(b, now));
+  const staleIds = stale.map((b) => b.id);
   if (staleIds.length) {
     const { error: deleteError } = await req.supabase.from('time_blocks').delete().in('id', staleIds);
     if (deleteError) return serverError(res, deleteError);
@@ -521,8 +563,126 @@ app.post('/api/schedule/accept', requireAuth, async (req, res) => {
     .select(BLOCK_COLUMNS);
   if (error) return serverError(res, error);
 
-  const commutes = await recalcCommutes(req, [...old.map((b) => b.date), ...rows.map((b) => b.date)]);
+  const commutes = await recalcCommutes(req, [...stale.map((b) => b.date), ...rows.map((b) => b.date)]);
+  // Which option was chosen out of which, by style, for the model's PAST PICKS.
+  // Also how many of the option's sessions they removed before choosing it.
+  const { options, chosen } = req.body;
+  const removed = Number.isInteger(req.body.removed) && req.body.removed >= 0 ? req.body.removed : 0;
+  if (Array.isArray(options) && options.length <= 3 && options.every((o) => PLAN_STYLES.includes(o)) && Number.isInteger(chosen) && options[chosen]) {
+    await logEvent(req, 'plan_accepted', { details: { week_start: weekStart, chosen, options, removed } });
+  }
   res.status(201).json({ blocks: data, commutes });
+});
+
+// ---- Preferences: the JSON the scheduler ranks calendars by (profiles.scheduler_preferences) ----
+//
+// For now the fixed rules in ml/prefs/system_prompt.txt write it, applied to the user's history
+// (history.rules on the scheduler service; no model is hosted yet). It's refreshed when the survey is
+// saved, and when "Suggest a plan" finds it missing, a week old, or behind enough new events. Never on
+// every request. A hosted model would replace the rules here and change PREFERENCES_VERSION.
+const PREFERENCES_VERSION = 'rules-v1';
+const HISTORY_DAYS = 21;
+const REFRESH_AFTER_EVENTS = 10;
+
+async function preferencesNeedRefresh(req, profile) {
+  if (preferencesOutOfDate(profile, Date.now())) return true;
+  if (!profile?.survey) return false;
+  const { count, error } = await req.supabase
+    .from('schedule_events')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', profile.preferences_updated_at);
+  if (error) {
+    console.error('Could not count new events', error);
+    return false;
+  }
+  return (count ?? 0) >= REFRESH_AFTER_EVENTS;
+}
+
+// The browser's local time and getTimezoneOffset() from a body or query, or null.
+function localClock(source) {
+  const tzOffset = Number.parseInt(source?.tzOffset, 10);
+  return isLocalNow(source?.now) && Number.isInteger(tzOffset) ? { now: source.now, tzOffset } : null;
+}
+
+// The user's last HISTORY_DAYS days as the scheduler service reads them: { bundle, rules }, or null when the
+// service said no. Database errors are thrown.
+async function readHistory(req, { now, tzOffset }) {
+  const sinceDate = new Date(`${now.slice(0, 10)}T00:00:00Z`);
+  sinceDate.setUTCDate(sinceDate.getUTCDate() - HISTORY_DAYS);
+  const since = sinceDate.toISOString().slice(0, 10);
+  // Moves logged a week before the window can still be about blocks inside it.
+  sinceDate.setUTCDate(sinceDate.getUTCDate() - 7);
+
+  const [profile, tasks, blocks, reflections, events] = await Promise.all([
+    req.supabase.from('profiles').select('survey').eq('id', req.userId).maybeSingle(),
+    req.supabase.from('tasks').select('id, title, type, estimated_time, time_spent, due_date, completed, completed_at'),
+    req.supabase.from('time_blocks').select('id, date, start_time, end_time, type, activity, task_id, auto').gte('date', since),
+    req.supabase.from('reflections').select('date, ratings, bed_time, wake_time').gte('date', since),
+    req.supabase
+      .from('schedule_events')
+      .select('created_at, kind, block_id, task_id, details')
+      .gte('created_at', sinceDate.toISOString()),
+  ]);
+  const failed = [profile, tasks, blocks, reflections, events].find((r) => r.error);
+  if (failed) throw failed.error;
+
+  return askScheduler('/history', {
+    rows: {
+      now,
+      tz_offset: tzOffset,
+      survey: profile.data?.survey ?? null,
+      tasks: tasks.data,
+      blocks: blocks.data,
+      reflections: reflections.data,
+      events: events.data,
+    },
+  });
+}
+
+// Works out the preferences again and saves them. Returns the saved profile fields, or null when it
+// couldn't (logged): the user's own request should still go ahead with whatever was saved before.
+async function refreshPreferences(req, clock) {
+  try {
+    const result = await readHistory(req, clock);
+    if (!result) return null;
+    const { data, error } = await req.supabase
+      .from('profiles')
+      .update({
+        scheduler_preferences: result.rules,
+        preferences_updated_at: new Date().toISOString(),
+        preference_model_version: PREFERENCES_VERSION,
+      })
+      .eq('id', req.userId)
+      .select('survey, survey_updated_at, scheduler_preferences, preferences_updated_at');
+    if (error) throw error;
+    return data[0] ?? null;
+  } catch (err) {
+    console.error('Could not refresh preferences', err);
+    return null;
+  }
+}
+
+// What the preferences are read from, for checking the data.
+app.get('/api/preferences/history', requireAuth, async (req, res) => {
+  const clock = localClock(req.query);
+  if (!clock) return res.status(400).json({ error: 'now (YYYY-MM-DDTHH:MM) and tzOffset (minutes) are required' });
+  let result;
+  try {
+    result = await readHistory(req, clock);
+  } catch (err) {
+    return serverError(res, err);
+  }
+  if (!result) return res.status(502).json({ error: 'The scheduler could not read the history' });
+  res.json(result);
+});
+
+// Refresh now, instead of waiting for the next survey save or the weekly one.
+app.post('/api/preferences/refresh', requireAuth, async (req, res) => {
+  const clock = localClock(req.body);
+  if (!clock) return res.status(400).json({ error: 'now (YYYY-MM-DDTHH:MM) and tzOffset (minutes) are required' });
+  const saved = await refreshPreferences(req, clock);
+  if (!saved) return res.status(502).json({ error: "Couldn't update your preferences. Try again." });
+  res.json({ preferences: saved.scheduler_preferences, updatedAt: saved.preferences_updated_at, version: PREFERENCES_VERSION });
 });
 
 // Unknown API routes and anything thrown (like a request body that isn't valid JSON) get a JSON error

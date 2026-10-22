@@ -5,6 +5,12 @@ export function todayIso() {
   return format(new Date(), 'yyyy-MM-dd');
 }
 
+// The local date and time as YYYY-MM-DDTHH:MM. The server doesn't know the user's time zone, so requests
+// that depend on "now" send this (with new Date().getTimezoneOffset()).
+export function localNow() {
+  return format(new Date(), "yyyy-MM-dd'T'HH:mm");
+}
+
 // Today's date as YYYY-MM-DD, kept current while the page stays open: a timer for midnight, plus a
 // re-check whenever the tab comes back into view (background tabs and sleeping laptops miss timers).
 export function useToday() {

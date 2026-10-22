@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { apiGet, apiPut } from './api';
+import { localNow } from './today';
 import type { SurveyAnswers } from './survey';
 import type { Travel } from './places';
 
@@ -46,7 +47,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const loading = !!user && state.userId !== user.id;
 
   const saveSurvey = async (survey: SurveyAnswers) => {
-    const profile = await apiPut('/api/profile/survey', { survey });
+    // The clock lets the server work out the scheduling preferences again from the new answers.
+    const profile = await apiPut('/api/profile/survey', { survey, now: localNow(), tzOffset: new Date().getTimezoneOffset() });
     setState({ userId: profile.id, profile, error: null });
   };
 

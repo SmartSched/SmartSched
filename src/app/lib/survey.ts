@@ -1,4 +1,4 @@
-// Onboarding survey definitions. Keys here must match SURVEY_OPTIONS in server/index.js.
+// Onboarding survey definitions. Keys here must match SURVEY_OPTIONS in server/validation.js.
 
 export const COMMITMENTS = [
   { key: 'classes', label: 'Classes' },
@@ -46,6 +46,10 @@ export const CALENDAR_STYLES = [
   { key: 'calendar4', label: 'Light and even', image: '/images/calendar4.png' },
 ] as const;
 
+// Must match SLEEP_HOURS and WAKE_TIME in server/validation.js.
+export const SLEEP_HOURS = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10] as const;
+export const WAKE_TIME = { earliest: '04:00', latest: '12:00' };
+
 type Key<T extends readonly { key: string }[]> = T[number]['key'];
 
 export interface SurveyAnswers {
@@ -56,6 +60,9 @@ export interface SurveyAnswers {
   non_negotiables: Key<typeof NON_NEGOTIABLES>[];
   deadline_style: Key<typeof DEADLINE_STYLES> | null;
   calendar_style: Key<typeof CALENDAR_STYLES> | null;
+  // Missing on surveys saved before these questions existed.
+  sleep_hours?: number | null;
+  wake_time?: string | null; // HH:MM
 }
 
 export const EMPTY_SURVEY: SurveyAnswers = {
@@ -65,8 +72,17 @@ export const EMPTY_SURVEY: SurveyAnswers = {
   non_negotiables: [],
   deadline_style: null,
   calendar_style: null,
+  sleep_hours: null,
+  wake_time: null,
 };
 
 export function labelFor(options: readonly { key: string; label: string }[], key: string | null) {
   return options.find((o) => o.key === key)?.label ?? '—';
+}
+
+// "07:30" -> "7:30 AM"
+export function formatWakeTime(hhmm: string | null | undefined) {
+  if (!hhmm) return '—';
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 }

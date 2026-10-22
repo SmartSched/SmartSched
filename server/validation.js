@@ -10,6 +10,11 @@ export const SURVEY_OPTIONS = {
   calendar_style: ['calendar1', 'calendar2', 'calendar3', 'calendar4'],
 };
 
+// Sleep a night, in half hours, and the usual wake-up time. The scheduler keeps study out of the sleep
+// window and its buffers (ml/prefs/hard.py), which also clamps them to a sane band. Match survey.ts.
+export const SLEEP_HOURS = { min: 6, max: 10 };
+export const WAKE_TIME = { earliest: '04:00', latest: '12:00' };
+
 // Returns { survey } with only known fields, or { error } describing the first problem.
 export function validateSurvey(input) {
   if (!input || typeof input !== 'object') return { error: 'Survey answers are required' };
@@ -36,6 +41,16 @@ export function validateSurvey(input) {
     return { error: 'Invalid answer for non_negotiables' };
   }
 
+  const sleepHours = input.sleep_hours;
+  if (typeof sleepHours !== 'number' || sleepHours < SLEEP_HOURS.min || sleepHours > SLEEP_HOURS.max || (sleepHours * 2) % 1 !== 0) {
+    return { error: 'Sleep must be between 6 and 10 hours, in half hours' };
+  }
+  // Stored as HH:MM: the scheduler reads it that way.
+  const wakeTime = typeof input.wake_time === 'string' ? input.wake_time.slice(0, 5) : '';
+  if (!TIME_PATTERN.test(wakeTime) || wakeTime < WAKE_TIME.earliest || wakeTime > WAKE_TIME.latest) {
+    return { error: 'Wake-up time must be between 4:00 AM and noon' };
+  }
+
   return {
     survey: {
       commitments,
@@ -44,6 +59,8 @@ export function validateSurvey(input) {
       non_negotiables: [...new Set(nonNegotiables)],
       deadline_style: input.deadline_style,
       calendar_style: input.calendar_style,
+      sleep_hours: sleepHours,
+      wake_time: wakeTime,
     },
   };
 }
@@ -170,6 +187,22 @@ export function isValidTimeSpent(value) {
 }
 
 export const REFLECTION_KEYS = ['productivity', 'mood', 'energy', 'sleep'];
+
+// Optional bed time (the night before) and wake-up time on a reflection, as HH:MM or null. Blank clears one.
+export function validateSleepTimes(input) {
+  const times = {};
+  for (const [key, label] of [['bed_time', 'Bed time'], ['wake_time', 'Wake-up time']]) {
+    const value = input?.[key];
+    if (value === undefined || value === null || value === '') {
+      times[key] = null;
+    } else if (typeof value === 'string' && TIME_PATTERN.test(value)) {
+      times[key] = value.slice(0, 5);
+    } else {
+      return { error: `${label} must be HH:MM` };
+    }
+  }
+  return { times };
+}
 
 // Returns { ratings } with exactly the four known keys, or { error } for the first one that isn't rated 1-5.
 export function validateRatings(input) {

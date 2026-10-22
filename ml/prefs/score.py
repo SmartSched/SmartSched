@@ -195,6 +195,13 @@ def base(view):
         + 0.2 * fragments
 
 
+def style_of(inp, cal):
+    """Which distribution style a calendar fits best (the lowest pen_distribution). The app logs the styles of
+    the options it showed and the one chosen; the model reads that as PAST PICKS."""
+    view = View(inp, cal)
+    return min(["front_loaded", "even", "spaced", "clustered"], key=lambda s: pen_distribution(view, {"style": s}))
+
+
 def breakdown(inp, prefs, cal):
     """[(item, penalty, weight)] for every preference, plus sleep when the JSON has one."""
     view = View(inp, cal)
