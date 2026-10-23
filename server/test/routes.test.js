@@ -650,3 +650,73 @@ describe('GET /api/preferences/history', () => {
     expect((await request(app).get('/api/preferences/history?now=2026-10-22T12:00').set(AUTH)).status).toBe(400);
   });
 });
+
+describe('scheduler waking up', () => {
+  const survey = { focus_time: 'evening', work_session: '45' };
+  const task = { id: TASK_ID, title: 'Essay', type: 'homework', priority: 'high', due_date: '2026-10-25', estimated_time: 90, completed: false };
+  const calendar = { blocks: [{ task: TASK_ID, date: '2026-10-23', start: '19:00', end: '19:45' }], unscheduled: [] };
+  const ok = () => new Response(JSON.stringify({ calendars: [{ id: 'c001', why: 'x', style: 'even', calendar }] }), { status: 200 });
+
+  beforeEach(() => {
+    process.env.SCHEDULER_RETRY_DELAY_MS = '0';
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    fake.state.results = [
+      { data: [task], error: null },
+      { data: [], error: null },
+      { data: { survey, survey_updated_at: '2026-10-20T10:00:00Z', scheduler_preferences: {}, preferences_updated_at: new Date().toISOString() }, error: null },
+      { data: [], error: null },
+      { data: null, count: 0, error: null },
+    ];
+  });
+  afterEach(() => {
+    delete process.env.SCHEDULER_RETRY_DELAY_MS;
+  });
+  const suggest = () => request(app).post('/api/schedule/suggest').set(AUTH).send({ now: '2026-10-22T12:00', weekStart: '2026-10-19', tzOffset: 420 });
+
+  it('tries once more when the host says it is starting (503)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('waking', { status: 503 }))
+      .mockResolvedValueOnce(ok());
+    const res = await suggest();
+    expect(res.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(res.body.suggestions).toHaveLength(1);
+  });
+
+  it('tries once more when there is no answer, then gives a readable error', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('fetch failed'));
+    const res = await suggest();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('The planner is starting up. Try again in a minute.');
+  });
+
+  it("doesn't retry a real answer like 422", async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('bad input', { status: 422 }));
+    const res = await suggest();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe('The scheduler could not build a plan');
+  });
+
+  it('wakes the scheduler without waiting for it', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
+    const res = await request(app).post('/api/schedule/warm').set(AUTH).send({});
+    expect(res.status).toBe(202);
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/health$/);
+  });
+});
+
+describe('choosing a plan that has gone stale', () => {
+  it('refuses a plan whose session already started', async () => {
+    const plan = {
+      now: '2026-10-23T10:05', weekStart: '2026-10-19',
+      blocks: [{ activity: 'Essay', date: '2026-10-23', start_time: '10:00:00', end_time: '10:45:00', type: 'task', task_id: TASK_ID }],
+    };
+    const res = await request(app).post('/api/schedule/accept').set(AUTH).send(plan);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('Part of this plan has already started. Suggest a new plan.');
+    expect(fake.state.queries).toHaveLength(0);
+  });
+});

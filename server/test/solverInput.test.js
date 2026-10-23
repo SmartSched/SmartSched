@@ -8,6 +8,17 @@ describe('buildSolverInput', () => {
     expect(input).not.toHaveProperty('available');
     expect(input).not.toHaveProperty('prefs');
   });
+
+  it('plans from 30 minutes after now, so the first session is still ahead when a plan is chosen', () => {
+    const tasks = [
+      { id: 'soon', title: 'Due soon', due_date: '2026-10-23T06:50:00+00:00', estimated_time: 30, completed: false },
+      { id: 'later', title: 'Due later', due_date: '2026-10-25', estimated_time: 30, completed: false },
+    ];
+    const input = buildSolverInput({ now: '2026-10-22T23:45', weekStart: '2026-10-19', tzOffset: 420, tasks, blocks: [], reflections: [] });
+    expect(input.now).toBe('2026-10-23T00:15');
+    // "Due soon" is due at 23:50 local, before plans can start.
+    expect(input.tasks.map((t) => t.id)).toEqual(['later']);
+  });
 });
 
 describe('buildSolverInput fixed blocks', () => {

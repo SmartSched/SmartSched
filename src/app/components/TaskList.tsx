@@ -330,6 +330,11 @@ export function TaskList() {
     }
   };
 
+  // The scheduler service sleeps when idle; wake it now so a plan is quick when asked for. Best effort.
+  useEffect(() => {
+    if (user) apiPost('/api/schedule/warm', {}).catch(() => {});
+  }, [user]);
+
   const handleSuggestPlan = async () => {
   setLoadingSuggestion(true);
   setSuggestionNote(null);

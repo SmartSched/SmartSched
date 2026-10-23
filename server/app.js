@@ -424,19 +424,50 @@ app.post('/api/reflections', requireAuth, async (req, res) => {
 });
 const SCHEDULER_URL = process.env.SCHEDULER_URL || 'http://localhost:8000';
 
+// The scheduler service sleeps when idle on the free host and takes up to a minute to wake. Each call gets
+// SCHEDULER_TIMEOUT_MS, and one more try after a short wait when it's waking up (the host's 502/503/504, a
+// timeout, or no answer at all).
+const SCHEDULER_TIMEOUT_MS = 60_000;
+const WAKING_STATUSES = [502, 503, 504];
+const retryDelay = () => Number(process.env.SCHEDULER_RETRY_DELAY_MS ?? 3000);
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // POSTs to the Python scheduler service (ml/csp/api.py). Returns its JSON, or null after logging what it said.
+// Throws when it can't be reached even on the second try.
 async function askScheduler(path, body) {
-  const r = await fetch(`${SCHEDULER_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.SERVICE_API_KEY || '' },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) {
+  for (let attempt = 1; ; attempt++) {
+    const last = attempt === 2;
+    let r;
+    try {
+      r = await fetch(`${SCHEDULER_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.SERVICE_API_KEY || '' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(SCHEDULER_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (last) throw err;
+      console.warn(`Scheduler ${path} unreachable (${err.name}), trying again`);
+      await wait(retryDelay());
+      continue;
+    }
+    if (r.ok) return r.json();
+    if (!last && WAKING_STATUSES.includes(r.status)) {
+      console.warn(`Scheduler ${path} said ${r.status} while waking up, trying again`);
+      await wait(retryDelay());
+      continue;
+    }
     console.error('Scheduler said', r.status, await r.text());
     return null;
   }
-  return r.json();
 }
+
+// Wakes the scheduler service when the Schedule page opens, so it's up by the time the user asks for a plan.
+// Doesn't wait for it.
+app.post('/api/schedule/warm', requireAuth, (req, res) => {
+  fetch(`${SCHEDULER_URL}/health`, { signal: AbortSignal.timeout(SCHEDULER_TIMEOUT_MS) }).catch(() => {});
+  res.status(202).json({ status: 'waking' });
+});
 
 // How a suggested plan spreads its work (ml/prefs/score.py style_of).
 const PLAN_STYLES = ['front_loaded', 'even', 'spaced', 'clustered'];
@@ -490,7 +521,8 @@ app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
     // prefs null: the scheduler derives them from the survey (ml/prefs/baseline.py).
     result = await askScheduler('/schedule', { input, survey, prefs: savedPreferences(saved) });
   } catch (err) {
-    return serverError(res, err);
+    console.error('Scheduler unreachable', err);
+    return res.status(503).json({ error: 'The planner is starting up. Try again in a minute.' });
   }
   if (!result) return res.status(502).json({ error: 'The scheduler could not build a plan' });
 
@@ -531,6 +563,10 @@ app.post('/api/schedule/accept', requireAuth, async (req, res) => {
     if (validationError) return res.status(400).json({ error: validationError });
     if (block.date < weekStart || block.date > weekEnd) {
       return res.status(400).json({ error: 'Every block has to fall inside the week' });
+    }
+    // Options can sit on screen for a while; don't save a session that has already started.
+    if (startsBefore(block, now)) {
+      return res.status(409).json({ error: 'Part of this plan has already started. Suggest a new plan.' });
     }
     rows.push(block);
   }

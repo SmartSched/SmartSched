@@ -1,5 +1,14 @@
 const hhmm = (t) => t.slice(0, 5);
 
+// Plans start at least this long after "now", so the first session hasn't begun by the time the user has
+// read the options and chosen one.
+export const LEAD_MINUTES = 30;
+
+// A local YYYY-MM-DDTHH:MM plus n minutes (as plain clock arithmetic; no time zone is involved).
+function addMinutes(localIso, n) {
+  return new Date(Date.parse(`${localIso.slice(0, 16)}:00Z`) + n * 60000).toISOString().slice(0, 16);
+}
+
 function addDays(dateStr, n) {
   const d = new Date(`${dateStr}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -43,6 +52,7 @@ export function preferencesOutOfDate(profile, nowMs) {
 // preference JSON on the Python side (ml/prefs/hard.py build), so they aren't set here.
 export function buildSolverInput({ now, weekStart, tasks, blocks, reflections, tzOffset = 0 }) {
   const weekEnd = addDays(weekStart, 6);
+  const planFrom = addMinutes(now, LEAD_MINUTES);
   // Task blocks that accepting a plan won't replace (see /api/schedule/accept) are fixed like classes:
   // ones for tasks that are done, and ones that already started.
   const unfinished = new Set(tasks.filter((t) => !t.completed).map((t) => t.id));
@@ -58,7 +68,7 @@ export function buildSolverInput({ now, weekStart, tasks, blocks, reflections, t
         due: toLocal(t.due_date, tzOffset),
         minutes: t.estimated_time - (t.time_spent ?? 0),
     }))
-    .filter((t) => t.minutes > 0 && t.due > now);
+    .filter((t) => t.minutes > 0 && t.due > planFrom);
 
   const fixed = blocks
     .filter((b) => stays(b) && b.date >= weekStart && b.date <= weekEnd)
@@ -73,7 +83,7 @@ export function buildSolverInput({ now, weekStart, tasks, blocks, reflections, t
   const recent_ratings = reflections.map((r) => ({ date: r.date, ...r.ratings }));
 
   return {
-    now,
+    now: planFrom,
     week: { start: weekStart, end: weekEnd },
     day_off: null,
     fixed,
