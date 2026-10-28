@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import {
   Card,
   CardContent,
@@ -14,7 +14,7 @@ import {
   Link as MuiLink,
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 
 const MIN_PASSWORD_LENGTH = 6;
@@ -26,7 +26,14 @@ export function AuthPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
   const [message, setMessage] = useState<string | null>(null);
+  // A note passed along by the page that sent the user here, e.g. after deleting their account. An effect,
+  // because signing out can bring the user here a moment before that page's own navigate does.
+  const note = (location.state as { message?: string } | null)?.message;
+  useEffect(() => {
+    if (note) setMessage(note);
+  }, [note]);
   const [submitting, setSubmitting] = useState(false);
   const { signUp, signIn, resetPassword } = useAuth();
   const navigate = useNavigate();

@@ -16,6 +16,7 @@ import {
 import { expandSeries } from './series.js';
 import { planCommutes } from './commute.js';
 import { buildSolverInput, preferencesOutOfDate, savedPreferences, startsBefore } from './solverInput.js';
+import { askModel } from './model.js';
 
 // The Express app with every route. index.js starts it; the tests use it directly.
 export const app = express();
@@ -58,7 +59,7 @@ function serverError(res, error) {
   res.status(500).json({ error: 'Something went wrong on our end. Try again in a moment.' });
 }
 
-const PROFILE_COLUMNS = 'id, name, survey, survey_updated_at, travel';
+const PROFILE_COLUMNS = 'id, name, survey, survey_updated_at, travel, consented_at, consent_version';
 
 app.get('/api/profile', requireAuth, async (req, res) => {
   const { data, error } = await req.supabase
@@ -83,6 +84,28 @@ app.put('/api/profile/survey', requireAuth, async (req, res) => {
   const clock = localClock(req.body);
   if (clock) await refreshPreferences(req, clock);
   res.json(data[0]);
+});
+
+// #31 The tester agreed to the consent text. The text lives in the app, so the app sends the version it
+// showed; when the text changes the app asks again.
+app.put('/api/profile/consent', requireAuth, async (req, res) => {
+  const version = req.body.version;
+  if (typeof version !== 'string' || !/^[\w.-]{1,40}$/.test(version)) {
+    return res.status(400).json({ error: 'Consent version is required' });
+  }
+  const { data, error } = await req.supabase
+    .from('profiles')
+    .upsert({ id: req.userId, consented_at: new Date().toISOString(), consent_version: version }, { onConflict: 'id' })
+    .select(PROFILE_COLUMNS);
+  if (error) return serverError(res, error);
+  res.json(data[0]);
+});
+
+// #31 Deletes the account and, through the cascades, all of the user's data (see the consent migration).
+app.delete('/api/account', requireAuth, async (req, res) => {
+  const { error } = await req.supabase.rpc('delete_my_account');
+  if (error) return serverError(res, error);
+  res.status(204).end();
 });
 
 // Saving travel times also rebuilds the automatic commutes for the next eight weeks, so they show up
@@ -612,10 +635,10 @@ app.post('/api/schedule/accept', requireAuth, async (req, res) => {
 
 // ---- Preferences: the JSON the scheduler ranks calendars by (profiles.scheduler_preferences) ----
 //
-// For now the fixed rules in ml/prefs/system_prompt.txt write it, applied to the user's history
-// (history.rules on the scheduler service; no model is hosted yet). It's refreshed when the survey is
-// saved, and when "Suggest a plan" finds it missing, a week old, or behind enough new events. Never on
-// every request. A hosted model would replace the rules here and change PREFERENCES_VERSION.
+// The fixed rules in ml/prefs/system_prompt.txt write it first, applied to the user's history (history.rules
+// on the scheduler service), and the model replaces it in the background when MODEL_URL is set (see
+// preferencesFromModel). It's refreshed when the survey is saved, and when "Suggest a plan" finds it
+// missing, a week old, or behind enough new events. Never on every request.
 const PREFERENCES_VERSION = 'rules-v1';
 const HISTORY_DAYS = 21;
 const REFRESH_AFTER_EVENTS = 10;
@@ -691,11 +714,36 @@ async function refreshPreferences(req, clock) {
       .eq('id', req.userId)
       .select('survey, survey_updated_at, scheduler_preferences, preferences_updated_at');
     if (error) throw error;
+    if (process.env.MODEL_URL && data[0]) {
+      preferencesFromModel(req, result.bundle, data[0].survey).catch((err) => console.error('Model refresh failed', err));
+    }
     return data[0] ?? null;
   } catch (err) {
     console.error('Could not refresh preferences', err);
     return null;
   }
+}
+
+// The preference model (server/model.js; ml/serve on a Hugging Face Space at MODEL_URL). It's asked after the
+// rules' JSON is saved and the user's request has gone ahead, and its JSON replaces the rules' only when the
+// reply was usable. A plan never waits on the model.
+async function preferencesFromModel(req, bundle, survey) {
+  const reply = await askModel(bundle, survey);
+  if (!reply) return;
+  if (!reply.parsed || reply.fallback) {
+    console.warn('Model reply not usable, keeping the rules', reply.problems);
+    return;
+  }
+  const { error } = await req.supabase
+    .from('profiles')
+    .update({
+      scheduler_preferences: reply.prefs,
+      preferences_updated_at: new Date().toISOString(),
+      preference_model_version: reply.version,
+    })
+    .eq('id', req.userId);
+  if (error) console.error('Could not save the model preferences', error);
+  else console.log(`Model preferences saved (${reply.version}, ${reply.seconds}s)`);
 }
 
 // What the preferences are read from, for checking the data.

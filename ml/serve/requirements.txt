@@ -1,0 +1,5 @@
+# Gradio and the spaces package come with the Space's Gradio SDK (README.md). ZeroGPU supports torch 2.8+.
+torch==2.8.0
+transformers==4.57.1
+peft==0.17.1
+huggingface_hub>=0.34,<1.0

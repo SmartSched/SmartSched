@@ -35,6 +35,11 @@ const fake = vi.hoisted(() => {
         state.user ? { data: { user: state.user }, error: null } : { data: { user: null }, error: new Error('bad token') },
     },
     from,
+    // Recorded like a query on "rpc:<name>", answered from the same queue.
+    rpc: async (name, args) => {
+      state.queries.push({ table: `rpc:${name}`, calls: [['rpc', args]] });
+      return state.results.shift() ?? { data: null, error: null };
+    },
   };
   return { state, client };
 });
@@ -82,6 +87,8 @@ const ROUTES = [
   ['delete', '/api/time-blocks/abc'],
   ['get', '/api/reflections/2026-09-29'],
   ['post', '/api/reflections'],
+  ['put', '/api/profile/consent'],
+  ['delete', '/api/account'],
 ];
 
 describe('every route', () => {
@@ -279,6 +286,41 @@ describe('profile survey', () => {
     const res = await request(app).put('/api/profile/survey').set(AUTH).send({ survey: { ...survey, focus_time: 'noon' } });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Invalid answer for focus_time');
+  });
+});
+
+describe('consent and deleting the account', () => {
+  it('records when the tester agreed and to which version', async () => {
+    fake.state.results = [{ data: [{ id: 'user-1', consent_version: '2026-10-26' }], error: null }];
+    const res = await request(app).put('/api/profile/consent').set(AUTH).send({ version: '2026-10-26' });
+    expect(res.status).toBe(200);
+    expect(res.body.consent_version).toBe('2026-10-26');
+    const [[, row, options]] = callsOn('profiles').filter(([method]) => method === 'upsert');
+    expect(row).toMatchObject({ id: 'user-1', consent_version: '2026-10-26' });
+    expect(Date.parse(row.consented_at)).not.toBeNaN();
+    expect(options).toEqual({ onConflict: 'id' });
+  });
+
+  it('refuses a missing or odd version', async () => {
+    for (const body of [{}, { version: '' }, { version: 42 }, { version: 'a b' }, { version: 'x'.repeat(41) }]) {
+      const res = await request(app).put('/api/profile/consent').set(AUTH).send(body);
+      expect(res.status).toBe(400);
+    }
+    expect(fake.state.queries).toHaveLength(0);
+  });
+
+  it('deletes the account through delete_my_account', async () => {
+    const res = await request(app).delete('/api/account').set(AUTH);
+    expect(res.status).toBe(204);
+    expect(fake.state.queries.map((q) => q.table)).toEqual(['rpc:delete_my_account']);
+  });
+
+  it('reports a failed delete instead of pretending it worked', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    fake.state.results = [{ data: null, error: { message: 'permission denied for table users' } }];
+    const res = await request(app).delete('/api/account').set(AUTH);
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('Something went wrong on our end. Try again in a moment.');
   });
 });
 
@@ -718,5 +760,66 @@ describe('choosing a plan that has gone stale', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('Part of this plan has already started. Suggest a new plan.');
     expect(fake.state.queries).toHaveLength(0);
+  });
+});
+
+describe('the preference model', () => {
+  const rules = { summary: 'From the rules.', preferences: [], adjustments: [] };
+  const modelPrefs = { summary: 'From the model.', preferences: [{ kind: 'session_length', ideal: 60 }], adjustments: [] };
+  const BODY = { now: '2026-10-22T12:00', tzOffset: 420 };
+
+  beforeEach(() => {
+    process.env.MODEL_URL = 'https://model.test';
+    process.env.MODEL_HF_TOKEN = 'hf_test';
+    fake.state.results = [
+      ...Array(5).fill({ data: [], error: null }),
+      { data: [{ survey: { focus_time: 'evening' }, scheduler_preferences: rules, preferences_updated_at: '2026-10-22T19:00:00Z' }], error: null },
+    ];
+  });
+  afterEach(() => {
+    delete process.env.MODEL_URL;
+    delete process.env.MODEL_HF_TOKEN;
+  });
+
+  // The scheduler's /history, then Gradio's two steps: start the job, then its event stream.
+  function fakeServices(modelReply) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url.endsWith('/history')) return new Response(JSON.stringify({ bundle: 'TODAY: 2026-10-22 Thu', rules }), { status: 200 });
+      if (url.endsWith('/gradio_api/call/prefs')) return new Response(JSON.stringify({ event_id: 'e1' }), { status: 200 });
+      return new Response(`event: complete\ndata: ${JSON.stringify([modelReply])}\n\n`, { status: 200 });
+    });
+  }
+  const modelUpdates = () => callsOn('profiles').filter(([method, row]) => method === 'update' && row.preference_model_version === 'qwen-lora-v1');
+
+  it('answers with the rules right away, then saves the model reply in the background', async () => {
+    const fetchSpy = fakeServices({ prefs: modelPrefs, parsed: true, fallback: false, problems: [], seconds: 40, version: 'qwen-lora-v1' });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await request(app).post('/api/preferences/refresh').set(AUTH).send(BODY);
+    expect(res.status).toBe(200);
+    expect(res.body.preferences).toEqual(rules);
+
+    await vi.waitFor(() => expect(modelUpdates()).toHaveLength(1));
+    expect(modelUpdates()[0][1].scheduler_preferences).toEqual(modelPrefs);
+    const [url, init] = fetchSpy.mock.calls.find(([u]) => u.endsWith('/gradio_api/call/prefs'));
+    expect(url).toBe('https://model.test/gradio_api/call/prefs');
+    expect(init.headers.Authorization).toBe('Bearer hf_test');
+    expect(JSON.parse(init.body).data.slice(0, 2)).toEqual(['TODAY: 2026-10-22 Thu', JSON.stringify({ focus_time: 'evening' })]);
+    expect(fetchSpy.mock.calls.some(([u]) => u === 'https://model.test/gradio_api/call/prefs/e1')).toBe(true);
+  });
+
+  it('keeps the rules when the model reply was not usable', async () => {
+    const fetchSpy = fakeServices({ prefs: {}, parsed: false, fallback: true, problems: ['reply is not JSON'], seconds: 30, version: 'qwen-lora-v1' });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect((await request(app).post('/api/preferences/refresh').set(AUTH).send(BODY)).status).toBe(200);
+    await vi.waitFor(() => expect(fetchSpy.mock.calls.some(([u]) => u.endsWith('/prefs/e1'))).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(modelUpdates()).toHaveLength(0);
+  });
+
+  it('is not asked when MODEL_URL is not set', async () => {
+    delete process.env.MODEL_URL;
+    const fetchSpy = fakeServices({});
+    expect((await request(app).post('/api/preferences/refresh').set(AUTH).send(BODY)).status).toBe(200);
+    expect(fetchSpy.mock.calls.some(([u]) => u.includes('/gradio_api/'))).toBe(false);
   });
 });

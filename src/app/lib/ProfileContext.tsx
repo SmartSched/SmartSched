@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { useAuth } from './AuthContext';
 import { apiGet, apiPut } from './api';
 import { localNow } from './today';
+import { CONSENT_VERSION } from './consent';
 import type { SurveyAnswers } from './survey';
 import type { Travel } from './places';
 
@@ -11,6 +12,8 @@ export interface Profile {
   survey: SurveyAnswers | null;
   survey_updated_at: string | null;
   travel: Travel;
+  consented_at: string | null;
+  consent_version: string | null;
 }
 
 interface ProfileContextValue {
@@ -19,6 +22,7 @@ interface ProfileContextValue {
   error: string | null;
   saveSurvey: (survey: SurveyAnswers) => Promise<void>;
   saveTravel: (travel: Travel) => Promise<void>;
+  saveConsent: () => Promise<void>;
 }
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
@@ -57,9 +61,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     setState({ userId: profile.id, profile, error: null });
   };
 
+  const saveConsent = async () => {
+    const profile = await apiPut('/api/profile/consent', { version: CONSENT_VERSION });
+    setState({ userId: profile.id, profile, error: null });
+  };
+
   return (
     <ProfileContext.Provider
-      value={{ profile: user ? state.profile : null, loading, error: state.error, saveSurvey, saveTravel }}
+      value={{ profile: user ? state.profile : null, loading, error: state.error, saveSurvey, saveTravel, saveConsent }}
     >
       {children}
     </ProfileContext.Provider>

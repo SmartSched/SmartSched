@@ -21,8 +21,10 @@ import { BrowserRouter, Routes, Route, Link, useNavigate, Navigate, useLocation 
 import { AccountCircle, Menu as MenuIcon } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ProfileProvider, useProfile } from './lib/ProfileContext';
+import { needsConsent } from './lib/consent';
 import { HomePage } from './components/HomePage';
 import { SurveyPage } from './components/SurveyPage';
+import { ConsentPage } from './components/ConsentPage';
 import { ProfilePage } from './components/ProfilePage';
 import { TaskList } from './components/TaskList';
 import { DailyPlanner } from './components/DailyPlanner';
@@ -89,7 +91,11 @@ function RequireAuth({ children }: { children: ReactNode }) {
   if (loading) return null;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
   if (profileLoading) return null;
-  if (!profileError && !profile?.survey && location.pathname !== '/survey') {
+  // Consent (#31) comes first, then the survey.
+  if (!profileError && needsConsent(profile)) {
+    return location.pathname === '/consent' ? <>{children}</> : <Navigate to="/consent" replace />;
+  }
+  if (!profileError && !profile?.survey && location.pathname !== '/survey' && location.pathname !== '/consent') {
     return <Navigate to="/survey" replace />;
   }
 
@@ -191,6 +197,7 @@ function AppShell() {
           <Route path="/schedule" element={<RequireAuth><TaskList /></RequireAuth>} />
           <Route path="/planner" element={<RequireAuth><DailyPlanner /></RequireAuth>} />
           <Route path="/reflection" element={<RequireAuth><DayReflection /></RequireAuth>} />
+          <Route path="/consent" element={<RequireAuth><ConsentPage /></RequireAuth>} />
           <Route path="/survey" element={<RequireAuth><SurveyPage /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
         </Routes>
