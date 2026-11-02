@@ -2,11 +2,11 @@ import { ReactNode } from 'react';
 import { Card, CardContent, Typography, Box, Button, Divider, Alert } from '@mui/material';
 import { format } from 'date-fns';
 import { Link } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-import { useProfile } from '../lib/ProfileContext';
-import { CalendarImage } from './SurveyPage';
-import { TravelTimes } from './TravelTimes';
-import { YourData } from './YourData';
+import { useAuth } from '../../../app/lib/AuthContext';
+import { useProfile } from '../../../app/lib/ProfileContext';
+import { CalendarImage } from '../../survey/components/SurveyPage';
+import { TravelTimes } from '../../planner/components/TravelTimes';
+import { YourData } from '../../planner/components/YourData';
 import {
   COMMITMENTS,
   FOCUS_TIMES,
@@ -16,7 +16,7 @@ import {
   CALENDAR_STYLES,
   formatWakeTime,
   labelFor,
-} from '../lib/survey';
+} from '../../../app/lib/survey';
 
 function Answer({ question, children }: { question: string; children: ReactNode }) {
   return (

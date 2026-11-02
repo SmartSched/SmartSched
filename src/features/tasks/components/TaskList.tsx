@@ -28,13 +28,13 @@ import {
 import { Add, Close, EditOutlined, DeleteOutline } from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router';
 import { format, parseISO } from 'date-fns';
-import { useAuth } from '../lib/AuthContext';
-import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
-import { localNow } from '../lib/today';
-import { estimateRatios, sortTasks, type EstimateRatio, type Task } from '../lib/tasks';
+import { useAuth } from '../../../app/lib/AuthContext';
+import { apiPost } from '../../../app/lib/api';
+import { estimateRatios, sortTasks, type EstimateRatio, type Task } from '../../../app/lib/tasks';
+import { localNow } from '../../../app/lib/today';
 import { TimeSpentDialog } from './TimeSpentDialog';
-
-type TaskPayload = Pick<Task, 'title' | 'description' | 'type' | 'priority' | 'due_date' | 'estimated_time'>;
+import { useTasks, type TaskPayload } from '../hooks/useTasks';
+import { useCurrentTime } from '../../../shared/hooks/useCurrentTime';
 
 interface TaskFormValues {
   title: string;
@@ -211,16 +211,14 @@ function currentWeekStart() {
 export function TaskList() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { tasks, loading, error, createTask, updateTask, removeTask } = useTasks(user?.id);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useCurrentTime();
   const [finishingTask, setFinishingTask] = useState<Task | null>(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -228,37 +226,18 @@ export function TaskList() {
   const [suggestionNote, setSuggestionNote] = useState<string | null>(null);
   const [acceptingPlanId, setAcceptingPlanId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    apiGet('/api/tasks')
-      .then(setTasks)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [user]);
-
-  // Re-check overdue flags while the page stays open.
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
   const sortedTasks = useMemo(() => sortTasks(tasks), [tasks]);
   const ratios = useMemo(() => estimateRatios(tasks), [tasks]);
   const ratioEntries = Object.entries(ratios) as [Task['type'], EstimateRatio][];
 
   const handleAddTask = async (payload: TaskPayload) => {
-    const created = await apiPost('/api/tasks', payload);
-    setTasks((current) => [created, ...current]);
+    await createTask(payload);
     setShowForm(false);
   };
 
   const handleEditTask = async (payload: TaskPayload) => {
     if (!editingTask) return;
-    const updated = await apiPatch(`/api/tasks/${editingTask.id}`, payload);
-    setTasks((current) => current.map((t) => (t.id === updated.id ? updated : t)));
+    await updateTask(editingTask.id, payload);
     setEditingTask(null);
   };
 
@@ -266,8 +245,7 @@ export function TaskList() {
     if (!deletingTask) return;
     setDeleteInProgress(true);
     try {
-      await apiDelete(`/api/tasks/${deletingTask.id}`);
-      setTasks((current) => current.filter((t) => t.id !== deletingTask.id));
+      await removeTask(deletingTask.id);
       setDeletingTask(null);
     } catch {
       setActionError("Couldn't delete task. Try again.");
@@ -288,16 +266,9 @@ export function TaskList() {
   const updateCompleted = async (task: Task, changes: { completed: boolean; time_spent?: number }) => {
     const { completed } = changes;
     setToggling(task.id, true);
-    setTasks((current) =>
-      current.map((t) =>
-        t.id === task.id ? { ...t, ...changes, completed_at: completed ? new Date().toISOString() : null } : t
-      )
-    );
     try {
-      const updated = await apiPatch(`/api/tasks/${task.id}`, changes);
-      setTasks((current) => current.map((t) => (t.id === task.id ? updated : t)));
+      await updateTask(task.id, changes);
     } catch {
-      setTasks((current) => current.map((t) => (t.id === task.id ? task : t)));
       setActionError("Couldn't update task. Try again.");
     } finally {
       setToggling(task.id, false);

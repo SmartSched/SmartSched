@@ -1,4 +1,3 @@
-import { useEffect, useState, FormEvent } from 'react';
 import {
   Card,
   CardContent,
@@ -14,66 +13,11 @@ import {
   Link as MuiLink,
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
-import { useLocation, useNavigate } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-
-const MIN_PASSWORD_LENGTH = 6;
+import { MIN_PASSWORD_LENGTH, useAuthForm } from '../hooks/useAuthForm';
 
 export function AuthPage() {
-  const [mode, setMode] = useState<'signup' | 'login' | 'forgot'>('login');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const location = useLocation();
-  const [message, setMessage] = useState<string | null>(null);
-  // A note passed along by the page that sent the user here, e.g. after deleting their account. An effect,
-  // because signing out can bring the user here a moment before that page's own navigate does.
-  const note = (location.state as { message?: string } | null)?.message;
-  useEffect(() => {
-    if (note) setMessage(note);
-  }, [note]);
-  const [submitting, setSubmitting] = useState(false);
-  const { signUp, signIn, resetPassword } = useAuth();
-  const navigate = useNavigate();
-
-  const passwordTooShort = mode === 'signup' && password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setMessage(null);
-
-    if (mode === 'signup' && password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Password needs to be at least ${MIN_PASSWORD_LENGTH} characters.`);
-      return;
-    }
-
-    setSubmitting(true);
-
-    if (mode === 'forgot') {
-      const result = await resetPassword(email);
-      setSubmitting(false);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      setMessage('Check your email for a password reset link.');
-      return;
-    }
-
-    const result = mode === 'signup' ? await signUp(email, password, name) : await signIn(email, password);
-
-    setSubmitting(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-
-    navigate('/');
-  };
+  const form = useAuthForm();
+  const { mode, name, email, password, showPassword, error, message, submitting, passwordTooShort } = form;
 
   return (
     <Box sx={{ maxWidth: '400px', mx: 'auto', mt: 4 }}>
@@ -85,9 +29,7 @@ export function AuthPage() {
               exclusive
               onChange={(_, newMode) => {
                 if (newMode) {
-                  setMode(newMode);
-                  setError(null);
-                  setMessage(null);
+                  form.changeMode(newMode);
                 }
               }}
               fullWidth
@@ -116,12 +58,12 @@ export function AuthPage() {
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box component="form" onSubmit={form.submit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {mode === 'signup' && (
               <TextField
                 label="Name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => form.setName(e.target.value)}
                 required
                 fullWidth
               />
@@ -130,7 +72,7 @@ export function AuthPage() {
               label="Email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => form.setEmail(e.target.value)}
               required
               fullWidth
             />
@@ -139,7 +81,7 @@ export function AuthPage() {
                 label="Password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => form.setPassword(e.target.value)}
                 required
                 fullWidth
                 error={passwordTooShort}
@@ -155,7 +97,7 @@ export function AuthPage() {
                     endAdornment: (
                       <InputAdornment position="end">
                         <IconButton
-                          onClick={() => setShowPassword((prev) => !prev)}
+                          onClick={() => form.setShowPassword(!showPassword)}
                           edge="end"
                           aria-label={showPassword ? 'Hide password' : 'Show password'}
                         >
@@ -175,9 +117,7 @@ export function AuthPage() {
                 variant="body2"
                 sx={{ alignSelf: 'flex-end' }}
                 onClick={() => {
-                  setMode('forgot');
-                  setError(null);
-                  setMessage(null);
+                  form.changeMode('forgot');
                 }}
               >
                 Forgot password?
@@ -206,9 +146,7 @@ export function AuthPage() {
                 type="button"
                 variant="body2"
                 onClick={() => {
-                  setMode('login');
-                  setError(null);
-                  setMessage(null);
+                  form.changeMode('login');
                 }}
               >
                 Back to log in

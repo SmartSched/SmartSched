@@ -14,8 +14,8 @@ import {
 } from '@mui/material';
 import { format } from 'date-fns';
 import { Link, useNavigate } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-import { useProfile } from '../lib/ProfileContext';
+import { useAuth } from '../../../app/lib/AuthContext';
+import { useProfile } from '../../../app/lib/ProfileContext';
 
 const CONFIRM_WORD = 'delete';
 

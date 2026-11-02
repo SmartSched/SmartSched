@@ -28,17 +28,18 @@ import {
 import { Add, ChevronLeft, ChevronRight } from '@mui/icons-material';
 import { addDays, format, parseISO, startOfWeek, subDays } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '../lib/api';
-import { useSelectedDay } from '../lib/today';
-import { layoutBlocks, toMinutes, type BlockTask, type TimeBlock } from '../lib/planner';
-import { burnoutWarnings } from '../lib/burnout';
-import { findOpenSlot, missedTaskBlocks, type Slot } from '../lib/reschedule';
-import type { Task } from '../lib/tasks';
-import { allPlaces, placeLabel } from '../lib/places';
-import { useProfile } from '../lib/ProfileContext';
+import { useAuth } from '../../../app/lib/AuthContext';
+import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '../../../app/lib/api';
+import { useSelectedDay } from '../../../app/lib/today';
+import { layoutBlocks, toMinutes, type BlockTask, type TimeBlock } from '../../../app/lib/planner';
+import { burnoutWarnings } from '../../../app/lib/burnout';
+import { findOpenSlot, missedTaskBlocks, type Slot } from '../../../app/lib/reschedule';
+import type { Task } from '../../../app/lib/tasks';
+import { allPlaces, placeLabel } from '../../../app/lib/places';
+import { useProfile } from '../../../app/lib/ProfileContext';
 import { BurnoutBanner } from './BurnoutBanner';
-import { TimeSpentDialog } from './TimeSpentDialog';
+import { TimeSpentDialog } from '../../tasks/components/TimeSpentDialog';
+import { useCurrentTime } from '../../../shared/hooks/useCurrentTime';
 
 type BlockPayload = Omit<TimeBlock, 'id' | 'task' | 'series' | 'series_id' | 'auto'>;
 
@@ -634,7 +635,7 @@ export function DailyPlanner() {
   const [nearbyVersion, setNearbyVersion] = useState(0);
   const [finishingTask, setFinishingTask] = useState<BlockTask | null>(null);
   const [leftBlocks, setLeftBlocks] = useState<Set<string>>(readLeftBlocks);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useCurrentTime();
 
   const weekStart = useMemo(
     () => startOfWeek(parseISO(selectedDate), { weekStartsOn: WEEK_STARTS_ON }),
@@ -689,11 +690,6 @@ export function DailyPlanner() {
   }, [user, today, nearbyVersion]);
 
   // Blocks end while the page is open, so re-check for missed ones every minute.
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
   const missed = useMemo(() => {
     const at = new Date(now);
     return missedTaskBlocks(nearbyBlocks, at)

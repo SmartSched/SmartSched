@@ -13,9 +13,9 @@ import {
 import { ChevronLeft, ChevronRight } from '@mui/icons-material';
 import { addDays, format, parseISO } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-import { apiGet, apiPost } from '../lib/api';
-import { useSelectedDay } from '../lib/today';
+import { useAuth } from '../../../app/lib/AuthContext';
+import { apiGet, apiPost } from '../../../app/lib/api';
+import { useSelectedDay } from '../../../app/lib/today';
 
 const CRITERIA = [
   { key: 'productivity', label: 'Productivity' },

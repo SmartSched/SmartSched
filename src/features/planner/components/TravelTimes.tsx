@@ -1,7 +1,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { Box, Button, Card, CardContent, Chip, TextField, Typography } from '@mui/material';
-import { useProfile } from '../lib/ProfileContext';
-import { BUILT_IN_PLACES, EMPTY_TRAVEL, pairKey, placeLabel, placePairs, type Travel } from '../lib/places';
+import { useProfile } from '../../../app/lib/ProfileContext';
+import { BUILT_IN_PLACES, EMPTY_TRAVEL, pairKey, placeLabel, placePairs, type Travel } from '../../../app/lib/places';
 
 // Minutes typed per pair, as strings so a field can be empty.
 type Draft = Record<string, string>;

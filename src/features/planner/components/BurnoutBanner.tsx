@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Alert, AlertTitle, Box } from '@mui/material';
-import type { BurnoutWarning } from '../lib/burnout';
+import type { BurnoutWarning } from '../../../app/lib/burnout';
 
 // The week's heavy spots from burnoutWarnings, or nothing when there aren't any.
 export function BurnoutBanner({ warnings, action }: { warnings: BurnoutWarning[]; action?: ReactNode }) {
