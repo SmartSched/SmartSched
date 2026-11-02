@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Card, CardContent, Typography, Box, Button, Checkbox, FormControlLabel, Alert } from '@mui/material';
 import { format } from 'date-fns';
 import { Link, useNavigate } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-import { useProfile } from '../lib/ProfileContext';
-import { CONSENT_INTRO, CONSENT_SECTIONS, needsConsent } from '../lib/consent';
-import { colors } from '../theme';
+import { useAuth } from '../../../app/lib/AuthContext';
+import { useProfile } from '../../../app/lib/ProfileContext';
+import { CONSENT_INTRO, CONSENT_SECTIONS, needsConsent } from '../../../app/lib/consent';
+import { colors } from '../../../app/theme';
 
 // #31 Shown before anything else after logging in, until the tester agrees to the current text. Once they
 // have, the Profile page links back here to read it again.

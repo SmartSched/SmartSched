@@ -17,7 +17,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import { useNavigate } from 'react-router';
-import { useProfile } from '../lib/ProfileContext';
+import { useProfile } from '../../../app/lib/ProfileContext';
 import {
   COMMITMENTS,
   FOCUS_TIMES,
@@ -29,8 +29,8 @@ import {
   WAKE_TIME,
   EMPTY_SURVEY,
   SurveyAnswers,
-} from '../lib/survey';
-import { colors } from '../theme';
+} from '../../../app/lib/survey';
+import { colors } from '../../../app/theme';
 
 type CommitmentKey = (typeof COMMITMENTS)[number]['key'];
 type NonNegotiableKey = (typeof NON_NEGOTIABLES)[number]['key'];

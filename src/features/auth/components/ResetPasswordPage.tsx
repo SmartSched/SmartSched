@@ -12,8 +12,8 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-import { colors } from '../theme';
+import { useAuth } from '../../../app/lib/AuthContext';
+import { colors } from '../../../app/theme';
 
 const MIN_PASSWORD_LENGTH = 6;
 

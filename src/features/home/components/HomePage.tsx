@@ -1,24 +1,22 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Alert, Box, Button, Card, Checkbox, Chip, LinearProgress, Snackbar, Typography } from '@mui/material';
 import { NightsStayOutlined, PlaceOutlined, ScheduleOutlined, WarningAmberRounded } from '@mui/icons-material';
-import { addDays, differenceInCalendarDays, format, parseISO, startOfWeek, subDays } from 'date-fns';
+import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { Link } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-import { useProfile } from '../lib/ProfileContext';
-import { apiGet, apiPatch } from '../lib/api';
-import { useToday } from '../lib/today';
-import { sortTasks, type Task } from '../lib/tasks';
-import { toMinutes, type BlockTask, type TimeBlock } from '../lib/planner';
-import { burnoutWarnings } from '../lib/burnout';
-import { findOpenSlot, missedTaskBlocks, type Slot } from '../lib/reschedule';
-import { readLeftBlocks, saveLeftBlocks } from '../lib/leftBlocks';
-import { placeLabel } from '../lib/places';
-import { CATEGORY_LABELS, categoryColor, colors } from '../theme';
-import { EmptyState, ListSkeleton } from './States';
-import { TimeSpentDialog } from './TimeSpentDialog';
-
-// How far around today to look for task blocks that were missed, and for room to move them (as the planner does).
-const NEARBY_DAYS = 14;
+import { useAuth } from '../../../app/lib/AuthContext';
+import { useProfile } from '../../../app/lib/ProfileContext';
+import { apiPatch } from '../../../app/lib/api';
+import { useToday } from '../../../app/lib/today';
+import { sortTasks, type Task } from '../../../app/lib/tasks';
+import { toMinutes, type BlockTask, type TimeBlock } from '../../../app/lib/planner';
+import { findOpenSlot, missedTaskBlocks, type Slot } from '../../../app/lib/reschedule';
+import { readLeftBlocks, saveLeftBlocks } from '../../../app/lib/leftBlocks';
+import { placeLabel } from '../../../app/lib/places';
+import { CATEGORY_LABELS, categoryColor, colors } from '../../../app/theme';
+import { EmptyState, ListSkeleton } from '../../../shared/components/States';
+import { TimeSpentDialog } from '../../tasks/components/TimeSpentDialog';
+import { useHomeDashboard } from '../hooks/useHomeDashboard';
+import { useCurrentTime } from '../../../shared/hooks/useCurrentTime';
 
 // "13:10" -> "1:10 PM"
 function clock(time: string) {
@@ -87,54 +85,17 @@ export function HomePage() {
   const { user } = useAuth();
   const { profile } = useProfile();
   const today = useToday();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [weekBlocks, setWeekBlocks] = useState<TimeBlock[]>([]);
-  const [nearbyBlocks, setNearbyBlocks] = useState<TimeBlock[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
-  const [version, setVersion] = useState(0);
-  const [now, setNow] = useState(() => new Date());
+  const { tasks, weekBlocks, nearbyBlocks, weekDates, warnings, loading, loadError, reload, applyTask } = useHomeDashboard(
+    user?.id,
+    today,
+  );
+  // The "now" card and the missed-block notice follow the clock while the page is open.
+  const nowMs = useCurrentTime();
+  const now = useMemo(() => new Date(nowMs), [nowMs]);
   const [leftBlocks, setLeftBlocks] = useState<Set<string>>(readLeftBlocks);
   const [finishingTask, setFinishingTask] = useState<BlockTask | Task | null>(null);
   const [moving, setMoving] = useState(false);
   const [notice, setNotice] = useState<{ text: string; severity: 'success' | 'error' } | null>(null);
-
-  // This week as the planner shows it (Sunday to Saturday), plus the next day for Saturday night.
-  const weekDates = useMemo(() => {
-    const start = startOfWeek(parseISO(today), { weekStartsOn: 0 });
-    return Array.from({ length: 7 }, (_, i) => format(addDays(start, i), 'yyyy-MM-dd'));
-  }, [today]);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    const weekEnd = format(addDays(parseISO(weekDates[6]), 1), 'yyyy-MM-dd');
-    const nearStart = format(subDays(parseISO(today), NEARBY_DAYS), 'yyyy-MM-dd');
-    const nearEnd = format(addDays(parseISO(today), NEARBY_DAYS), 'yyyy-MM-dd');
-    setLoadError(false);
-    Promise.all([
-      apiGet('/api/tasks'),
-      apiGet(`/api/time-blocks?start=${weekDates[0]}&end=${weekEnd}`),
-      apiGet(`/api/time-blocks?start=${nearStart}&end=${nearEnd}`),
-    ])
-      .then(([taskData, weekData, nearbyData]) => {
-        if (cancelled) return;
-        setTasks(taskData);
-        setWeekBlocks(weekData);
-        setNearbyBlocks(nearbyData);
-      })
-      .catch(() => !cancelled && setLoadError(true))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [user, today, weekDates, version]);
-
-  // The "now" card and the missed-block notice follow the clock while the page is open.
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(interval);
-  }, []);
 
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -160,7 +121,6 @@ export function HomePage() {
 
   const dueSoon = useMemo(() => sortTasks(tasks).filter((t) => !t.completed).slice(0, 5), [tasks]);
 
-  const warnings = useMemo(() => burnoutWarnings(weekBlocks, tasks, weekDates), [weekBlocks, tasks, weekDates]);
   const heavyDates = new Set(warnings.map((w) => w.date));
   const weekHours = weekDates.map((date) => {
     const minutes = weekBlocks
@@ -169,15 +129,6 @@ export function HomePage() {
     return { date, hours: Math.round((minutes / 60) * 10) / 10 };
   });
   const maxHours = Math.max(8, ...weekHours.map((d) => d.hours));
-
-  // Every place a task shows up here (the list and its blocks) follows its latest state.
-  const applyTask = (updated: Task) => {
-    setTasks((list) => list.map((t) => (t.id === updated.id ? updated : t)));
-    const refresh = (blocks: TimeBlock[]) =>
-      blocks.map((b) => (b.task_id === updated.id && b.task ? { ...b, task: { ...b.task, ...updated } } : b));
-    setWeekBlocks(refresh);
-    setNearbyBlocks(refresh);
-  };
 
   const updateTask = async (taskId: string, changes: { completed: boolean; time_spent?: number }) => {
     try {
@@ -206,7 +157,7 @@ export function HomePage() {
     try {
       const { block: moved }: { block: TimeBlock } = await apiPatch(`/api/time-blocks/${missed.block.id}`, missed.slot);
       setNotice({ severity: 'success', text: `Moved “${blockTitle(moved)}” to ${slotText(moved, today)}.` });
-      setVersion((v) => v + 1);
+      reload();
     } catch {
       setNotice({ severity: 'error', text: "Couldn't move the block. Try again." });
     } finally {
@@ -372,7 +323,7 @@ export function HomePage() {
               <EmptyState
                 title="Couldn't load today's schedule"
                 body="Check your connection and try again."
-                action={<Button variant="outlined" onClick={() => setVersion((v) => v + 1)}>Try again</Button>}
+                action={<Button variant="outlined" onClick={() => reload()}>Try again</Button>}
               />
             ) : todayBlocks.length === 0 ? (
               <EmptyState

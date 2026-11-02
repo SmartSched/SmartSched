@@ -21,16 +21,16 @@ import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ProfileProvider, useProfile } from './lib/ProfileContext';
 import { needsConsent } from './lib/consent';
 import { colors, theme } from './theme';
-import { HomePage } from './components/HomePage';
-import { SurveyPage } from './components/SurveyPage';
-import { ConsentPage } from './components/ConsentPage';
-import { ProfilePage } from './components/ProfilePage';
-import { TaskList } from './components/TaskList';
-import { DailyPlanner } from './components/DailyPlanner';
-import { DayReflection } from './components/DayReflection';
-import { AuthPage } from './components/AuthPage';
-import { ResetPasswordPage } from './components/ResetPasswordPage';
-import { PageLoader } from './components/States';
+import { HomePage } from '../features/home/components/HomePage';
+import { SurveyPage } from '../features/survey/components/SurveyPage';
+import { ConsentPage } from '../features/planner/components/ConsentPage';
+import { ProfilePage } from '../features/profile/components/ProfilePage';
+import { TaskList } from '../features/tasks/components/TaskList';
+import { DailyPlanner } from '../features/planner/components/DailyPlanner';
+import { DayReflection } from '../features/reflection/components/DayReflection';
+import { AuthPage } from '../features/auth/components/AuthPage';
+import { ResetPasswordPage } from '../features/auth/components/ResetPasswordPage';
+import { PageLoader } from '../shared/components/States';
 
 const NAV_LINKS = [
   { to: '/', label: 'Today', icon: <WbSunnyOutlined /> },

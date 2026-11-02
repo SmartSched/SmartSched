@@ -1,7 +1,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from '@mui/material';
-import { apiGet } from '../lib/api';
-import { minutesSoFar } from '../lib/planner';
+import { apiGet } from '../../../app/lib/api';
+import { minutesSoFar } from '../../../app/lib/planner';
 
 export interface FinishingTask {
   id: string;

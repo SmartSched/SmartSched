@@ -15,11 +15,11 @@ import {
 import { ChevronLeft, ChevronRight } from '@mui/icons-material';
 import { addDays, format, parseISO } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
-import { useAuth } from '../lib/AuthContext';
-import { apiGet, apiPost } from '../lib/api';
-import { useSelectedDay } from '../lib/today';
-import { colors } from '../theme';
-import { ListSkeleton } from './States';
+import { useAuth } from '../../../app/lib/AuthContext';
+import { apiGet, apiPost } from '../../../app/lib/api';
+import { useSelectedDay } from '../../../app/lib/today';
+import { colors } from '../../../app/theme';
+import { ListSkeleton } from '../../../shared/components/States';
 
 const CRITERIA = [
   { key: 'productivity', label: 'Productivity', hint: 'How much of what you planned got done' },
