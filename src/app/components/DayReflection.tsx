@@ -8,6 +8,8 @@ import {
   Button,
   IconButton,
   TextField,
+  Alert,
+  Chip,
   Link as MuiLink,
 } from '@mui/material';
 import { ChevronLeft, ChevronRight } from '@mui/icons-material';
@@ -16,12 +18,14 @@ import { Link as RouterLink } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { apiGet, apiPost } from '../lib/api';
 import { useSelectedDay } from '../lib/today';
+import { colors } from '../theme';
+import { ListSkeleton } from './States';
 
 const CRITERIA = [
-  { key: 'productivity', label: 'Productivity' },
-  { key: 'mood', label: 'Mood' },
-  { key: 'energy', label: 'Energy' },
-  { key: 'sleep', label: 'Sleep' },
+  { key: 'productivity', label: 'Productivity', hint: 'How much of what you planned got done' },
+  { key: 'mood', label: 'Mood', hint: 'How you felt overall' },
+  { key: 'energy', label: 'Energy', hint: 'Physical and mental energy through the day' },
+  { key: 'sleep', label: 'Sleep', hint: 'How rested you felt' },
 ] as const;
 
 type Ratings = Record<(typeof CRITERIA)[number]['key'], number>;
@@ -46,6 +50,8 @@ export function DayReflection() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Whether this day already had a reflection when it loaded.
+  const [hadReflection, setHadReflection] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -56,12 +62,14 @@ export function DayReflection() {
     setLoading(true);
     setError(null);
     setSaved(false);
+    setHadReflection(false);
     setRatings(EMPTY_RATINGS);
     setSleepTimes(EMPTY_SLEEP);
 
     apiGet(`/api/reflections/${selectedDate}`)
       .then((existing) => {
         if (!cancelled && existing) {
+          setHadReflection(true);
           setRatings({ ...EMPTY_RATINGS, ...existing.ratings });
           setSleepTimes({ bed_time: existing.bed_time?.slice(0, 5) ?? '', wake_time: existing.wake_time?.slice(0, 5) ?? '' });
         }
@@ -120,103 +128,138 @@ export function DayReflection() {
   }
 
   return (
-    <Card sx={{ maxWidth: '500px', mx: 'auto', borderRadius: '16px' }}>
-      <CardContent sx={{ p: 4 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-          Day Reflection
+    <Box sx={{ maxWidth: 640, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h5" component="h1" sx={{ color: colors.violet500 }}>
+          Reflect
         </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Four quick ratings. Over time they help the planner learn which kinds of days work for you.
+        </Typography>
+      </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-          <IconButton aria-label="Previous day" onClick={() => changeDay(-1)}>
-            <ChevronLeft />
-          </IconButton>
-          <Typography variant="body1" sx={{ fontWeight: 600, flex: 1, textAlign: 'center' }}>
-            {formatDay(selectedDate)}
-          </Typography>
-          <IconButton aria-label="Next day" onClick={() => changeDay(1)} disabled={isToday}>
-            <ChevronRight />
-          </IconButton>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 3 }}>
-          <TextField
-            size="small"
-            type="date"
-            label="Go to date"
-            value={selectedDate}
-            onChange={(e) => pickDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: today } }}
-          />
-          <Button size="small" onClick={() => setSelectedDate(today)} disabled={isToday}>
-            Today
-          </Button>
-        </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <IconButton
+          aria-label="Previous day"
+          onClick={() => changeDay(-1)}
+          sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}
+        >
+          <ChevronLeft />
+        </IconButton>
+        <IconButton
+          aria-label="Next day"
+          onClick={() => changeDay(1)}
+          disabled={isToday}
+          sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}
+        >
+          <ChevronRight />
+        </IconButton>
+        <Typography variant="h6" component="h2" sx={{ flex: 1, minWidth: 180, ml: 1 }}>
+          {isToday ? 'Today' : formatDay(selectedDate)}
+          {isToday && (
+            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+              {' · '}
+              {format(parseISO(selectedDate), 'MMMM d')}
+            </Box>
+          )}
+        </Typography>
+        <TextField
+          size="small"
+          type="date"
+          label="Go to date"
+          value={selectedDate}
+          onChange={(e) => pickDate(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: today } }}
+        />
+      </Box>
 
-        {loading ? (
-          <Typography variant="body2" color="text.secondary">
-            Loading...
-          </Typography>
-        ) : (
-          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {CRITERIA.map(({ key, label }) => (
-              <Box key={key} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="body1">{label}</Typography>
-                <Rating value={ratings[key]} onChange={(_, newValue) => rate(key, newValue)} />
+      <Card>
+        <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+          {loading ? (
+            <ListSkeleton rows={4} height={52} />
+          ) : (
+            <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {hadReflection && !saved && (
+                <Chip
+                  label="Already saved for this day. Change anything and save again."
+                  sx={{ alignSelf: 'flex-start', mb: 1, backgroundColor: colors.violet100, color: colors.violet800, height: 'auto', py: 0.5, '& .MuiChip-label': { whiteSpace: 'normal' } }}
+                />
+              )}
+              {CRITERIA.map(({ key, label, hint }) => (
+                <Box
+                  key={key}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 2,
+                    flexWrap: 'wrap',
+                    py: 1.5,
+                    borderBottom: `1px solid ${colors.grey200}`,
+                  }}
+                >
+                  <Box>
+                    <Typography id={`rate-${key}`} sx={{ fontWeight: 600 }}>
+                      {label}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {hint}
+                    </Typography>
+                  </Box>
+                  <Rating
+                    size="large"
+                    value={ratings[key]}
+                    onChange={(_, newValue) => rate(key, newValue)}
+                    aria-labelledby={`rate-${key}`}
+                    sx={{ '& .MuiRating-iconFilled': { color: colors.violet500 }, '& .MuiRating-iconHover': { color: colors.violet600 } }}
+                  />
+                </Box>
+              ))}
+
+              <Box sx={{ pt: 2 }}>
+                <Typography sx={{ fontWeight: 600 }}>Sleep times</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  Optional. Helps the planner keep study away from your sleep.
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  <TextField
+                    size="small"
+                    type="time"
+                    label="Went to bed the night before"
+                    value={sleepTimes.bed_time}
+                    onChange={(e) => setSleepTime('bed_time', e.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    sx={{ flex: '1 1 200px' }}
+                  />
+                  <TextField
+                    size="small"
+                    type="time"
+                    label="Woke up"
+                    value={sleepTimes.wake_time}
+                    onChange={(e) => setSleepTime('wake_time', e.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    sx={{ flex: '1 1 200px' }}
+                  />
+                </Box>
               </Box>
-            ))}
 
-            <Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                Sleep times (optional)
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <TextField
-                  size="small"
-                  type="time"
-                  label="Went to bed the night before"
-                  value={sleepTimes.bed_time}
-                  onChange={(e) => setSleepTime('bed_time', e.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                  sx={{ flex: 1 }}
-                />
-                <TextField
-                  size="small"
-                  type="time"
-                  label="Woke up"
-                  value={sleepTimes.wake_time}
-                  onChange={(e) => setSleepTime('wake_time', e.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                  sx={{ flex: 1 }}
-                />
+              {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+              {saved && <Alert severity="success" sx={{ mt: 2 }}>Saved.</Alert>}
+
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2, flexWrap: 'wrap', mt: 2 }}>
+                {!saved && unrated.length > 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                    Rate {unrated.map(({ label }) => label.toLowerCase()).join(', ')} to save.
+                  </Typography>
+                )}
+                <Button type="submit" variant="contained" disabled={submitting || unrated.length > 0}>
+                  {submitting ? 'Saving...' : hadReflection ? 'Save changes' : 'Save reflection'}
+                </Button>
               </Box>
             </Box>
-
-            {error && (
-              <Typography variant="body2" color="error">
-                {error}
-              </Typography>
-            )}
-            {saved && (
-              <Typography variant="body2" color="success.main">
-                Saved.
-              </Typography>
-            )}
-            {!saved && unrated.length > 0 && (
-              <Typography variant="body2" color="text.secondary">
-                Rate {unrated.map(({ label }) => label.toLowerCase()).join(', ')} to save.
-              </Typography>
-            )}
-
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={submitting || unrated.length > 0}
-              sx={{ backgroundColor: '#8b5cf6' }}
-            >
-              {submitting ? 'Saving...' : 'Save Reflection'}
-            </Button>
-          </Box>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+    </Box>
   );
 }

@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { useProfile } from '../lib/ProfileContext';
 import { CONSENT_INTRO, CONSENT_SECTIONS, needsConsent } from '../lib/consent';
+import { colors } from '../theme';
 
 // #31 Shown before anything else after logging in, until the tester agrees to the current text. Once they
 // have, the Profile page links back here to read it again.
@@ -34,7 +35,7 @@ export function ConsentPage() {
       <Card sx={{ borderRadius: '16px' }}>
         <CardContent sx={{ p: { xs: 2.5, sm: 4 }, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: '#8b5cf6' }}>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: colors.violet500 }}>
               Taking part in testing
             </Typography>
             {!asking && profile?.consented_at && (
@@ -74,7 +75,6 @@ export function ConsentPage() {
                   variant="contained"
                   disabled={!agreed || saving}
                   onClick={handleAgree}
-                  sx={{ backgroundColor: '#8b5cf6' }}
                 >
                   Continue
                 </Button>
@@ -83,7 +83,7 @@ export function ConsentPage() {
                     await signOut();
                     navigate('/auth');
                   }}
-                  sx={{ color: '#6b7280' }}
+                  sx={{ color: colors.grey500 }}
                 >
                   Log out
                 </Button>

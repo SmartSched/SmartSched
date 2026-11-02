@@ -13,6 +13,7 @@ import {
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
+import { colors } from '../theme';
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -122,7 +123,6 @@ export function ResetPasswordPage() {
                 variant="contained"
                 size="large"
                 disabled={resending}
-                sx={{ backgroundColor: '#8b5cf6' }}
               >
                 {resending ? 'Sending...' : 'Send New Reset Link'}
               </Button>
@@ -173,8 +173,8 @@ export function ResetPasswordPage() {
                       password.length === 0
                         ? 'text.secondary'
                         : passwordValid
-                        ? '#10b981'
-                        : '#dc2626',
+                        ? colors.successInk
+                        : colors.error,
                     fontWeight: 500,
                   },
                 },
@@ -199,7 +199,6 @@ export function ResetPasswordPage() {
               variant="contained"
               size="large"
               disabled={submitting || !passwordValid}
-              sx={{ backgroundColor: '#8b5cf6' }}
             >
               {submitting ? 'Updating...' : 'Update Password'}
             </Button>

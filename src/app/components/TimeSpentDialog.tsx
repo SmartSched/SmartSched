@@ -109,7 +109,7 @@ export function TimeSpentDialog({ task, onFinish, onCancel }: TimeSpentDialogPro
           <Button onClick={() => finish(null)} disabled={saving}>
             Skip
           </Button>
-          <Button type="submit" variant="contained" disabled={saving} sx={{ backgroundColor: '#8b5cf6' }}>
+          <Button type="submit" variant="contained" disabled={saving}>
             {saving ? 'Saving...' : 'Done'}
           </Button>
         </DialogActions>

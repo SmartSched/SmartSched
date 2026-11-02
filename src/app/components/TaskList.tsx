@@ -23,9 +23,10 @@ import {
   DialogActions,
   Snackbar,
   Alert,
+  Collapse,
   Link as MuiLink,
 } from '@mui/material';
-import { Add, Close, EditOutlined, DeleteOutline } from '@mui/icons-material';
+import { Add, AutoAwesomeOutlined, Close, EditOutlined, DeleteOutline, ExpandLess, ExpandMore } from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '../lib/AuthContext';
@@ -33,6 +34,8 @@ import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
 import { localNow } from '../lib/today';
 import { estimateRatios, sortTasks, type EstimateRatio, type Task } from '../lib/tasks';
 import { TimeSpentDialog } from './TimeSpentDialog';
+import { colors } from '../theme';
+import { EmptyState, ListSkeleton } from './States';
 
 type TaskPayload = Pick<Task, 'title' | 'description' | 'type' | 'priority' | 'due_date' | 'estimated_time'>;
 
@@ -66,6 +69,10 @@ function formatDue(dueDate: string) {
 }
 
 type Ratios = ReturnType<typeof estimateRatios>;
+
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 function ratioText(ratio: EstimateRatio) {
   return `${ratio.ratio}× your estimate`;
@@ -246,6 +253,21 @@ export function TaskList() {
   }, []);
 
   const sortedTasks = useMemo(() => sortTasks(tasks), [tasks]);
+  const [showDone, setShowDone] = useState(false);
+
+  // Open tasks by when they're due; finished ones go in their own section, folded away.
+  const groups = useMemo(() => {
+    const weekAhead = now + 7 * 24 * 60 * 60 * 1000;
+    const open = sortedTasks.filter((t) => !t.completed);
+    const due = (t: Task) => (t.due_date ? new Date(t.due_date).getTime() : null);
+    return [
+      { key: 'overdue', title: 'Overdue', tasks: open.filter((t) => due(t) !== null && due(t)! < now) },
+      { key: 'week', title: 'Due in the next 7 days', tasks: open.filter((t) => due(t) !== null && due(t)! >= now && due(t)! <= weekAhead) },
+      { key: 'later', title: 'Due later', tasks: open.filter((t) => due(t) !== null && due(t)! > weekAhead) },
+      { key: 'undated', title: 'No due date', tasks: open.filter((t) => due(t) === null) },
+    ].filter((group) => group.tasks.length > 0);
+  }, [sortedTasks, now]);
+  const doneTasks = useMemo(() => sortedTasks.filter((t) => t.completed), [sortedTasks]);
   const ratios = useMemo(() => estimateRatios(tasks), [tasks]);
   const ratioEntries = Object.entries(ratios) as [Task['type'], EstimateRatio][];
 
@@ -317,18 +339,6 @@ export function TaskList() {
     await updateCompleted(task, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return 'error';
-      case 'medium':
-        return 'warning';
-      case 'low':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
 
   // The scheduler service sleeps when idle; wake it now so a plan is quick when asked for. Best effort.
   useEffect(() => {
@@ -403,215 +413,258 @@ const handleAcceptPlan = async (plan: any) => {
     );
   }
 
-  return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <CardContent sx={{ flexGrow: 1, overflow: 'auto' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" fontWeight="600">
-            Your Tasks
+  const renderTask = (task: Task) => {
+    const overdue = !task.completed && task.due_date !== null && new Date(task.due_date).getTime() < now;
+    return (
+      <ListItem
+        key={task.id}
+        disablePadding
+        sx={{
+          alignItems: 'flex-start',
+          gap: 0.5,
+          px: { xs: 1, sm: 2 },
+          py: 1,
+          borderTop: `1px solid ${colors.grey200}`,
+          transition: 'background-color 0.15s ease',
+          '&:hover': { backgroundColor: colors.surfaceMuted },
+        }}
+      >
+        <Checkbox
+          checked={task.completed}
+          disabled={togglingIds.has(task.id)}
+          onChange={() => handleToggleTask(task)}
+          slotProps={{ input: { 'aria-label': `${task.completed ? 'Reopen' : 'Complete'} ${task.title}` } }}
+        />
+        <Box sx={{ flex: 1, minWidth: 0, pt: 1 }}>
+          <Typography
+            sx={{
+              fontWeight: 600,
+              color: task.completed ? colors.grey500 : 'text.primary',
+              textDecoration: task.completed ? 'line-through' : 'none',
+            }}
+          >
+            {task.title}
           </Typography>
-
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={handleSuggestPlan}
-              disabled={loadingSuggestion}
-            >
-              {loadingSuggestion ? 'Building plan…' : 'Suggest a plan'}
-            </Button>
-
-            <Button startIcon={<Add />} size="small" onClick={() => setShowForm(!showForm)}>
-              Add
-            </Button>
+          {task.description && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, whiteSpace: 'pre-line' }}>
+              {task.description}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
+            {task.due_date && (
+              <Chip
+                size="small"
+                label={`${overdue ? 'Overdue · ' : 'Due '}${formatDue(task.due_date)}`}
+                sx={
+                  overdue
+                    ? { backgroundColor: colors.warningBg, color: colors.warningInk }
+                    : { backgroundColor: colors.surfaceMuted, color: 'text.secondary' }
+                }
+              />
+            )}
+            <Chip size="small" label={capitalize(task.type)} sx={{ backgroundColor: colors.surfaceMuted, color: 'text.secondary' }} />
+            {task.priority === 'high' ? (
+              <Chip size="small" variant="outlined" color="error" label="High priority" />
+            ) : (
+              <Chip size="small" variant="outlined" label={`${capitalize(task.priority)} priority`} sx={{ color: 'text.secondary' }} />
+            )}
+            {task.estimated_time && <Chip size="small" variant="outlined" label={`About ${task.estimated_time} min`} sx={{ color: 'text.secondary' }} />}
+            {task.completed && task.time_spent > 0 && (
+              <Chip size="small" variant="outlined" label={`Took ${task.time_spent} min`} sx={{ color: 'text.secondary' }} />
+            )}
           </Box>
         </Box>
-        {suggestionNote && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-            {suggestionNote}
-          </Typography>
-        )}
+        <Box sx={{ display: 'flex', pt: 0.5 }}>
+          <IconButton aria-label={`Edit ${task.title}`} onClick={() => setEditingTask(task)}>
+            <EditOutlined fontSize="small" />
+          </IconButton>
+          <IconButton aria-label={`Delete ${task.title}`} onClick={() => setDeletingTask(task)}>
+            <DeleteOutline fontSize="small" />
+          </IconButton>
+        </Box>
+      </ListItem>
+    );
+  };
 
-        {suggestions.length > 0 && (
-          <Box sx={{ mt: 2, mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="subtitle2">Choose a suggested plan</Typography>
-              <Button size="small" onClick={() => setSuggestions([])} disabled={acceptingPlanId !== null}>
-                Dismiss
-              </Button>
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Remove any session you don't want before choosing. Nothing is saved until you choose a plan.
+  const openCount = tasks.filter((t) => !t.completed).length;
+
+  return (
+    <Box sx={{ maxWidth: 960, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
+        <Box>
+          <Typography variant="h5" component="h1" sx={{ color: colors.violet500 }}>
+            Tasks
+          </Typography>
+          {!loading && tasks.length > 0 && (
+            <Typography variant="body2" color="text.secondary">
+              {openCount === 0 ? 'Everything is checked off.' : `${openCount} open`}
             </Typography>
+          )}
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<AutoAwesomeOutlined />} onClick={handleSuggestPlan} disabled={loadingSuggestion}>
+            {loadingSuggestion ? 'Building plan…' : 'Suggest a plan'}
+          </Button>
+          <Button variant="contained" startIcon={<Add />} onClick={() => setShowForm(!showForm)}>
+            Add task
+          </Button>
+        </Box>
+      </Box>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
-              {suggestions.map((plan, index) => (
-                <Card key={plan.id} variant="outlined" sx={{ display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ py: 1.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <Typography fontWeight={600}>Option {index + 1}</Typography>
-                    {plan.why && (
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        {plan.why}
-                      </Typography>
-                    )}
+      {suggestionNote && <Alert severity="info">{suggestionNote}</Alert>}
 
-                    <Box sx={{ flex: 1 }}>
-                      {plan.blocks.map((block: any, blockIndex: number) => (
-                        <Box
-                          key={`${block.task_id}-${block.date}-${block.start_time}`}
-                          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
-                        >
-                          <Typography variant="body2" color="text.secondary">
-                            {block.activity} · {format(parseISO(block.date), 'EEE MMM d')} ·{' '}
-                            {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
-                          </Typography>
-                          <IconButton
-                            size="small"
-                            aria-label={`Remove ${block.activity} on ${block.date} at ${block.start_time.slice(0, 5)}`}
-                            onClick={() => removeSuggestedBlock(plan.id, blockIndex)}
-                            disabled={acceptingPlanId !== null}
-                          >
-                            <Close fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      ))}
-                      {plan.blocks.length === 0 && (
-                        <Typography variant="body2" color="text.secondary">
-                          Every session was removed from this option.
-                        </Typography>
-                      )}
-                      {plan.unscheduled?.length > 0 && (
-                        <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
-                          Not enough time this week for:{' '}
-                          {plan.unscheduled
-                            .map((u: any) => `${tasks.find((t) => t.id === u.task)?.title ?? 'a task'} (${u.minutes} min)`)
-                            .join(', ')}
-                        </Typography>
-                      )}
-                    </Box>
-
-                    <Button
-                      variant="contained"
-                      size="small"
-                      sx={{ mt: 1.5, alignSelf: 'flex-start' }}
-                      onClick={() => handleAcceptPlan(plan)}
-                      disabled={acceptingPlanId !== null || plan.blocks.length === 0}
-                    >
-                      {acceptingPlanId === plan.id ? 'Saving…' : 'Choose this plan'}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
+      {suggestions.length > 0 && (
+        <Card component="section" sx={{ p: { xs: 2, sm: 3 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography variant="h6" component="h2">
+              Choose a suggested plan
+            </Typography>
+            <Button onClick={() => setSuggestions([])} disabled={acceptingPlanId !== null}>
+              Dismiss
+            </Button>
           </Box>
-        )}
-
-        {ratioEntries.length > 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            How long your finished tasks took:{' '}
-            {ratioEntries.map(([type, ratio]) => `${type} tasks ${ratioText(ratio)} (${ratio.count} tasks)`).join(', ')}.
+            Remove any session you don't want before choosing. Nothing is saved until you choose a plan.
           </Typography>
-        )}
 
-        {showForm && (
-          <Box sx={{ mb: 3, p: 2, backgroundColor: 'action.hover', borderRadius: 1 }}>
-            <TaskForm
-              initial={EMPTY_FORM}
-              ratios={ratios}
-              submitLabel="Add Task"
-              submittingLabel="Adding..."
-              onSubmit={handleAddTask}
-              onCancel={() => setShowForm(false)}
-            />
-          </Box>
-        )}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+            {suggestions.map((plan, index) => (
+              <Box
+                key={plan.id}
+                sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${colors.grey200}`, borderRadius: '12px', p: 2 }}
+              >
+                <Typography sx={{ fontWeight: 700, color: colors.violet800 }}>Option {index + 1}</Typography>
+                {plan.why && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {plan.why}
+                  </Typography>
+                )}
 
-        {error && (
-          <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-            {error}
-          </Typography>
-        )}
-
-        {loading ? (
-          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-            Loading...
-          </Typography>
-        ) : (
-          <List sx={{ p: 0 }}>
-            {sortedTasks.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                No tasks yet — add one above
-              </Typography>
-            ) : (
-              sortedTasks.map((task) => {
-                const overdue = !task.completed && task.due_date !== null && new Date(task.due_date).getTime() < now;
-                return (
-                  <ListItem
-                    key={task.id}
-                    disablePadding
-                    sx={{
-                      mb: 1,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      backgroundColor: task.completed ? 'action.hover' : 'transparent',
-                      py: 1.5,
-                      px: 2,
-                    }}
-                  >
-                    <Checkbox
-                      checked={task.completed}
-                      disabled={togglingIds.has(task.id)}
-                      onChange={() => handleToggleTask(task)}
-                      sx={{ mr: 1 }}
-                    />
-                    <ListItemText
-                      primary={task.title}
-                      slotProps={{ secondary: { component: 'div' } }}
-                      secondary={
-                        <>
-                          {task.description && (
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, whiteSpace: 'pre-line' }}>
-                              {task.description}
-                            </Typography>
-                          )}
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                            <Chip label={task.type} size="small" sx={{ height: 20, fontSize: '10px' }} />
-                            <Chip label={task.priority} size="small" color={getPriorityColor(task.priority) as any} sx={{ height: 20, fontSize: '10px' }} />
-                            {task.estimated_time && (
-                              <Chip label={`${task.estimated_time}min`} size="small" variant="outlined" sx={{ height: 20, fontSize: '10px' }} />
-                            )}
-                            {task.completed && task.time_spent > 0 && (
-                              <Chip label={`took ${task.time_spent}min`} size="small" variant="outlined" sx={{ height: 20, fontSize: '10px' }} />
-                            )}
-                            {task.due_date && (
-                              <Chip
-                                label={`${overdue ? 'Overdue · ' : 'Due '}${formatDue(task.due_date)}`}
-                                size="small"
-                                variant="outlined"
-                                color={overdue ? 'error' : 'default'}
-                                sx={{ height: 20, fontSize: '10px' }}
-                              />
-                            )}
-                          </Box>
-                        </>
-                      }
-                    />
-                    <Box sx={{ display: 'flex', ml: 1 }}>
-                      <IconButton size="small" aria-label={`Edit ${task.title}`} onClick={() => setEditingTask(task)}>
-                        <EditOutlined fontSize="small" />
-                      </IconButton>
-                      <IconButton size="small" aria-label={`Delete ${task.title}`} onClick={() => setDeletingTask(task)}>
-                        <DeleteOutline fontSize="small" />
+                <Box sx={{ flex: 1 }}>
+                  {plan.blocks.map((block: any, blockIndex: number) => (
+                    <Box
+                      key={`${block.task_id}-${block.date}-${block.start_time}`}
+                      sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        {block.activity} · {format(parseISO(block.date), 'EEE MMM d')} ·{' '}
+                        {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        aria-label={`Remove ${block.activity} on ${block.date} at ${block.start_time.slice(0, 5)}`}
+                        onClick={() => removeSuggestedBlock(plan.id, blockIndex)}
+                        disabled={acceptingPlanId !== null}
+                      >
+                        <Close fontSize="small" />
                       </IconButton>
                     </Box>
-                  </ListItem>
-                );
-              })
-            )}
-          </List>
-        )}
-      </CardContent>
+                  ))}
+                  {plan.blocks.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      Every session was removed from this option.
+                    </Typography>
+                  )}
+                  {plan.unscheduled?.length > 0 && (
+                    <Typography variant="body2" sx={{ mt: 1, color: colors.warningInk }}>
+                      Not enough time this week for:{' '}
+                      {plan.unscheduled
+                        .map((u: any) => `${tasks.find((t) => t.id === u.task)?.title ?? 'a task'} (${u.minutes} min)`)
+                        .join(', ')}
+                    </Typography>
+                  )}
+                </Box>
+
+                <Button
+                  variant="contained"
+                  size="small"
+                  sx={{ mt: 1.5, alignSelf: 'flex-start' }}
+                  onClick={() => handleAcceptPlan(plan)}
+                  disabled={acceptingPlanId !== null || plan.blocks.length === 0}
+                >
+                  {acceptingPlanId === plan.id ? 'Saving…' : 'Choose this plan'}
+                </Button>
+              </Box>
+            ))}
+          </Box>
+        </Card>
+      )}
+
+      {showForm && (
+        <Card component="section" sx={{ p: { xs: 2, sm: 3 } }}>
+          <Typography variant="h6" component="h2" sx={{ mb: 2 }}>
+            New task
+          </Typography>
+          <TaskForm
+            initial={EMPTY_FORM}
+            ratios={ratios}
+            submitLabel="Add task"
+            submittingLabel="Adding..."
+            onSubmit={handleAddTask}
+            onCancel={() => setShowForm(false)}
+          />
+        </Card>
+      )}
+
+      {error && <Alert severity="error">{error}</Alert>}
+
+      {loading ? (
+        <ListSkeleton rows={4} height={72} />
+      ) : tasks.length === 0 ? (
+        !showForm && (
+          <Card>
+            <EmptyState
+              title="No tasks yet"
+              body="Add homework, exams and projects, and the planner can fit them into your week."
+              action={
+                <Button variant="contained" startIcon={<Add />} onClick={() => setShowForm(true)}>
+                  Add a task
+                </Button>
+              }
+            />
+          </Card>
+        )
+      ) : (
+        <>
+          {groups.map((group) => (
+            <Card component="section" key={group.key} sx={{ pt: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: { xs: 2, sm: 3 }, pb: 1 }}>
+                <Typography variant="h6" component="h2" sx={{ fontSize: '1.0625rem' }}>
+                  {group.title}
+                </Typography>
+                <Chip
+                  size="small"
+                  label={group.tasks.length}
+                  sx={group.key === 'overdue' ? { backgroundColor: colors.warningBg, color: colors.warningInk } : { backgroundColor: colors.surfaceMuted, color: 'text.secondary' }}
+                />
+              </Box>
+              <List sx={{ p: 0 }}>{group.tasks.map(renderTask)}</List>
+            </Card>
+          ))}
+
+          {doneTasks.length > 0 && (
+            <Card component="section" sx={{ pt: 1 }}>
+              <Button
+                onClick={() => setShowDone(!showDone)}
+                aria-expanded={showDone}
+                endIcon={showDone ? <ExpandLess /> : <ExpandMore />}
+                sx={{ mx: { xs: 1, sm: 2 }, mb: 1, color: 'text.secondary' }}
+              >
+                {showDone ? 'Hide' : 'Show'} {doneTasks.length} finished
+              </Button>
+              <Collapse in={showDone} unmountOnExit>
+                {ratioEntries.length > 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ px: { xs: 2, sm: 3 }, pb: 1.5 }}>
+                    How long finished tasks took:{' '}
+                    {ratioEntries.map(([type, ratio]) => `${type} tasks ${ratioText(ratio)} (${ratio.count} tasks)`).join(', ')}.
+                  </Typography>
+                )}
+                <List sx={{ p: 0 }}>{doneTasks.map(renderTask)}</List>
+              </Collapse>
+            </Card>
+          )}
+        </>
+      )}
 
       <Dialog open={editingTask !== null} onClose={() => setEditingTask(null)} fullWidth maxWidth="sm">
         <DialogTitle>Edit task</DialogTitle>
@@ -659,6 +712,6 @@ const handleAcceptPlan = async (plan: any) => {
           {actionError}
         </Alert>
       </Snackbar>
-    </Card>
+    </Box>
   );
 }

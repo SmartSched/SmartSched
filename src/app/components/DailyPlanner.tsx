@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, FormEvent } from 'react';
+import { useEffect, useMemo, useState, FormEvent, type MouseEvent } from 'react';
 import {
   Card,
   CardContent,
@@ -21,11 +21,14 @@ import {
   DialogActions,
   Snackbar,
   Alert,
+  Chip,
+  Drawer,
+  useMediaQuery,
   Link as MuiLink,
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material';
-import { Add, ChevronLeft, ChevronRight } from '@mui/icons-material';
+import { Add, ChevronLeft, ChevronRight, Close } from '@mui/icons-material';
 import { addDays, format, parseISO, startOfWeek, subDays } from 'date-fns';
 import { Link as RouterLink } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
@@ -36,8 +39,11 @@ import { burnoutWarnings } from '../lib/burnout';
 import { findOpenSlot, missedTaskBlocks, type Slot } from '../lib/reschedule';
 import type { Task } from '../lib/tasks';
 import { allPlaces, placeLabel } from '../lib/places';
+import { readLeftBlocks, saveLeftBlocks } from '../lib/leftBlocks';
 import { useProfile } from '../lib/ProfileContext';
+import { CATEGORY_LABELS, categoryColor, colors, theme } from '../theme';
 import { BurnoutBanner } from './BurnoutBanner';
+import { ListSkeleton } from './States';
 import { TimeSpentDialog } from './TimeSpentDialog';
 
 type BlockPayload = Omit<TimeBlock, 'id' | 'task' | 'series' | 'series_id' | 'auto'>;
@@ -80,28 +86,8 @@ function formatWeekRange(weekStart: Date) {
   return `${startLabel} – ${endLabel}${year}`;
 }
 
-const getTypeColor = (type: string) => {
-  switch (type) {
-    case 'class':
-      return '#3b82f6';
-    case 'study':
-      return '#8b5cf6';
-    case 'break':
-      return '#10b981';
-    case 'personal':
-      return '#ec4899';
-    case 'commute':
-      return '#f59e0b';
-    case 'meal':
-      return '#06b6d4';
-    case 'work':
-      return '#64748b';
-    case 'task':
-      return '#4f46e5';
-    default:
-      return '#6b7280';
-  }
-};
+
+const BLOCK_TYPES: TimeBlock['type'][] = ['class', 'study', 'task', 'work', 'meal', 'break', 'personal', 'commute'];
 
 // A new repeat runs about a semester unless the user changes it.
 const REPEAT_WEEKS = 15;
@@ -289,19 +275,39 @@ function BlockForm({
 
   return (
     <Box component="form" onSubmit={handleSubmit} noValidate sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <FormControl fullWidth>
-        <InputLabel>Type</InputLabel>
-        <Select value={values.type} label="Type" onChange={(e) => setValues({ ...values, type: e.target.value })}>
-          <MenuItem value="task">Task (time for one of your tasks)</MenuItem>
-          <MenuItem value="class">Class</MenuItem>
-          <MenuItem value="study">Study</MenuItem>
-          <MenuItem value="break">Break</MenuItem>
-          <MenuItem value="personal">Personal</MenuItem>
-          <MenuItem value="commute">Commute</MenuItem>
-          <MenuItem value="meal">Meal</MenuItem>
-          <MenuItem value="work">Work</MenuItem>
-        </Select>
-      </FormControl>
+      <Box>
+        <Typography id="block-type-label" variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+          Type
+        </Typography>
+        <Box role="radiogroup" aria-labelledby="block-type-label" sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+          {BLOCK_TYPES.map((type) => {
+            const selected = values.type === type;
+            return (
+              <Chip
+                key={type}
+                role="radio"
+                aria-checked={selected}
+                label={CATEGORY_LABELS[type]}
+                onClick={() => setValues({ ...values, type })}
+                variant="outlined"
+                sx={{
+                  height: 32,
+                  borderRadius: '999px',
+                  borderColor: selected ? colors.violet500 : colors.grey200,
+                  backgroundColor: selected ? colors.violet100 : colors.surface,
+                  color: selected ? colors.violet800 : 'text.secondary',
+                  '&&:hover': { backgroundColor: selected ? colors.violet100 : colors.surfaceMuted },
+                }}
+              />
+            );
+          })}
+        </Box>
+        {isTask && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+            Time set aside for one of your tasks. Checking it off here completes the task.
+          </Typography>
+        )}
+      </Box>
       {isTask ? (
         <FormControl fullWidth>
           <InputLabel>Task</InputLabel>
@@ -381,7 +387,7 @@ function BlockForm({
       </Box>
 
       {canRepeat && (
-        <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <FormControlLabel
             control={
               <Checkbox
@@ -470,7 +476,6 @@ function BlockForm({
               variant="contained"
               disabled={submitting || endBeforeStart}
               onClick={() => submit('all')}
-              sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
             >
               {submitting ? submittingLabel : 'Save all in the series'}
             </Button>
@@ -480,7 +485,6 @@ function BlockForm({
             type="submit"
             variant="contained"
             disabled={submitting || endBeforeStart}
-            sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
           >
             {submitting ? submittingLabel : submitLabel}
           </Button>
@@ -492,7 +496,6 @@ function BlockForm({
 
 // How far around today the planner looks for task blocks that were missed, and for room to move them.
 const NEARBY_DAYS = 14;
-const LEFT_KEY = 'smartsched.leftMissedBlocks';
 
 function formatSlot(slot: Pick<Slot, 'date' | 'start_time' | 'end_time'>) {
   return `${format(parseISO(slot.date), 'EEE, MMM d')}, ${formatTime(slot.start_time)} – ${formatTime(slot.end_time)}`;
@@ -503,22 +506,48 @@ function durationText(block: TimeBlock) {
   return minutes % 60 === 0 ? `${minutes / 60}-hour` : `${minutes}-minute`;
 }
 
-// Missed blocks the user chose to leave where they are, remembered in this browser. Storage can be
-// unavailable (private windows, blocked site data), so every access is guarded.
-function readLeftBlocks(): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(LEFT_KEY) ?? '[]'));
-  } catch {
-    return new Set();
-  }
+// The red line across today's column at the current time.
+function NowLine({ startHour, endHour, now }: { startHour: number; endHour: number; now: Date }) {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (minutes < startHour * 60 || minutes > endHour * 60) return null;
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        position: 'absolute',
+        left: -5,
+        right: 0,
+        top: ((minutes - startHour * 60) / 60) * HOUR_HEIGHT - 1,
+        height: 2,
+        backgroundColor: colors.error,
+        zIndex: 2,
+        pointerEvents: 'none',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          left: 0,
+          top: -4,
+          width: 10,
+          height: 10,
+          borderRadius: '50%',
+          backgroundColor: colors.error,
+        },
+      }}
+    />
+  );
 }
 
-function saveLeftBlocks(ids: Set<string>) {
-  try {
-    localStorage.setItem(LEFT_KEY, JSON.stringify([...ids]));
-  } catch {
-    // Not remembered past this visit; the prompt just comes back next time.
-  }
+// Where in a day column the user clicked, as a start time rounded down to the half hour.
+function timeAtClick(e: MouseEvent<HTMLElement>, startHour: number) {
+  const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
+  const minutes = startHour * 60 + Math.floor(((y / HOUR_HEIGHT) * 60) / 30) * 30;
+  const clamped = Math.min(Math.max(minutes, 0), 23 * 60);
+  return `${String(Math.floor(clamped / 60)).padStart(2, '0')}:${String(clamped % 60).padStart(2, '0')}`;
+}
+
+function plusOneHour(time: string) {
+  const minutes = Math.min(toMinutes(time) + 60, 23 * 60 + 59);
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
 // Shared between the day view (one wide column) and week view (7 narrow columns) so both
@@ -539,7 +568,7 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
   const top = ((start - startHour * 60) / 60) * HOUR_HEIGHT;
   const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, MIN_BLOCK_HEIGHT);
   const compact = height < 48;
-  const color = getTypeColor(block.type);
+  const color = categoryColor(block.type);
   const timeRange = `${formatTime(block.start_time)} – ${formatTime(block.end_time)}`;
   const gap = dense ? 2 : 4;
   // Task blocks show the task's current title and priority, and a checkbox that completes the task.
@@ -548,10 +577,13 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
 
   return (
     <Box
+      // Clicks on a block mustn't reach the column underneath, which would start a new block there.
+      onClick={(e) => e.stopPropagation()}
       sx={{
         position: 'absolute',
         top,
         height,
+        zIndex: 1,
         left: `calc(${(column * 100) / columns}% + ${gap}px)`,
         width: `calc(${100 / columns}% - ${gap * 2}px)`,
         backgroundColor: color + '20',
@@ -563,7 +595,9 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
         overflow: 'hidden',
         boxSizing: 'border-box',
         opacity: task?.completed ? 0.6 : 1,
+        transition: 'background-color 0.15s ease',
         '&:hover': { backgroundColor: color + '35' },
+        '&:focus-within': { outline: `2px solid ${colors.violet600}`, outlineOffset: 1 },
       }}
     >
       {task && (
@@ -595,7 +629,7 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
         <Typography
           variant={dense ? 'caption' : 'body2'}
           noWrap
-          sx={{ fontWeight: 600, color, minWidth: 0, maxWidth: '100%', textDecoration: task?.completed ? 'line-through' : 'none' }}
+          sx={{ fontWeight: 600, color: 'text.primary', minWidth: 0, maxWidth: '100%', textDecoration: task?.completed ? 'line-through' : 'none' }}
         >
           {title}
         </Typography>
@@ -613,12 +647,15 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
 
 export function DailyPlanner() {
   const { user } = useAuth();
-  const [viewMode, setViewMode] = useState<ViewMode>('day');
+  // Week on wide screens, one day at a time on phones.
+  const wide = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true });
+  const [viewMode, setViewMode] = useState<ViewMode>(wide ? 'week' : 'day');
   const { today, selectedDate, setSelectedDate } = useSelectedDay();
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  // The add form's starting values while it's open (from the button or a click on an empty slot).
+  const [adding, setAdding] = useState<BlockFormValues | null>(null);
   const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null);
   const [deletingBlock, setDeletingBlock] = useState<TimeBlock | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
@@ -791,7 +828,7 @@ export function DailyPlanner() {
       showSavedBlock(created.block);
       reportCommutes(created.commutes);
     }
-    setShowForm(false);
+    setAdding(null);
     reload();
   };
 
@@ -895,49 +932,66 @@ export function DailyPlanner() {
   const isToday = selectedDate === today;
   const isCurrentWeek = weekDates.includes(today);
 
+  // A click on an empty part of a day column starts a block there.
+  const openAddAt = (date: string, e: MouseEvent<HTMLElement>) => {
+    const start = timeAtClick(e, startHour);
+    setEditingBlock(null);
+    setAdding({ ...emptyForm(date), start_time: start, end_time: plusOneHour(start) });
+  };
+
+  const openEdit = (block: TimeBlock) => {
+    setAdding(null);
+    setEditingBlock(block);
+  };
+
+  const closePanel = () => {
+    setAdding(null);
+    setEditingBlock(null);
+  };
+
+  const panelBlock = editingBlock ?? adding;
+  const panelWhen = panelBlock?.date
+    ? `${format(parseISO(panelBlock.date), 'EEEE, MMM d')} · ${formatTime(panelBlock.start_time)} – ${formatTime(panelBlock.end_time)}`
+    : null;
+
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700, color: '#8b5cf6' }}>
-          {viewMode === 'day' ? 'Daily Schedule' : 'Weekly Schedule'}
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            size="small"
-            onChange={(_, newMode) => newMode && setViewMode(newMode)}
-          >
-            <ToggleButton value="day">Day</ToggleButton>
-            <ToggleButton value="week">Week</ToggleButton>
-          </ToggleButtonGroup>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => setShowForm(!showForm)}
-            sx={{ backgroundColor: '#8b5cf6', '&:hover': { backgroundColor: '#7c3aed' } }}
-          >
-            Add Time Block
-          </Button>
-        </Box>
-      </Box>
-
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-        <IconButton aria-label={viewMode === 'day' ? 'Previous day' : 'Previous week'} onClick={goToPrevious}>
-          <ChevronLeft />
-        </IconButton>
-        <Typography variant="h6" sx={{ fontWeight: 600, minWidth: { sm: 260 }, textAlign: 'center' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
+        <Typography variant="h5" component="h1" sx={{ color: colors.violet500, mr: 1, minWidth: { sm: 220 } }}>
           {viewMode === 'day' ? formatDay(selectedDate) : formatWeekRange(weekStart)}
         </Typography>
-        <IconButton aria-label={viewMode === 'day' ? 'Next day' : 'Next week'} onClick={goToNext}>
-          <ChevronRight />
-        </IconButton>
-        <Button
-          size="small"
-          onClick={() => setSelectedDate(today)}
-          disabled={viewMode === 'day' ? isToday : isCurrentWeek}
-        >
+        <Box sx={{ display: 'flex', gap: 0.75 }}>
+          <IconButton
+            aria-label={viewMode === 'day' ? 'Previous day' : 'Previous week'}
+            onClick={goToPrevious}
+            sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}
+          >
+            <ChevronLeft />
+          </IconButton>
+          <IconButton
+            aria-label={viewMode === 'day' ? 'Next day' : 'Next week'}
+            onClick={goToNext}
+            sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}
+          >
+            <ChevronRight />
+          </IconButton>
+        </Box>
+        <Button variant="outlined" onClick={() => setSelectedDate(today)} disabled={viewMode === 'day' ? isToday : isCurrentWeek}>
           Today
+        </Button>
+        <Box sx={{ flex: 1 }} />
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          size="small"
+          aria-label="View"
+          onChange={(_, newMode) => newMode && setViewMode(newMode)}
+        >
+          <ToggleButton value="day" sx={{ px: 2 }}>Day</ToggleButton>
+          <ToggleButton value="week" sx={{ px: 2 }}>Week</ToggleButton>
+        </ToggleButtonGroup>
+        <Button variant="contained" startIcon={<Add />} onClick={() => setAdding(emptyForm(viewMode === 'day' ? selectedDate : today))}>
+          Add block
         </Button>
       </Box>
 
@@ -970,7 +1024,7 @@ export function DailyPlanner() {
             sx={{ mb: 2, borderRadius: '12px' }}
             action={
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <Button size="small" color="inherit" onClick={() => setEditingBlock(block)}>
+                <Button size="small" color="inherit" onClick={() => openEdit(block)}>
                   Edit block
                 </Button>
                 <Button size="small" color="inherit" onClick={() => leaveBlock(block)}>
@@ -987,23 +1041,6 @@ export function DailyPlanner() {
 
       {viewMode === 'week' && <BurnoutBanner warnings={warnings} />}
 
-      {showForm && (
-        <Card sx={{ mb: 3, borderRadius: '16px' }}>
-          <CardContent>
-            <BlockForm
-              initial={emptyForm(viewMode === 'day' ? selectedDate : today)}
-              submitLabel="Add Block"
-              submittingLabel="Adding..."
-              tasks={tasks}
-              places={places}
-              mode="add"
-              onSubmit={handleAddBlock}
-              onCancel={() => setShowForm(false)}
-            />
-          </CardContent>
-        </Card>
-      )}
-
       {error && (
         <Typography variant="body2" color="error" sx={{ mb: 2 }}>
           {error}
@@ -1011,15 +1048,13 @@ export function DailyPlanner() {
       )}
 
       {loading ? (
-        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-          Loading...
-        </Typography>
+        <ListSkeleton rows={6} height={64} />
       ) : viewMode === 'day' ? (
         <Card sx={{ borderRadius: '16px' }}>
           <CardContent>
             {timeBlocks.length === 0 && (
               <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', pb: 2 }}>
-                Nothing scheduled for this day — add a time block above
+                Nothing planned for this day. Click a time below to add a block.
               </Typography>
             )}
             <Box sx={{ display: 'flex' }}>
@@ -1032,10 +1067,14 @@ export function DailyPlanner() {
                   </Box>
                 ))}
               </Box>
-              <Box sx={{ flex: 1, position: 'relative', borderLeft: '2px solid #e5e7eb' }}>
+              <Box
+                onClick={(e) => openAddAt(selectedDate, e)}
+                sx={{ flex: 1, position: 'relative', borderLeft: `2px solid ${colors.grey200}`, cursor: 'copy' }}
+              >
                 {hours.map((hour, index) => (
-                  <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? '1px dashed #e5e7eb' : 'none' }} />
+                  <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? `1px dashed ${colors.grey200}` : 'none' }} />
                 ))}
+                {isToday && <NowLine startHour={startHour} endHour={endHour} now={new Date(now)} />}
                 {placedBlocks.map(({ block, column, columns }) => (
                   <TimeBlockItem
                     key={block.id}
@@ -1043,7 +1082,7 @@ export function DailyPlanner() {
                     column={column}
                     columns={columns}
                     startHour={startHour}
-                    onClick={() => setEditingBlock(block)}
+                    onClick={() => openEdit(block)}
                     onToggleTask={handleToggleTask}
                   />
                 ))}
@@ -1064,13 +1103,25 @@ export function DailyPlanner() {
                     <Box key={date} sx={{ flex: 1, textAlign: 'center', pb: 1 }}>
                       <Typography
                         variant="body2"
-                        sx={{ fontWeight: 700, color: isDayToday ? '#8b5cf6' : 'text.primary' }}
+                        sx={{ fontWeight: 700, color: isDayToday ? colors.violet600 : 'text.secondary' }}
                       >
                         {format(day, 'EEE')}
                       </Typography>
-                      <Typography variant="caption" sx={{ color: isDayToday ? '#8b5cf6' : 'text.secondary' }}>
+                      <Box
+                        sx={{
+                          mx: 'auto',
+                          mt: 0.5,
+                          width: 32,
+                          height: 32,
+                          lineHeight: '32px',
+                          borderRadius: '50%',
+                          fontWeight: 700,
+                          backgroundColor: isDayToday ? colors.violet600 : 'transparent',
+                          color: isDayToday ? colors.surface : 'text.primary',
+                        }}
+                      >
                         {format(day, 'd')}
-                      </Typography>
+                      </Box>
                     </Box>
                   );
                 })}
@@ -1090,11 +1141,19 @@ export function DailyPlanner() {
                   return (
                     <Box
                       key={date}
-                      sx={{ flex: 1, position: 'relative', borderLeft: '1px solid #e5e7eb' }}
+                      onClick={(e) => openAddAt(date, e)}
+                      sx={{
+                        flex: 1,
+                        position: 'relative',
+                        borderLeft: `1px solid ${colors.grey200}`,
+                        backgroundColor: date === today ? colors.violet100 + '40' : 'transparent',
+                        cursor: 'copy',
+                      }}
                     >
                       {hours.map((hour, index) => (
-                        <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? '1px dashed #e5e7eb' : 'none' }} />
+                        <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? `1px dashed ${colors.grey200}` : 'none' }} />
                       ))}
+                      {date === today && <NowLine startHour={startHour} endHour={endHour} now={new Date(now)} />}
                       {dayBlocks.map(({ block, column, columns }) => (
                         <TimeBlockItem
                           key={block.id}
@@ -1103,7 +1162,7 @@ export function DailyPlanner() {
                           columns={columns}
                           startHour={startHour}
                           dense
-                          onClick={() => setEditingBlock(block)}
+                          onClick={() => openEdit(block)}
                           onToggleTask={handleToggleTask}
                         />
                       ))}
@@ -1116,31 +1175,83 @@ export function DailyPlanner() {
         </Card>
       )}
 
-      <Dialog open={editingBlock !== null} onClose={() => setEditingBlock(null)} fullWidth maxWidth="sm">
-        <DialogTitle>Edit time block</DialogTitle>
-        <DialogContent>
-          {editingBlock && (
-            <Box sx={{ pt: 1 }}>
-              <BlockForm
-                key={editingBlock.id}
-                initial={toFormValues(editingBlock)}
-                submitLabel="Save"
-                submittingLabel="Saving..."
-                tasks={tasks}
-                places={places}
-                mode="edit"
-                inSeries={Boolean(editingBlock.series_id)}
-                onSubmit={handleEditBlock}
-                onCancel={() => setEditingBlock(null)}
-                onDelete={() => {
-                  setDeletingBlock(editingBlock);
-                  setEditingBlock(null);
+      {!loading && (
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 2, px: 0.5 }} aria-label="Block colours">
+          {BLOCK_TYPES.map((type) => (
+            <Box key={type} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: 12, fontWeight: 600, color: 'text.secondary' }}>
+              <Box
+                aria-hidden
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                  backgroundColor: categoryColor(type) + '20',
+                  border: `2px ${type === 'commute' ? 'dashed' : 'solid'} ${categoryColor(type)}`,
                 }}
               />
+              {CATEGORY_LABELS[type]}
             </Box>
+          ))}
+        </Box>
+      )}
+
+      <Drawer
+        anchor="right"
+        open={adding !== null || editingBlock !== null}
+        onClose={closePanel}
+        slotProps={{ paper: { sx: { width: { xs: '100%', sm: 440 }, borderRadius: { xs: 0, sm: '16px 0 0 16px' } } } }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', px: 3, pt: 2.5, pb: 1 }}>
+          <Box>
+            <Typography variant="h6" component="h2">
+              {editingBlock ? 'Edit block' : 'New block'}
+            </Typography>
+            {panelWhen && (
+              <Typography variant="body2" color="text.secondary">
+                {panelWhen}
+              </Typography>
+            )}
+          </Box>
+          <IconButton aria-label="Close" onClick={closePanel} sx={{ mr: -1 }}>
+            <Close />
+          </IconButton>
+        </Box>
+        <Box sx={{ px: 3, pt: 1, pb: 3 }}>
+          {editingBlock ? (
+            <BlockForm
+              key={editingBlock.id}
+              initial={toFormValues(editingBlock)}
+              submitLabel="Save"
+              submittingLabel="Saving..."
+              tasks={tasks}
+              places={places}
+              mode="edit"
+              inSeries={Boolean(editingBlock.series_id)}
+              onSubmit={handleEditBlock}
+              onCancel={closePanel}
+              onDelete={() => {
+                setDeletingBlock(editingBlock);
+                setEditingBlock(null);
+              }}
+            />
+          ) : (
+            adding && (
+              <BlockForm
+                key={`${adding.date}-${adding.start_time}`}
+                initial={adding}
+                submitLabel="Add block"
+                submittingLabel="Adding..."
+                tasks={tasks}
+                places={places}
+                mode="add"
+                onSubmit={handleAddBlock}
+                onCancel={closePanel}
+              />
+            )
           )}
-        </DialogContent>
-      </Dialog>
+        </Box>
+      </Drawer>
 
       <Dialog open={deletingBlock !== null} onClose={() => !deleteInProgress && setDeletingBlock(null)}>
         <DialogTitle>Delete time block?</DialogTitle>

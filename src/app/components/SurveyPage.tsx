@@ -3,6 +3,7 @@ import {
   Card,
   CardContent,
   CardActionArea,
+  ButtonBase,
   Typography,
   Box,
   Button,
@@ -29,6 +30,7 @@ import {
   EMPTY_SURVEY,
   SurveyAnswers,
 } from '../lib/survey';
+import { colors } from '../theme';
 
 type CommitmentKey = (typeof COMMITMENTS)[number]['key'];
 type NonNegotiableKey = (typeof NON_NEGOTIABLES)[number]['key'];
@@ -44,7 +46,7 @@ export function CalendarImage({ src, label }: { src: string; label: string }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#f3f4f6',
+          backgroundColor: colors.surfaceMuted,
           color: 'text.secondary',
         }}
       >
@@ -104,6 +106,7 @@ export function SurveyPage() {
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [step, setStep] = useState(0);
 
   const checkedCommitments = Object.entries(commitmentHours) as [CommitmentKey, string][];
   const commitmentsValid =
@@ -139,8 +142,27 @@ export function SurveyPage() {
     });
   };
 
+  // The message for a question that isn't answered well enough to move on.
+  const stepError = (index: number) => {
+    if (index === 0 && checkedCommitments.length > 0 && !commitmentsValid)
+      return 'Add rough weekly hours (up to 168) for each commitment you checked.';
+    if (index === 4 && answers.wake_time && !wakeTimeValid) return 'Pick a wake-up time between 4:00 AM and noon.';
+    return 'Answer this question to go on.';
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    // Enter or Next on any question but the last moves forward.
+    if (step < answered.length - 1) {
+      if (!answered[step]) {
+        setError(stepError(step));
+        return;
+      }
+      setError(null);
+      setStep(step + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     const missing = answered.map((ok, i) => (ok ? null : i + 1)).filter((n) => n !== null);
     if (missing.length > 0) {
       setError(
@@ -148,7 +170,7 @@ export function SurveyPage() {
           ? 'Add rough weekly hours (up to 168) for each commitment you checked in question 1.'
           : answers.wake_time && !wakeTimeValid
             ? 'Pick a wake-up time between 4:00 AM and noon in question 5.'
-            : `Please answer question${missing.length > 1 ? 's' : ''} ${missing.join(', ')}.`,
+            : `Please answer question${missing.length > 1 ? 's' : ''} ${missing.join(', ')}. Use the numbers above to go back.`,
       );
       return;
     }
@@ -167,33 +189,7 @@ export function SurveyPage() {
     }
   };
 
-  return (
-    <Box sx={{ maxWidth: '720px', mx: 'auto' }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: '#8b5cf6', mb: 1 }}>
-          {isEditing ? 'Edit your survey' : "Let's get to know your week"}
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {isEditing
-            ? 'Update anything that has changed.'
-            : 'A few quick questions so your schedule fits how you actually live. You can change these any time from your profile.'}
-        </Typography>
-      </Box>
-
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'white', py: 1.5, mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-          <Typography variant="body2" color="text.secondary">
-            {answeredCount} of {answered.length} answered
-          </Typography>
-        </Box>
-        <LinearProgress
-          variant="determinate"
-          value={(answeredCount / answered.length) * 100}
-          sx={{ height: 8, borderRadius: 4, backgroundColor: '#f3e8ff' }}
-        />
-      </Box>
-
-      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+  const questions = [
         <Question
           number={1}
           title="What's already locked into your week?"
@@ -225,7 +221,7 @@ export function SurveyPage() {
             })}
           </Box>
         </Question>
-
+,
         <Question number={2} title="When do you actually focus best?">
           <RadioGroup
             value={answers.focus_time ?? ''}
@@ -236,7 +232,7 @@ export function SurveyPage() {
             ))}
           </RadioGroup>
         </Question>
-
+,
         <Question number={3} title="How long can you work before you need a real break?">
           <RadioGroup
             value={answers.work_session ?? ''}
@@ -247,7 +243,7 @@ export function SurveyPage() {
             ))}
           </RadioGroup>
         </Question>
-
+,
         <Question
           number={4}
           title="What has to stay in your week, even during your busiest stretch?"
@@ -268,7 +264,7 @@ export function SurveyPage() {
             ))}
           </Box>
         </Question>
-
+,
         <Question
           number={5}
           title="How much sleep do you need, and when do you usually wake up?"
@@ -303,7 +299,7 @@ export function SurveyPage() {
             />
           </Box>
         </Question>
-
+,
         <Question number={6} title="Be honest, how do you usually handle a deadline?">
           <RadioGroup
             value={answers.deadline_style ?? ''}
@@ -316,7 +312,7 @@ export function SurveyPage() {
             ))}
           </RadioGroup>
         </Question>
-
+,
         <Question number={7} title="Choose the calendar that describes you best.">
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             {CALENDAR_STYLES.map(({ key, label, image }) => {
@@ -326,8 +322,8 @@ export function SurveyPage() {
                   key={key}
                   sx={{
                     borderRadius: '12px',
-                    border: selected ? '3px solid #8b5cf6' : '3px solid transparent',
-                    outline: selected ? 'none' : '1px solid #e5e7eb',
+                    border: selected ? `3px solid ${colors.violet500}` : '3px solid transparent',
+                    outline: selected ? 'none' : `1px solid ${colors.grey200}`,
                   }}
                 >
                   <CardActionArea
@@ -346,19 +342,92 @@ export function SurveyPage() {
               );
             })}
           </Box>
-        </Question>
+        </Question>,
+  ];
+
+  const last = questions.length - 1;
+  const goTo = (index: number) => {
+    setError(null);
+    setStep(index);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <Box sx={{ maxWidth: '720px', mx: 'auto' }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" component="h1" sx={{ color: colors.violet500, mb: 1, fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>
+          {isEditing ? 'Edit your survey' : "Let's get to know your week"}
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          {isEditing
+            ? 'Update anything that has changed.'
+            : 'A few quick questions so your schedule fits how you actually live. You can change these any time from your profile.'}
+        </Typography>
+      </Box>
+
+      <Box sx={{ mb: 2.5 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 2, flexWrap: 'wrap' }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: colors.violet800 }}>
+            Question {step + 1} of {questions.length}
+          </Typography>
+          <Box component="nav" aria-label="Survey questions" sx={{ display: 'flex', gap: 0.75 }}>
+            {questions.map((_, i) => (
+              <ButtonBase
+                key={i}
+                onClick={() => goTo(i)}
+                aria-label={`Question ${i + 1}${answered[i] ? ', answered' : ''}`}
+                aria-current={i === step ? 'step' : undefined}
+                sx={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  border: `1px solid ${i === step ? colors.violet600 : answered[i] ? colors.violet200 : colors.grey200}`,
+                  backgroundColor: i === step ? colors.violet600 : answered[i] ? colors.violet100 : colors.surface,
+                  color: i === step ? colors.surface : answered[i] ? colors.violet800 : 'text.secondary',
+                  transition: 'background-color 0.15s ease',
+                }}
+              >
+                {i + 1}
+              </ButtonBase>
+            ))}
+          </Box>
+        </Box>
+        <LinearProgress
+          variant="determinate"
+          value={(answeredCount / answered.length) * 100}
+          aria-label={`${answeredCount} of ${answered.length} answered`}
+          sx={{ height: 8, borderRadius: 4, backgroundColor: colors.violet100, '& .MuiLinearProgress-bar': { backgroundColor: colors.violet400 } }}
+        />
+      </Box>
+
+      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box key={step} sx={{ animation: 'pageIn 0.2s ease-out' }}>
+          {questions[step]}
+        </Box>
 
         {error && <Alert severity="error">{error}</Alert>}
 
-        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mb: 4 }}>
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 4, flexWrap: 'wrap' }}>
           {isEditing && (
-            <Button onClick={() => navigate('/profile')} disabled={submitting} sx={{ color: '#8b5cf6' }}>
+            <Button onClick={() => navigate('/profile')} disabled={submitting} sx={{ color: colors.violet600 }}>
               Cancel
             </Button>
           )}
-          <Button type="submit" variant="contained" size="large" disabled={submitting} sx={{ backgroundColor: '#8b5cf6' }}>
-            {submitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Finish'}
+          <Box sx={{ flex: 1 }} />
+          <Button variant="outlined" onClick={() => goTo(step - 1)} disabled={step === 0 || submitting}>
+            Back
           </Button>
+          {step < last ? (
+            <Button type="submit" variant="contained" size="large">
+              Next
+            </Button>
+          ) : (
+            <Button type="submit" variant="contained" size="large" disabled={submitting}>
+              {submitting ? 'Saving...' : isEditing ? 'Save changes' : 'Finish'}
+            </Button>
+          )}
         </Box>
       </Box>
     </Box>

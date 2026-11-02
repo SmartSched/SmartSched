@@ -75,7 +75,7 @@ export function TravelTimes() {
     <Card sx={{ borderRadius: '16px' }}>
       <CardContent sx={{ p: 3 }}>
         <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Travel Times
+          Travel times
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           How long it usually takes you to get between places. When two blocks in a row are in different places,
@@ -137,8 +137,8 @@ export function TravelTimes() {
           </Typography>
         )}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
-          <Button variant="contained" onClick={handleSave} disabled={saving} sx={{ backgroundColor: '#8b5cf6' }}>
-            {saving ? 'Saving...' : 'Save Travel Times'}
+          <Button variant="contained" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : 'Save travel times'}
           </Button>
           {savedMessage && (
             <Typography variant="body2" color="success.main">

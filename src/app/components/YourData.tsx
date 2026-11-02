@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { useProfile } from '../lib/ProfileContext';
+import { colors } from '../theme';
 
 const CONFIRM_WORD = 'delete';
 
@@ -53,13 +54,13 @@ export function YourData() {
     <Card sx={{ borderRadius: '16px' }}>
       <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Your Data
+          Your data
         </Typography>
         <Typography variant="body2" color="text.secondary">
           {profile?.consented_at
             ? `You agreed to take part in testing on ${format(new Date(profile.consented_at), 'MMMM d, yyyy')}.`
             : 'You agreed to take part in testing.'}{' '}
-          <Box component={Link} to="/consent" sx={{ color: '#8b5cf6' }}>
+          <Box component={Link} to="/consent" sx={{ color: colors.violet600 }}>
             Read what's stored and how it's used
           </Box>
         </Typography>

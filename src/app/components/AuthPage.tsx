@@ -16,6 +16,7 @@ import {
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
+import { colors } from '../theme';
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -76,7 +77,15 @@ export function AuthPage() {
   };
 
   return (
-    <Box sx={{ maxWidth: '400px', mx: 'auto', mt: 4 }}>
+    <Box sx={{ maxWidth: '400px', mx: 'auto', mt: { xs: 2, sm: 6 } }}>
+      <Box sx={{ textAlign: 'center', mb: 3 }}>
+        <Typography variant="h5" component="h1" sx={{ color: colors.violet500 }}>
+          {mode === 'signup' ? 'Make your account' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          Classes, work, study and rest, planned together.
+        </Typography>
+      </Box>
       <Card sx={{ borderRadius: '20px' }}>
         <CardContent sx={{ p: 4 }}>
           {mode !== 'forgot' && (
@@ -99,8 +108,8 @@ export function AuthPage() {
           )}
 
           {mode === 'forgot' && (
-            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-              Reset your password
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Enter your email and we'll send you a link to set a new password.
             </Typography>
           )}
 
@@ -189,7 +198,6 @@ export function AuthPage() {
               variant="contained"
               size="large"
               disabled={submitting || passwordTooShort}
-              sx={{ backgroundColor: '#8b5cf6' }}
             >
               {submitting
                 ? 'Please wait...'
