@@ -28,9 +28,13 @@ import {
 } from '@mui/material';
 import { Add, AutoAwesomeOutlined, Close, EditOutlined, DeleteOutline, ExpandLess, ExpandMore } from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router';
-import { format, parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import { useAuth } from '../../../app/lib/AuthContext';
-import { apiPost } from '../../../app/lib/api';
+import { apiGet, apiPost } from '../../../app/lib/api';
+import { useProfile } from '../../../app/lib/ProfileContext';
+import { downtimeRanges } from '../../../app/lib/downtime';
+import type { TimeBlock } from '../../../app/lib/planner';
+import { MiniWeek } from '../../planner/components/MiniWeek';
 import { estimateRatios, sortTasks, type EstimateRatio, type Task } from '../../../app/lib/tasks';
 import { localNow } from '../../../app/lib/today';
 import { useTasks, type TaskPayload } from '../hooks/useTasks';
@@ -208,6 +212,12 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
   );
 }
 
+// The Monday-to-Sunday week the scheduler plans, as YYYY-MM-DD dates.
+function planWeekDates() {
+  const start = parseISO(currentWeekStart());
+  return Array.from({ length: 7 }, (_, i) => format(addDays(start, i), 'yyyy-MM-dd'));
+}
+
 function currentWeekStart() {
   const d = new Date();
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -233,6 +243,9 @@ export function TaskList() {
   // Shown instead of the options when there was nothing to plan.
   const [suggestionNote, setSuggestionNote] = useState<string | null>(null);
   const [acceptingPlanId, setAcceptingPlanId] = useState<string | null>(null);
+  const [planWeekBlocks, setPlanWeekBlocks] = useState<TimeBlock[]>([]);
+  const { profile } = useProfile();
+  const downtime = useMemo(() => downtimeRanges(profile?.survey), [profile?.survey]);
 
   const sortedTasks = useMemo(() => sortTasks(tasks), [tasks]);
   const [showDone, setShowDone] = useState(false);
@@ -329,6 +342,11 @@ export function TaskList() {
     });
 
     setSuggestions(data.suggestions);
+    // What's already in that week, so each option can be drawn on top of it.
+    const dates = planWeekDates();
+    apiGet(`/api/time-blocks?start=${dates[0]}&end=${dates[6]}`)
+      .then(setPlanWeekBlocks)
+      .catch(() => setPlanWeekBlocks([])); // the options still show, just without the week behind them
     if (data.suggestions.length === 0) {
       setSuggestionNote('Nothing to plan this week. Plans include unfinished tasks with an estimate and a due date that is still ahead.');
     }
@@ -495,9 +513,20 @@ const handleAcceptPlan = async (plan: any) => {
               Dismiss
             </Button>
           </Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             Remove any session you don't want before choosing. Nothing is saved until you choose a plan.
           </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, fontSize: 12, color: 'text.secondary' }}>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.violet600 }} /> New sessions
+            </Box>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.info + '55' }} /> Already planned
+            </Box>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.surfaceMuted, border: `1px solid ${colors.grey200}` }} /> Downtime
+            </Box>
+          </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
             {suggestions.map((plan, index) => (
@@ -511,6 +540,15 @@ const handleAcceptPlan = async (plan: any) => {
                     {plan.why}
                   </Typography>
                 )}
+                <Box sx={{ mb: 1.5 }}>
+                  <MiniWeek
+                    dates={planWeekDates()}
+                    existing={planWeekBlocks.filter((b) => b.type !== 'commute')}
+                    added={plan.blocks}
+                    downtime={downtime}
+                    label={`Option ${index + 1}: ${plan.blocks.length} study sessions added to your week`}
+                  />
+                </Box>
 
                 <Box sx={{ flex: 1 }}>
                   {plan.blocks.map((block: any, blockIndex: number) => (

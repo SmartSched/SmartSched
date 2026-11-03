@@ -29,7 +29,18 @@ import {
   ToggleButtonGroup,
 } from '@mui/material';
 import { Add, ChevronLeft, ChevronRight, Close } from '@mui/icons-material';
-import { addDays, format, parseISO, startOfWeek, subDays } from 'date-fns';
+import {
+  addDays,
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+  subDays,
+} from 'date-fns';
 import { Link as RouterLink } from 'react-router';
 import { useAuth } from '../../../app/lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '../../../app/lib/api';
@@ -40,6 +51,9 @@ import { findOpenSlot, missedTaskBlocks, type Slot } from '../../../app/lib/resc
 import type { Task } from '../../../app/lib/tasks';
 import { allPlaces, placeLabel } from '../../../app/lib/places';
 import { readLeftBlocks, saveLeftBlocks } from '../../../app/lib/leftBlocks';
+import { downtimeRanges, type DowntimeRange } from '../../../app/lib/downtime';
+import { PlannerKey, readShowCommutes, saveShowCommutes } from './PlannerKey';
+import { MonthGrid } from './MonthGrid';
 import { useProfile } from '../../../app/lib/ProfileContext';
 import { CATEGORY_LABELS, categoryColor, colors, theme } from '../../../app/theme';
 import { BurnoutBanner } from './BurnoutBanner';
@@ -55,7 +69,7 @@ interface CommuteReport {
   added: { activity: string; start_time: string }[];
   tight: { date: string; from: string; to: string; gap: number; needed: number; after: string; before: string }[];
 }
-type ViewMode = 'day' | 'week';
+type ViewMode = 'day' | 'week' | 'month';
 
 const HOUR_HEIGHT = 64; // px per hour on the grid
 const MIN_BLOCK_HEIGHT = 26; // px, so very short blocks stay readable and clickable
@@ -538,6 +552,37 @@ function NowLine({ startHour, endHour, now }: { startHour: number; endHour: numb
   );
 }
 
+// Grey bands over the hours we assume someone is asleep, winding down or getting up. Clicks pass through,
+// so a block can still be added there.
+function DowntimeShade({ ranges, startHour, endHour }: { ranges: DowntimeRange[]; startHour: number; endHour: number }) {
+  return (
+    <>
+      {ranges.map((range) => {
+        const start = Math.max(range.start, startHour * 60);
+        const end = Math.min(range.end, endHour * 60);
+        if (end <= start) return null;
+        return (
+          <Box
+            key={range.start}
+            aria-hidden
+            title={range.label}
+            sx={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: ((start - startHour * 60) / 60) * HOUR_HEIGHT,
+              height: ((end - start) / 60) * HOUR_HEIGHT,
+              backgroundColor: colors.surfaceMuted,
+              backgroundImage: `repeating-linear-gradient(135deg, transparent 0 8px, ${colors.grey200}80 8px 9px)`,
+              pointerEvents: 'none',
+            }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 // Where in a day column the user clicked, as a start time rounded down to the half hour.
 function timeAtClick(e: MouseEvent<HTMLElement>, startHour: number) {
   const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
@@ -657,6 +702,7 @@ export function DailyPlanner() {
   const [error, setError] = useState<string | null>(null);
   // The add form's starting values while it's open (from the button or a click on an empty slot).
   const [adding, setAdding] = useState<BlockFormValues | null>(null);
+  const [showCommutes, setShowCommutes] = useState(readShowCommutes);
   const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null);
   const [deletingBlock, setDeletingBlock] = useState<TimeBlock | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
@@ -664,6 +710,7 @@ export function DailyPlanner() {
   const [notice, setNotice] = useState<{ text: string; severity: 'success' | 'info' | 'warning' } | null>(null);
   const { profile } = useProfile();
   const places = allPlaces(profile?.travel);
+  const downtime = useMemo(() => downtimeRanges(profile?.survey), [profile?.survey]);
   // Saving can add or remove automatic commutes elsewhere on the day, so the view reloads after each change.
   const [reloadVersion, setReloadVersion] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -682,6 +729,14 @@ export function DailyPlanner() {
     () => Array.from({ length: 7 }, (_, i) => format(addDays(weekStart, i), 'yyyy-MM-dd')),
     [weekStart]
   );
+  // Every day the month view shows: whole weeks from the one the 1st falls in to the one the last day falls in.
+  const monthDates = useMemo(() => {
+    const month = parseISO(selectedDate);
+    return eachDayOfInterval({
+      start: startOfWeek(startOfMonth(month), { weekStartsOn: WEEK_STARTS_ON }),
+      end: endOfWeek(endOfMonth(month), { weekStartsOn: WEEK_STARTS_ON }),
+    }).map((day) => format(day, 'yyyy-MM-dd'));
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!user) {
@@ -695,7 +750,9 @@ export function DailyPlanner() {
     const query =
       viewMode === 'day'
         ? `date=${selectedDate}`
-        : `start=${weekDates[0]}&end=${weekDates[6]}`;
+        : viewMode === 'week'
+          ? `start=${weekDates[0]}&end=${weekDates[6]}`
+          : `start=${monthDates[0]}&end=${monthDates[monthDates.length - 1]}`;
 
     apiGet(`/api/time-blocks?${query}`)
       .then((data) => !cancelled && setTimeBlocks(data))
@@ -704,7 +761,7 @@ export function DailyPlanner() {
     return () => {
       cancelled = true;
     };
-  }, [user, viewMode, selectedDate, weekDates, reloadVersion]);
+  }, [user, viewMode, selectedDate, weekDates, monthDates, reloadVersion]);
 
   useEffect(() => {
     if (!user) return;
@@ -741,21 +798,26 @@ export function DailyPlanner() {
     [viewMode, timeBlocks, tasks, weekDates],
   );
 
+  // Commutes can be hidden from the grid; they're still there and still counted in warnings.
+  const visibleBlocks = useMemo(
+    () => (showCommutes ? timeBlocks : timeBlocks.filter((b) => b.type !== 'commute')),
+    [timeBlocks, showCommutes],
+  );
   const placedBlocks = useMemo(
-    () => layoutBlocks(timeBlocks, (MIN_BLOCK_HEIGHT / HOUR_HEIGHT) * 60),
-    [timeBlocks],
+    () => layoutBlocks(visibleBlocks, (MIN_BLOCK_HEIGHT / HOUR_HEIGHT) * 60),
+    [visibleBlocks],
   );
   const blocksByDate = useMemo(() => {
     const map = new Map<string, TimeBlock[]>();
-    for (const block of timeBlocks) {
+    for (const block of visibleBlocks) {
       map.set(block.date, [...(map.get(block.date) ?? []), block]);
     }
     return map;
-  }, [timeBlocks]);
+  }, [visibleBlocks]);
 
   // Widen the grid past 7 AM–10 PM when a block starts earlier or ends later.
-  const startHour = Math.min(DEFAULT_START_HOUR, ...timeBlocks.map((b) => Math.floor(toMinutes(b.start_time) / 60)));
-  const endHour = Math.max(DEFAULT_END_HOUR, ...timeBlocks.map((b) => Math.ceil(toMinutes(b.end_time) / 60)));
+  const startHour = Math.min(DEFAULT_START_HOUR, ...visibleBlocks.map((b) => Math.floor(toMinutes(b.start_time) / 60)));
+  const endHour = Math.max(DEFAULT_END_HOUR, ...visibleBlocks.map((b) => Math.ceil(toMinutes(b.end_time) / 60)));
   const hours = Array.from({ length: endHour - startHour }, (_, i) => i + startHour);
 
   const changeDay = (days: number) => {
@@ -766,12 +828,16 @@ export function DailyPlanner() {
     setSelectedDate((current) => format(addDays(parseISO(current), weeks * 7), 'yyyy-MM-dd'));
   };
 
-  const goToPrevious = () => (viewMode === 'day' ? changeDay(-1) : changeWeek(-1));
-  const goToNext = () => (viewMode === 'day' ? changeDay(1) : changeWeek(1));
+  const changeMonth = (months: number) => {
+    setSelectedDate((current) => format(addMonths(parseISO(current), months), 'yyyy-MM-dd'));
+  };
+
+  const goToPrevious = () => (viewMode === 'day' ? changeDay(-1) : viewMode === 'week' ? changeWeek(-1) : changeMonth(-1));
+  const goToNext = () => (viewMode === 'day' ? changeDay(1) : viewMode === 'week' ? changeWeek(1) : changeMonth(1));
 
   // A block saved to another day takes the view to that day (in day mode), so it doesn't seem to vanish.
   const showSavedBlock = (saved: TimeBlock) => {
-    if (viewMode === 'week' && weekDates.includes(saved.date)) {
+    if ((viewMode === 'week' && weekDates.includes(saved.date)) || (viewMode === 'month' && monthDates.includes(saved.date))) {
       setTimeBlocks((current) => [...current.filter((b) => b.id !== saved.id), saved]);
     } else if (saved.date === selectedDate) {
       setTimeBlocks((current) => [...current.filter((b) => b.id !== saved.id), saved]);
@@ -872,7 +938,8 @@ export function DailyPlanner() {
     await updateTask(taskId, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
   };
 
-  const isShown = (date: string) => (viewMode === 'day' ? date === selectedDate : weekDates.includes(date));
+  const isShown = (date: string) =>
+    viewMode === 'day' ? date === selectedDate : viewMode === 'week' ? weekDates.includes(date) : monthDates.includes(date);
 
   const moveBlock = async (block: TimeBlock, slot: Slot) => {
     try {
@@ -926,6 +993,8 @@ export function DailyPlanner() {
 
   const isToday = selectedDate === today;
   const isCurrentWeek = weekDates.includes(today);
+  const isCurrentMonth = selectedDate.slice(0, 7) === today.slice(0, 7);
+  const unit = viewMode === 'day' ? 'day' : viewMode === 'week' ? 'week' : 'month';
 
   // A click on an empty part of a day column starts a block there.
   const openAddAt = (date: string, e: MouseEvent<HTMLElement>) => {
@@ -953,25 +1022,29 @@ export function DailyPlanner() {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
         <Typography variant="h5" component="h1" sx={{ color: colors.violet500, mr: 1, minWidth: { sm: 220 } }}>
-          {viewMode === 'day' ? formatDay(selectedDate) : formatWeekRange(weekStart)}
+          {viewMode === 'day'
+            ? formatDay(selectedDate)
+            : viewMode === 'week'
+              ? formatWeekRange(weekStart)
+              : format(parseISO(selectedDate), 'MMMM yyyy')}
         </Typography>
         <Box sx={{ display: 'flex', gap: 0.75 }}>
           <IconButton
-            aria-label={viewMode === 'day' ? 'Previous day' : 'Previous week'}
+            aria-label={`Previous ${unit}`}
             onClick={goToPrevious}
             sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}
           >
             <ChevronLeft />
           </IconButton>
           <IconButton
-            aria-label={viewMode === 'day' ? 'Next day' : 'Next week'}
+            aria-label={`Next ${unit}`}
             onClick={goToNext}
             sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}
           >
             <ChevronRight />
           </IconButton>
         </Box>
-        <Button variant="outlined" onClick={() => setSelectedDate(today)} disabled={viewMode === 'day' ? isToday : isCurrentWeek}>
+        <Button variant="outlined" onClick={() => setSelectedDate(today)} disabled={viewMode === 'day' ? isToday : viewMode === 'week' ? isCurrentWeek : isCurrentMonth}>
           Today
         </Button>
         <Box sx={{ flex: 1 }} />
@@ -984,6 +1057,7 @@ export function DailyPlanner() {
         >
           <ToggleButton value="day" sx={{ px: 2 }}>Day</ToggleButton>
           <ToggleButton value="week" sx={{ px: 2 }}>Week</ToggleButton>
+          <ToggleButton value="month" sx={{ px: 2 }}>Month</ToggleButton>
         </ToggleButtonGroup>
         <Button variant="contained" startIcon={<Add />} onClick={() => setAdding(emptyForm(viewMode === 'day' ? selectedDate : today))}>
           Add block
@@ -1042,8 +1116,22 @@ export function DailyPlanner() {
         </Typography>
       )}
 
+      <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      <Box sx={{ flex: '999 1 600px', minWidth: 0 }}>
       {loading ? (
         <ListSkeleton rows={6} height={64} />
+      ) : viewMode === 'month' ? (
+        <MonthGrid
+          dates={monthDates}
+          month={selectedDate.slice(0, 7)}
+          today={today}
+          blocksByDate={blocksByDate}
+          onOpenDay={(date) => {
+            setSelectedDate(date);
+            setViewMode('day');
+          }}
+          onOpenBlock={openEdit}
+        />
       ) : viewMode === 'day' ? (
         <Card sx={{ borderRadius: '16px' }}>
           <CardContent>
@@ -1069,6 +1157,7 @@ export function DailyPlanner() {
                 {hours.map((hour, index) => (
                   <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? `1px dashed ${colors.grey200}` : 'none' }} />
                 ))}
+                <DowntimeShade ranges={downtime} startHour={startHour} endHour={endHour} />
                 {isToday && <NowLine startHour={startHour} endHour={endHour} now={new Date(now)} />}
                 {placedBlocks.map(({ block, column, columns }) => (
                   <TimeBlockItem
@@ -1148,6 +1237,7 @@ export function DailyPlanner() {
                       {hours.map((hour, index) => (
                         <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? `1px dashed ${colors.grey200}` : 'none' }} />
                       ))}
+                      <DowntimeShade ranges={downtime} startHour={startHour} endHour={endHour} />
                       {date === today && <NowLine startHour={startHour} endHour={endHour} now={new Date(now)} />}
                       {dayBlocks.map(({ block, column, columns }) => (
                         <TimeBlockItem
@@ -1170,26 +1260,16 @@ export function DailyPlanner() {
         </Card>
       )}
 
-      {!loading && (
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 2, px: 0.5 }} aria-label="Block colours">
-          {BLOCK_TYPES.map((type) => (
-            <Box key={type} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: 12, fontWeight: 600, color: 'text.secondary' }}>
-              <Box
-                aria-hidden
-                sx={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: '4px',
-                  boxSizing: 'border-box',
-                  backgroundColor: categoryColor(type) + '20',
-                  border: `2px ${type === 'commute' ? 'dashed' : 'solid'} ${categoryColor(type)}`,
-                }}
-              />
-              {CATEGORY_LABELS[type]}
-            </Box>
-          ))}
-        </Box>
-      )}
+      </Box>
+      <PlannerKey
+        showCommutes={showCommutes}
+        onShowCommutesChange={(show) => {
+          setShowCommutes(show);
+          saveShowCommutes(show);
+        }}
+        hasSurvey={Boolean(profile?.survey)}
+      />
+      </Box>
 
       <Drawer
         anchor="right"
