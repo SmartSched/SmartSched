@@ -89,6 +89,9 @@ const ROUTES = [
   ['post', '/api/reflections'],
   ['put', '/api/profile/consent'],
   ['delete', '/api/account'],
+  ['put', '/api/profile/appearance'],
+  ['put', '/api/profile/avatar'],
+  ['get', '/api/reflections?start=2026-11-01&end=2026-11-07'],
 ];
 
 describe('every route', () => {
@@ -358,6 +361,70 @@ describe('reflections', () => {
   it('rejects a bad date', async () => {
     expect((await request(app).get('/api/reflections/yesterday').set(AUTH)).status).toBe(400);
     expect((await request(app).post('/api/reflections').set(AUTH).send({ date: '2026-02-30', ratings })).status).toBe(400);
+  });
+});
+
+describe('appearance and profile picture', () => {
+  it('saves the theme and accent on the profile', async () => {
+    fake.state.results = [{ data: [{ id: 'user-1', theme_mode: 'dark', accent: 'teal' }], error: null }];
+    const res = await request(app).put('/api/profile/appearance').set(AUTH).send({ theme_mode: 'dark', accent: 'teal' });
+    expect(res.status).toBe(200);
+    expect(res.body.accent).toBe('teal');
+    const [[, row, options]] = callsOn('profiles').filter(([method]) => method === 'upsert');
+    expect(row).toEqual({ id: 'user-1', theme_mode: 'dark', accent: 'teal' });
+    expect(options).toEqual({ onConflict: 'id' });
+  });
+
+  it('changes just one of them when only one is sent', async () => {
+    fake.state.results = [{ data: [{ id: 'user-1' }], error: null }];
+    await request(app).put('/api/profile/appearance').set(AUTH).send({ accent: 'rose' });
+    const [[, row]] = callsOn('profiles').filter(([method]) => method === 'upsert');
+    expect(row).toEqual({ id: 'user-1', accent: 'rose' });
+  });
+
+  it('refuses unknown themes and accents, and an empty change', async () => {
+    for (const body of [{ theme_mode: 'sepia' }, { accent: '#ff0000' }, {}]) {
+      expect((await request(app).put('/api/profile/appearance').set(AUTH).send(body)).status).toBe(400);
+    }
+    expect(fake.state.queries).toHaveLength(0);
+  });
+
+  it('saves a small image as the picture, and null removes it', async () => {
+    const avatar = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    fake.state.results = [{ data: [{ id: 'user-1', avatar }], error: null }, { data: [{ id: 'user-1', avatar: null }], error: null }];
+    expect((await request(app).put('/api/profile/avatar').set(AUTH).send({ avatar })).status).toBe(200);
+    expect((await request(app).put('/api/profile/avatar').set(AUTH).send({ avatar: null })).status).toBe(200);
+    const rows = callsOn('profiles').filter(([method]) => method === 'upsert').map(([, row]) => row.avatar);
+    expect(rows).toEqual([avatar, null]);
+  });
+
+  it('refuses something that is not an image, or too big', async () => {
+    for (const avatar of ['https://example.com/me.png', 'data:text/html;base64,PGgxPg==', `data:image/png;base64,${'A'.repeat(99_000)}`, 42]) {
+      expect((await request(app).put('/api/profile/avatar').set(AUTH).send({ avatar })).status).toBe(400);
+    }
+    // Bigger than the JSON body limit: turned away before the route, with a plain message.
+    const huge = await request(app).put('/api/profile/avatar').set(AUTH).send({ avatar: `data:image/png;base64,${'A'.repeat(130_000)}` });
+    expect(huge.status).toBe(413);
+    expect(huge.body.error).toBe('That is too large to save. Try something smaller.');
+    expect(fake.state.queries).toHaveLength(0);
+  });
+});
+
+describe('reflections over a range', () => {
+  it('lists them between two dates, oldest first', async () => {
+    fake.state.results = [{ data: [{ date: '2026-11-02' }], error: null }];
+    const res = await request(app).get('/api/reflections?start=2026-11-01&end=2026-11-07').set(AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([{ date: '2026-11-02' }]);
+    expect(callsOn('reflections')).toEqual(
+      expect.arrayContaining([['gte', 'date', '2026-11-01'], ['lte', 'date', '2026-11-07'], ['order', 'date']]),
+    );
+  });
+
+  it('needs both dates, in order', async () => {
+    for (const query of ['', '?start=2026-11-01', '?start=2026-11-07&end=2026-11-01', '?start=nov&end=dec']) {
+      expect((await request(app).get(`/api/reflections${query}`).set(AUTH)).status).toBe(400);
+    }
   });
 });
 
@@ -742,11 +809,19 @@ describe('scheduler waking up', () => {
     expect(res.body.error).toBe('The scheduler could not build a plan');
   });
 
-  it('wakes the scheduler without waiting for it', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
-    const res = await request(app).post('/api/schedule/warm').set(AUTH).send({});
-    expect(res.status).toBe(202);
+  it('wake says the scheduler is up once its health check answers, without logging in', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+    const res = await request(app).get('/api/wake');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ server: 'ok', scheduler: 'ok' });
     expect(fetchSpy.mock.calls[0][0]).toMatch(/\/health$/);
+  });
+
+  it('wake says the scheduler is still waking when it gives a 503 or no answer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 503 }));
+    expect((await request(app).get('/api/wake')).body.scheduler).toBe('waking');
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('timeout'));
+    expect((await request(app).get('/api/wake')).body.scheduler).toBe('waking');
   });
 });
 

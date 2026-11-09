@@ -1,7 +1,6 @@
 import { ReactNode, useState } from 'react';
 import {
-  ThemeProvider,
-  CssBaseline,
+  Avatar,
   Box,
   Container,
   AppBar,
@@ -14,13 +13,15 @@ import {
   Divider,
   ListItemIcon,
   useMediaQuery,
+  type Theme,
 } from '@mui/material';
 import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, Navigate, useLocation } from 'react-router';
 import { CalendarMonthOutlined, ChecklistOutlined, Logout, NightsStayOutlined, PersonOutline, WbSunnyOutlined } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ProfileProvider, useProfile } from './lib/ProfileContext';
 import { needsConsent } from './lib/consent';
-import { colors, theme } from './theme';
+import { colors } from './theme';
+import { AppearanceProvider } from './lib/AppearanceContext';
 import { HomePage } from '../features/home/components/HomePage';
 import { SurveyPage } from '../features/survey/components/SurveyPage';
 import { ConsentPage } from '../features/planner/components/ConsentPage';
@@ -91,15 +92,19 @@ function AccountMenu() {
           width: 40,
           height: 40,
           borderRadius: '50%',
-          border: `1px solid ${colors.violet200}`,
-          backgroundColor: colors.violet100,
-          color: colors.violet800,
+          border: `1px solid ${colors.accent200}`,
+          backgroundColor: colors.accent100,
+          color: colors.accent800,
           fontWeight: 700,
           fontSize: 14,
-          '&:focus-visible': { outline: `2px solid ${colors.violet600}`, outlineOffset: 2 },
+          '&:focus-visible': { outline: `2px solid ${colors.accent600}`, outlineOffset: 2 },
         }}
       >
-        {initials(profile?.name, user.email)}
+        {profile?.avatar ? (
+          <Avatar src={profile.avatar} alt="" sx={{ width: 38, height: 38 }} />
+        ) : (
+          initials(profile?.name, user.email)
+        )}
       </ButtonBase>
       <Menu
         anchorEl={anchor}
@@ -150,10 +155,10 @@ function TopNav() {
           to={link.to}
           end={link.to === '/'}
           sx={{
-            color: colors.violet600,
+            color: colors.accent600,
             px: 1.75,
-            '&:hover': { backgroundColor: colors.violet100, color: colors.violet800 },
-            '&.active': { backgroundColor: colors.violet100, color: colors.violet800 },
+            '&:hover': { backgroundColor: colors.accent100, color: colors.accent800 },
+            '&.active': { backgroundColor: colors.accent100, color: colors.accent800 },
           }}
         >
           {link.label}
@@ -177,7 +182,7 @@ function BottomTabs() {
         zIndex: (t) => t.zIndex.appBar,
         display: 'flex',
         backgroundColor: colors.surface,
-        borderTop: `2px solid ${colors.violet200}`,
+        borderTop: `2px solid ${colors.accent200}`,
         pb: 'env(safe-area-inset-bottom)',
       }}
     >
@@ -195,7 +200,7 @@ function BottomTabs() {
             fontSize: 11,
             fontWeight: 700,
             color: colors.grey500,
-            '&.active': { color: colors.violet600 },
+            '&.active': { color: colors.accent600 },
           }}
         >
           {link.icon}
@@ -209,7 +214,7 @@ function BottomTabs() {
 function NotFound() {
   return (
     <Box sx={{ textAlign: 'center', py: 10 }}>
-      <Typography variant="h5" sx={{ color: colors.violet500, mb: 1 }}>
+      <Typography variant="h5" sx={{ color: colors.accent500, mb: 1 }}>
         This page doesn't exist
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 3 }}>
@@ -223,7 +228,7 @@ function NotFound() {
 }
 
 function AppShell() {
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true });
+  const isMobile = useMediaQuery((t: Theme) => t.breakpoints.down('sm'), { noSsr: true });
   const { user } = useAuth();
   const location = useLocation();
   const showNav = Boolean(user);
@@ -233,13 +238,13 @@ function AppShell() {
       <AppBar
         position="sticky"
         elevation={0}
-        sx={{ backgroundColor: colors.surface, borderBottom: `2px solid ${colors.violet200}`, color: colors.textPrimary }}
+        sx={{ backgroundColor: colors.surface, borderBottom: `2px solid ${colors.accent200}`, color: colors.textPrimary }}
       >
         <Toolbar sx={{ gap: { xs: 1, sm: 3 }, maxWidth: 1376, width: '100%', mx: 'auto', px: { xs: 2, sm: 3 } }}>
           <Typography
             component={Link}
             to="/"
-            sx={{ fontSize: 24, fontWeight: 700, color: colors.violet500, textDecoration: 'none', mr: { xs: 'auto', sm: 0 } }}
+            sx={{ fontSize: 24, fontWeight: 700, color: colors.accent500, textDecoration: 'none', mr: { xs: 'auto', sm: 0 } }}
           >
             SmartSched
           </Typography>
@@ -274,15 +279,14 @@ function AppShell() {
 
 export default function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <BrowserRouter>
-        <AuthProvider>
-          <ProfileProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ProfileProvider>
+          <AppearanceProvider>
             <AppShell />
-          </ProfileProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </ThemeProvider>
+          </AppearanceProvider>
+        </ProfileProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

@@ -14,7 +14,12 @@ export interface Profile {
   travel: Travel;
   consented_at: string | null;
   consent_version: string | null;
+  theme_mode?: 'light' | 'dark' | 'system';
+  accent?: string;
+  avatar?: string | null; // a small image as a data URL
 }
+
+export type Appearance = { theme_mode?: 'light' | 'dark' | 'system'; accent?: string };
 
 interface ProfileContextValue {
   profile: Profile | null;
@@ -23,6 +28,8 @@ interface ProfileContextValue {
   saveSurvey: (survey: SurveyAnswers) => Promise<void>;
   saveTravel: (travel: Travel) => Promise<void>;
   saveConsent: () => Promise<void>;
+  saveAppearance: (appearance: Appearance) => Promise<void>;
+  saveAvatar: (avatar: string | null) => Promise<void>;
 }
 
 const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
@@ -66,9 +73,28 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     setState({ userId: profile.id, profile, error: null });
   };
 
+  const saveAppearance = async (appearance: Appearance) => {
+    const profile = await apiPut('/api/profile/appearance', appearance);
+    setState({ userId: profile.id, profile, error: null });
+  };
+
+  const saveAvatar = async (avatar: string | null) => {
+    const profile = await apiPut('/api/profile/avatar', { avatar });
+    setState({ userId: profile.id, profile, error: null });
+  };
+
   return (
     <ProfileContext.Provider
-      value={{ profile: user ? state.profile : null, loading, error: state.error, saveSurvey, saveTravel, saveConsent }}
+      value={{
+        profile: user ? state.profile : null,
+        loading,
+        error: state.error,
+        saveSurvey,
+        saveTravel,
+        saveConsent,
+        saveAppearance,
+        saveAvatar,
+      }}
     >
       {children}
     </ProfileContext.Provider>

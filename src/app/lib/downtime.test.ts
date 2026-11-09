@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { downtimeRanges, sleepPlan } from './downtime';
+import { checkInTime, downtimeRanges, sleepPlan } from './downtime';
 
 describe('sleepPlan', () => {
   it('works bedtime back from the wake time and sleep hours', () => {
@@ -31,5 +31,15 @@ describe('downtimeRanges', () => {
 
   it('has no evening range when wind-down starts after midnight', () => {
     expect(downtimeRanges({ wake_time: '10:00', sleep_hours: 8 })).toHaveLength(1);
+  });
+});
+
+describe('checkInTime', () => {
+  it('sits at the start of the wind-down hour', () => {
+    expect(checkInTime({ wake_time: '07:00', sleep_hours: 8 })).toEqual({ start: 22 * 60, end: 22 * 60 + 15 });
+  });
+
+  it('stays on the same day when bedtime is after midnight', () => {
+    expect(checkInTime({ wake_time: '09:00', sleep_hours: 8 })).toEqual({ start: 23 * 60 + 30, end: 23 * 60 + 45 });
   });
 });

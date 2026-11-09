@@ -322,7 +322,7 @@ export function SurveyPage() {
                   key={key}
                   sx={{
                     borderRadius: '12px',
-                    border: selected ? `3px solid ${colors.violet500}` : '3px solid transparent',
+                    border: selected ? `3px solid ${colors.accent500}` : '3px solid transparent',
                     outline: selected ? 'none' : `1px solid ${colors.grey200}`,
                   }}
                 >
@@ -355,7 +355,7 @@ export function SurveyPage() {
   return (
     <Box sx={{ maxWidth: '720px', mx: 'auto' }}>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" component="h1" sx={{ color: colors.violet500, mb: 1, fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>
+        <Typography variant="h4" component="h1" sx={{ color: colors.accent500, mb: 1, fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>
           {isEditing ? 'Edit your survey' : "Let's get to know your week"}
         </Typography>
         <Typography variant="body1" color="text.secondary">
@@ -367,7 +367,7 @@ export function SurveyPage() {
 
       <Box sx={{ mb: 2.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 2, flexWrap: 'wrap' }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: colors.violet800 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: colors.accent800 }}>
             Question {step + 1} of {questions.length}
           </Typography>
           <Box component="nav" aria-label="Survey questions" sx={{ display: 'flex', gap: 0.75 }}>
@@ -383,9 +383,9 @@ export function SurveyPage() {
                   borderRadius: '50%',
                   fontSize: 12,
                   fontWeight: 700,
-                  border: `1px solid ${i === step ? colors.violet600 : answered[i] ? colors.violet200 : colors.grey200}`,
-                  backgroundColor: i === step ? colors.violet600 : answered[i] ? colors.violet100 : colors.surface,
-                  color: i === step ? colors.surface : answered[i] ? colors.violet800 : 'text.secondary',
+                  border: `1px solid ${i === step ? colors.accent600 : answered[i] ? colors.accent200 : colors.grey200}`,
+                  backgroundColor: i === step ? colors.accent600 : answered[i] ? colors.accent100 : colors.surface,
+                  color: i === step ? colors.surface : answered[i] ? colors.accent800 : 'text.secondary',
                   transition: 'background-color 0.15s ease',
                 }}
               >
@@ -398,7 +398,7 @@ export function SurveyPage() {
           variant="determinate"
           value={(answeredCount / answered.length) * 100}
           aria-label={`${answeredCount} of ${answered.length} answered`}
-          sx={{ height: 8, borderRadius: 4, backgroundColor: colors.violet100, '& .MuiLinearProgress-bar': { backgroundColor: colors.violet400 } }}
+          sx={{ height: 8, borderRadius: 4, backgroundColor: colors.accent100, '& .MuiLinearProgress-bar': { backgroundColor: colors.accent400 } }}
         />
       </Box>
 
@@ -411,7 +411,7 @@ export function SurveyPage() {
 
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 4, flexWrap: 'wrap' }}>
           {isEditing && (
-            <Button onClick={() => navigate('/profile')} disabled={submitting} sx={{ color: colors.violet600 }}>
+            <Button onClick={() => navigate('/profile')} disabled={submitting} sx={{ color: colors.accent600 }}>
               Cancel
             </Button>
           )}

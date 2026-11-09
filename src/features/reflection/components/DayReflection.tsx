@@ -14,12 +14,13 @@ import {
 } from '@mui/material';
 import { ChevronLeft, ChevronRight } from '@mui/icons-material';
 import { addDays, format, parseISO } from 'date-fns';
-import { Link as RouterLink } from 'react-router';
+import { Link as RouterLink, useSearchParams } from 'react-router';
 import { useAuth } from '../../../app/lib/AuthContext';
 import { apiGet, apiPost } from '../../../app/lib/api';
 import { useSelectedDay } from '../../../app/lib/today';
 import { colors } from '../../../app/theme';
 import { ListSkeleton } from '../../../shared/components/States';
+import { ReflectionInsights } from './ReflectionInsights';
 
 const CRITERIA = [
   { key: 'productivity', label: 'Productivity', hint: 'How much of what you planned got done' },
@@ -52,6 +53,15 @@ export function DayReflection() {
   const [saved, setSaved] = useState(false);
   // Whether this day already had a reflection when it loaded.
   const [hadReflection, setHadReflection] = useState(false);
+  // Bumped after a save so the summary below picks up the new ratings.
+  const [insightsVersion, setInsightsVersion] = useState(0);
+
+  // The planner's bedtime check-in links here with ?date=, to open that day.
+  const [searchParams] = useSearchParams();
+  const linkedDate = searchParams.get('date');
+  useEffect(() => {
+    if (linkedDate && /^\d{4}-\d{2}-\d{2}$/.test(linkedDate) && linkedDate <= today) setSelectedDate(linkedDate);
+  }, [linkedDate]);
 
   useEffect(() => {
     if (!user) {
@@ -112,6 +122,7 @@ export function DayReflection() {
     try {
       await apiPost('/api/reflections', { date: selectedDate, ratings, ...sleepTimes });
       setSaved(true);
+      setInsightsVersion((v) => v + 1);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -130,7 +141,7 @@ export function DayReflection() {
   return (
     <Box sx={{ maxWidth: 640, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Box>
-        <Typography variant="h5" component="h1" sx={{ color: colors.violet500 }}>
+        <Typography variant="h5" component="h1" sx={{ color: colors.accent500 }}>
           Reflect
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -182,7 +193,7 @@ export function DayReflection() {
               {hadReflection && !saved && (
                 <Chip
                   label="Already saved for this day. Change anything and save again."
-                  sx={{ alignSelf: 'flex-start', mb: 1, backgroundColor: colors.violet100, color: colors.violet800, height: 'auto', py: 0.5, '& .MuiChip-label': { whiteSpace: 'normal' } }}
+                  sx={{ alignSelf: 'flex-start', mb: 1, backgroundColor: colors.accent100, color: colors.accent800, height: 'auto', py: 0.5, '& .MuiChip-label': { whiteSpace: 'normal' } }}
                 />
               )}
               {CRITERIA.map(({ key, label, hint }) => (
@@ -211,7 +222,7 @@ export function DayReflection() {
                     value={ratings[key]}
                     onChange={(_, newValue) => rate(key, newValue)}
                     aria-labelledby={`rate-${key}`}
-                    sx={{ '& .MuiRating-iconFilled': { color: colors.violet500 }, '& .MuiRating-iconHover': { color: colors.violet600 } }}
+                    sx={{ '& .MuiRating-iconFilled': { color: colors.accent500 }, '& .MuiRating-iconHover': { color: colors.accent600 } }}
                   />
                 </Box>
               ))}
@@ -260,6 +271,8 @@ export function DayReflection() {
           )}
         </CardContent>
       </Card>
+
+      <ReflectionInsights today={today} version={insightsVersion} />
     </Box>
   );
 }

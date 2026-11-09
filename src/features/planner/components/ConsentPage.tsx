@@ -35,7 +35,7 @@ export function ConsentPage() {
       <Card sx={{ borderRadius: '16px' }}>
         <CardContent sx={{ p: { xs: 2.5, sm: 4 }, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: colors.violet500 }}>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: colors.accent500 }}>
               Taking part in testing
             </Typography>
             {!asking && profile?.consented_at && (

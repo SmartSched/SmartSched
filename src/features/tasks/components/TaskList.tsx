@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, FormEvent } from 'react';
+import { useMemo, useState, FormEvent } from 'react';
 import {
   Card,
   CardContent,
@@ -24,10 +24,13 @@ import {
   Snackbar,
   Alert,
   Collapse,
+  LinearProgress,
   Link as MuiLink,
 } from '@mui/material';
 import { Add, AutoAwesomeOutlined, Close, EditOutlined, DeleteOutline, ExpandLess, ExpandMore } from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router';
+import { startWaking, untilAwake, useWakeState } from '../../../app/lib/wake';
+import { WakeProgress } from '../../../shared/components/WakeProgress';
 import { addDays, format, parseISO } from 'date-fns';
 import { useAuth } from '../../../app/lib/AuthContext';
 import { apiGet, apiPost } from '../../../app/lib/api';
@@ -325,16 +328,26 @@ export function TaskList() {
   };
 
 
-  // The scheduler service sleeps when idle; wake it now so a plan is quick when asked for. Best effort.
-  useEffect(() => {
-    if (user) apiPost('/api/schedule/warm', {}).catch(() => {});
-  }, [user]);
+  // The app wakes the server and scheduler when it opens (main.tsx). Asking for a plan before they're up waits
+  // for them behind a loading bar instead of sending a request that would hang or fail.
+  const wakeState = useWakeState();
+  const [waitingForPlanner, setWaitingForPlanner] = useState(false);
 
   const handleSuggestPlan = async () => {
   setLoadingSuggestion(true);
   setSuggestionNote(null);
 
   try {
+    if (wakeState !== 'awake') {
+      if (wakeState === 'gave-up') startWaking(); // it gave up earlier: try again for this click
+      setWaitingForPlanner(true);
+      const result = await untilAwake();
+      setWaitingForPlanner(false);
+      if (result === 'gave-up') {
+        setActionError("The planner isn't answering right now. Try again in a few minutes.");
+        return;
+      }
+    }
     const data = await apiPost('/api/schedule/suggest', {
       now: localNow(),
       weekStart: currentWeekStart(),
@@ -353,6 +366,7 @@ export function TaskList() {
   } catch (err: any) {
     setActionError(err.message ?? "Couldn't build a plan. Try again.");
   } finally {
+    setWaitingForPlanner(false);
     setLoadingSuggestion(false);
   }
 };
@@ -482,7 +496,7 @@ const handleAcceptPlan = async (plan: any) => {
     <Box sx={{ maxWidth: 960, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
         <Box>
-          <Typography variant="h5" component="h1" sx={{ color: colors.violet500 }}>
+          <Typography variant="h5" component="h1" sx={{ color: colors.accent500 }}>
             Tasks
           </Typography>
           {!loading && tasks.length > 0 && (
@@ -501,6 +515,8 @@ const handleAcceptPlan = async (plan: any) => {
         </Box>
       </Box>
 
+      {waitingForPlanner && <WakeProgress />}
+
       {suggestionNote && <Alert severity="info">{suggestionNote}</Alert>}
 
       {suggestions.length > 0 && (
@@ -518,7 +534,7 @@ const handleAcceptPlan = async (plan: any) => {
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, fontSize: 12, color: 'text.secondary' }}>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.violet600 }} /> New sessions
+              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.accent600 }} /> New sessions
             </Box>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
               <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.info + '55' }} /> Already planned
@@ -534,7 +550,7 @@ const handleAcceptPlan = async (plan: any) => {
                 key={plan.id}
                 sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${colors.grey200}`, borderRadius: '12px', p: 2 }}
               >
-                <Typography sx={{ fontWeight: 700, color: colors.violet800 }}>Option {index + 1}</Typography>
+                <Typography sx={{ fontWeight: 700, color: colors.accent800 }}>Option {index + 1}</Typography>
                 {plan.why && (
                   <Typography variant="body2" sx={{ mb: 1 }}>
                     {plan.why}

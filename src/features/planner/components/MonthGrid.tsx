@@ -66,9 +66,9 @@ export function MonthGrid({ dates, month, today, blocksByDate, onOpenDay, onOpen
                     fontSize: 13,
                     fontWeight: 700,
                     mb: 0.25,
-                    backgroundColor: isToday ? colors.violet600 : 'transparent',
+                    backgroundColor: isToday ? colors.accent600 : 'transparent',
                     color: isToday ? colors.surface : inMonth ? 'text.primary' : 'text.secondary',
-                    '&:hover': { backgroundColor: isToday ? colors.violet800 : colors.violet100 },
+                    '&:hover': { backgroundColor: isToday ? colors.accent800 : colors.accent100 },
                   }}
                 >
                   {format(parseISO(date), 'd')}
@@ -103,7 +103,7 @@ export function MonthGrid({ dates, month, today, blocksByDate, onOpenDay, onOpen
                 {more > 0 && (
                   <ButtonBase
                     onClick={() => onOpenDay(date)}
-                    sx={{ justifyContent: 'flex-start', px: 0.5, fontSize: 12, fontWeight: 600, color: colors.violet600 }}
+                    sx={{ justifyContent: 'flex-start', px: 0.5, fontSize: 12, fontWeight: 600, color: colors.accent600 }}
                   >
                     {more} more
                   </ButtonBase>

@@ -23,7 +23,7 @@ export function AuthPage() {
   return (
     <Box sx={{ maxWidth: '400px', mx: 'auto', mt: { xs: 2, sm: 6 } }}>
       <Box sx={{ textAlign: 'center', mb: 3 }}>
-        <Typography variant="h5" component="h1" sx={{ color: colors.violet500 }}>
+        <Typography variant="h5" component="h1" sx={{ color: colors.accent500 }}>
           {mode === 'signup' ? 'Make your account' : mode === 'forgot' ? 'Reset your password' : 'Welcome back'}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>

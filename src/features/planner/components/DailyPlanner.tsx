@@ -24,11 +24,12 @@ import {
   Chip,
   Drawer,
   useMediaQuery,
+  type Theme,
   Link as MuiLink,
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material';
-import { Add, ChevronLeft, ChevronRight, Close } from '@mui/icons-material';
+import { Add, CheckCircleOutline, ChevronLeft, ChevronRight, Close, NightsStayOutlined } from '@mui/icons-material';
 import {
   addDays,
   addMonths,
@@ -41,7 +42,7 @@ import {
   startOfWeek,
   subDays,
 } from 'date-fns';
-import { Link as RouterLink } from 'react-router';
+import { Link as RouterLink, useNavigate } from 'react-router';
 import { useAuth } from '../../../app/lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '../../../app/lib/api';
 import { useSelectedDay } from '../../../app/lib/today';
@@ -51,11 +52,11 @@ import { findOpenSlot, missedTaskBlocks, type Slot } from '../../../app/lib/resc
 import type { Task } from '../../../app/lib/tasks';
 import { allPlaces, placeLabel } from '../../../app/lib/places';
 import { readLeftBlocks, saveLeftBlocks } from '../../../app/lib/leftBlocks';
-import { downtimeRanges, type DowntimeRange } from '../../../app/lib/downtime';
+import { checkInTime, downtimeRanges, type DowntimeRange } from '../../../app/lib/downtime';
 import { PlannerKey, readShowCommutes, saveShowCommutes } from './PlannerKey';
 import { MonthGrid } from './MonthGrid';
 import { useProfile } from '../../../app/lib/ProfileContext';
-import { CATEGORY_LABELS, categoryColor, colors, theme } from '../../../app/theme';
+import { CATEGORY_LABELS, categoryColor, colors, withAlpha } from '../../../app/theme';
 import { BurnoutBanner } from './BurnoutBanner';
 import { ListSkeleton } from '../../../shared/components/States';
 import { TimeSpentDialog } from '../../tasks/components/TimeSpentDialog';
@@ -308,10 +309,10 @@ function BlockForm({
                 sx={{
                   height: 32,
                   borderRadius: '999px',
-                  borderColor: selected ? colors.violet500 : colors.grey200,
-                  backgroundColor: selected ? colors.violet100 : colors.surface,
-                  color: selected ? colors.violet800 : 'text.secondary',
-                  '&&:hover': { backgroundColor: selected ? colors.violet100 : colors.surfaceMuted },
+                  borderColor: selected ? colors.accent500 : colors.grey200,
+                  backgroundColor: selected ? colors.accent100 : colors.surface,
+                  color: selected ? colors.accent800 : 'text.secondary',
+                  '&&:hover': { backgroundColor: selected ? colors.accent100 : colors.surfaceMuted },
                 }}
               />
             );
@@ -573,13 +574,55 @@ function DowntimeShade({ ranges, startHour, endHour }: { ranges: DowntimeRange[]
               top: ((start - startHour * 60) / 60) * HOUR_HEIGHT,
               height: ((end - start) / 60) * HOUR_HEIGHT,
               backgroundColor: colors.surfaceMuted,
-              backgroundImage: `repeating-linear-gradient(135deg, transparent 0 8px, ${colors.grey200}80 8px 9px)`,
+              backgroundImage: `repeating-linear-gradient(135deg, transparent 0 8px, ${withAlpha(colors.grey200, 50)} 8px 9px)`,
               pointerEvents: 'none',
             }}
           />
         );
       })}
     </>
+  );
+}
+
+// The evening "reflect on your day" check-in: not a saved block, just a reminder drawn at the start of the
+// wind-down hour. Ticked once that day has a reflection; opens the Reflect page for that day.
+function CheckIn({ date, done, time, startHour }: { date: string; done: boolean; time: { start: number; end: number }; startHour: number }) {
+  const navigate = useNavigate();
+  return (
+    <ButtonBase
+      onClick={(e) => {
+        e.stopPropagation();
+        navigate(`/reflection?date=${date}`);
+      }}
+      aria-label={done ? `Reflection for ${formatDay(date)} saved. Open it` : `Reflect on ${formatDay(date)}`}
+      sx={{
+        position: 'absolute',
+        left: 3,
+        right: 3,
+        top: ((time.start - startHour * 60) / 60) * HOUR_HEIGHT + 1,
+        height: Math.max(((time.end - time.start) / 60) * HOUR_HEIGHT - 2, MIN_BLOCK_HEIGHT - 4),
+        zIndex: 1,
+        justifyContent: 'flex-start',
+        gap: 0.5,
+        px: 0.75,
+        borderRadius: '6px',
+        border: `1.5px dashed ${colors.accent600}`,
+        backgroundColor: done ? colors.surface : colors.accent100,
+        color: done ? 'text.secondary' : colors.accent800,
+        fontSize: 11,
+        fontWeight: 700,
+        overflow: 'hidden',
+        whiteSpace: 'nowrap',
+        opacity: done ? 0.75 : 1,
+        '&:hover': { backgroundColor: colors.accent200 },
+        '&:focus-visible': { outline: `2px solid ${colors.accent600}`, outlineOffset: 1 },
+      }}
+    >
+      {done ? <CheckCircleOutline sx={{ fontSize: 14 }} aria-hidden /> : <NightsStayOutlined sx={{ fontSize: 14 }} aria-hidden />}
+      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {done ? 'Reflected' : 'Reflect on your day'}
+      </Box>
+    </ButtonBase>
   );
 }
 
@@ -643,7 +686,7 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
         opacity: task?.completed ? 0.6 : 1,
         transition: 'background-color 0.15s ease',
         '&:hover': { backgroundColor: color + '35' },
-        '&:focus-within': { outline: `2px solid ${colors.violet600}`, outlineOffset: 1 },
+        '&:focus-within': { outline: `2px solid ${colors.accent600}`, outlineOffset: 1 },
       }}
     >
       {task && (
@@ -694,7 +737,7 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
 export function DailyPlanner() {
   const { user } = useAuth();
   // Week on wide screens, one day at a time on phones.
-  const wide = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true });
+  const wide = useMediaQuery((t: Theme) => t.breakpoints.up('md'), { noSsr: true });
   const [viewMode, setViewMode] = useState<ViewMode>(wide ? 'week' : 'day');
   const { today, selectedDate, setSelectedDate } = useSelectedDay();
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
@@ -711,6 +754,9 @@ export function DailyPlanner() {
   const { profile } = useProfile();
   const places = allPlaces(profile?.travel);
   const downtime = useMemo(() => downtimeRanges(profile?.survey), [profile?.survey]);
+  const checkIn = useMemo(() => checkInTime(profile?.survey), [profile?.survey]);
+  // Days in view that already have a reflection, so their check-in shows as done.
+  const [reflectedDates, setReflectedDates] = useState<Set<string>>(new Set());
   // Saving can add or remove automatic commutes elsewhere on the day, so the view reloads after each change.
   const [reloadVersion, setReloadVersion] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -762,6 +808,23 @@ export function DailyPlanner() {
       cancelled = true;
     };
   }, [user, viewMode, selectedDate, weekDates, monthDates, reloadVersion]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const [start, end] =
+      viewMode === 'day'
+        ? [selectedDate, selectedDate]
+        : viewMode === 'week'
+          ? [weekDates[0], weekDates[6]]
+          : [monthDates[0], monthDates[monthDates.length - 1]];
+    apiGet(`/api/reflections?start=${start}&end=${end}`)
+      .then((rows: { date: string }[]) => !cancelled && setReflectedDates(new Set(rows.map((r) => r.date))))
+      .catch(() => {}); // check-ins just show as not done
+    return () => {
+      cancelled = true;
+    };
+  }, [user, viewMode, selectedDate, weekDates, monthDates]);
 
   useEffect(() => {
     if (!user) return;
@@ -817,7 +880,11 @@ export function DailyPlanner() {
 
   // Widen the grid past 7 AM–10 PM when a block starts earlier or ends later.
   const startHour = Math.min(DEFAULT_START_HOUR, ...visibleBlocks.map((b) => Math.floor(toMinutes(b.start_time) / 60)));
-  const endHour = Math.max(DEFAULT_END_HOUR, ...visibleBlocks.map((b) => Math.ceil(toMinutes(b.end_time) / 60)));
+  const endHour = Math.max(
+    DEFAULT_END_HOUR,
+    Math.ceil(checkIn.end / 60), // so the evening check-in is on the grid
+    ...visibleBlocks.map((b) => Math.ceil(toMinutes(b.end_time) / 60)),
+  );
   const hours = Array.from({ length: endHour - startHour }, (_, i) => i + startHour);
 
   const changeDay = (days: number) => {
@@ -1021,7 +1088,7 @@ export function DailyPlanner() {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
-        <Typography variant="h5" component="h1" sx={{ color: colors.violet500, mr: 1, minWidth: { sm: 220 } }}>
+        <Typography variant="h5" component="h1" sx={{ color: colors.accent500, mr: 1, minWidth: { sm: 220 } }}>
           {viewMode === 'day'
             ? formatDay(selectedDate)
             : viewMode === 'week'
@@ -1158,6 +1225,7 @@ export function DailyPlanner() {
                   <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? `1px dashed ${colors.grey200}` : 'none' }} />
                 ))}
                 <DowntimeShade ranges={downtime} startHour={startHour} endHour={endHour} />
+                <CheckIn date={selectedDate} done={reflectedDates.has(selectedDate)} time={checkIn} startHour={startHour} />
                 {isToday && <NowLine startHour={startHour} endHour={endHour} now={new Date(now)} />}
                 {placedBlocks.map(({ block, column, columns }) => (
                   <TimeBlockItem
@@ -1187,7 +1255,7 @@ export function DailyPlanner() {
                     <Box key={date} sx={{ flex: 1, textAlign: 'center', pb: 1 }}>
                       <Typography
                         variant="body2"
-                        sx={{ fontWeight: 700, color: isDayToday ? colors.violet600 : 'text.secondary' }}
+                        sx={{ fontWeight: 700, color: isDayToday ? colors.accent600 : 'text.secondary' }}
                       >
                         {format(day, 'EEE')}
                       </Typography>
@@ -1200,7 +1268,7 @@ export function DailyPlanner() {
                           lineHeight: '32px',
                           borderRadius: '50%',
                           fontWeight: 700,
-                          backgroundColor: isDayToday ? colors.violet600 : 'transparent',
+                          backgroundColor: isDayToday ? colors.accent600 : 'transparent',
                           color: isDayToday ? colors.surface : 'text.primary',
                         }}
                       >
@@ -1230,7 +1298,7 @@ export function DailyPlanner() {
                         flex: 1,
                         position: 'relative',
                         borderLeft: `1px solid ${colors.grey200}`,
-                        backgroundColor: date === today ? colors.violet100 + '40' : 'transparent',
+                        backgroundColor: date === today ? withAlpha(colors.accent100, 25) : 'transparent',
                         cursor: 'copy',
                       }}
                     >
@@ -1238,6 +1306,7 @@ export function DailyPlanner() {
                         <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? `1px dashed ${colors.grey200}` : 'none' }} />
                       ))}
                       <DowntimeShade ranges={downtime} startHour={startHour} endHour={endHour} />
+                      <CheckIn date={date} done={reflectedDates.has(date)} time={checkIn} startHour={startHour} />
                       {date === today && <NowLine startHour={startHour} endHour={endHour} now={new Date(now)} />}
                       {dayBlocks.map(({ block, column, columns }) => (
                         <TimeBlockItem

@@ -12,6 +12,8 @@ import {
   validateSurvey,
   validateTimeBlock,
   validateTravel,
+  validateAppearance,
+  validateAvatar,
 } from './validation.js';
 import { expandSeries } from './series.js';
 import { planCommutes } from './commute.js';
@@ -59,7 +61,8 @@ function serverError(res, error) {
   res.status(500).json({ error: 'Something went wrong on our end. Try again in a moment.' });
 }
 
-const PROFILE_COLUMNS = 'id, name, survey, survey_updated_at, travel, consented_at, consent_version';
+const PROFILE_COLUMNS =
+  'id, name, survey, survey_updated_at, travel, consented_at, consent_version, theme_mode, accent, avatar';
 
 app.get('/api/profile', requireAuth, async (req, res) => {
   const { data, error } = await req.supabase
@@ -96,6 +99,30 @@ app.put('/api/profile/consent', requireAuth, async (req, res) => {
   const { data, error } = await req.supabase
     .from('profiles')
     .upsert({ id: req.userId, consented_at: new Date().toISOString(), consent_version: version }, { onConflict: 'id' })
+    .select(PROFILE_COLUMNS);
+  if (error) return serverError(res, error);
+  res.json(data[0]);
+});
+
+// Light/dark/system and the accent colour. Saved per account so they follow the user to other devices.
+app.put('/api/profile/appearance', requireAuth, async (req, res) => {
+  const { appearance, error: validationError } = validateAppearance(req.body);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const { data, error } = await req.supabase
+    .from('profiles')
+    .upsert({ id: req.userId, ...appearance }, { onConflict: 'id' })
+    .select(PROFILE_COLUMNS);
+  if (error) return serverError(res, error);
+  res.json(data[0]);
+});
+
+// The profile picture, already shrunk by the browser, or null to remove it.
+app.put('/api/profile/avatar', requireAuth, async (req, res) => {
+  const { avatar, error: validationError } = validateAvatar(req.body.avatar);
+  if (validationError) return res.status(400).json({ error: validationError });
+  const { data, error } = await req.supabase
+    .from('profiles')
+    .upsert({ id: req.userId, avatar }, { onConflict: 'id' })
     .select(PROFILE_COLUMNS);
   if (error) return serverError(res, error);
   res.json(data[0]);
@@ -420,6 +447,22 @@ app.delete('/api/block-series/:id', requireAuth, async (req, res) => {
   res.status(204).end();
 });
 
+// Reflections between two dates, oldest first, for the Reflect page's summary and the planner's bedtime check-in.
+app.get('/api/reflections', requireAuth, async (req, res) => {
+  const { start, end } = req.query;
+  if (!isValidDate(start) || !isValidDate(end) || start > end) {
+    return res.status(400).json({ error: 'start and end must be YYYY-MM-DD dates, start first' });
+  }
+  const { data, error } = await req.supabase
+    .from('reflections')
+    .select('date, ratings, bed_time, wake_time')
+    .gte('date', start)
+    .lte('date', end)
+    .order('date');
+  if (error) return serverError(res, error);
+  res.json(data);
+});
+
 app.get('/api/reflections/:date', requireAuth, async (req, res) => {
   if (!isValidDate(req.params.date)) return res.status(400).json({ error: 'Date must be a valid YYYY-MM-DD date' });
   const { data, error } = await req.supabase
@@ -485,11 +528,19 @@ async function askScheduler(path, body) {
   }
 }
 
-// Wakes the scheduler service when the Schedule page opens, so it's up by the time the user asks for a plan.
-// Doesn't wait for it.
-app.post('/api/schedule/warm', requireAuth, (req, res) => {
-  fetch(`${SCHEDULER_URL}/health`, { signal: AbortSignal.timeout(SCHEDULER_TIMEOUT_MS) }).catch(() => {});
-  res.status(202).json({ status: 'waking' });
+// The browser calls this as soon as the app opens: the request itself wakes this server, and it waits for the
+// scheduler service's health check so that wakes too. No login needed (the app pings it before auth has loaded).
+// scheduler is 'ok' once it answered, 'waking' if it didn't answer in time; the browser asks again until it's 'ok'.
+const WAKE_TIMEOUT_MS = 25_000;
+app.get('/api/wake', async (req, res) => {
+  let scheduler = 'waking';
+  try {
+    const r = await fetch(`${SCHEDULER_URL}/health`, { signal: AbortSignal.timeout(WAKE_TIMEOUT_MS) });
+    if (r.ok) scheduler = 'ok';
+  } catch {
+    // still starting up
+  }
+  res.json({ server: 'ok', scheduler });
 });
 
 // How a suggested plan spreads its work (ml/prefs/score.py style_of).
@@ -777,5 +828,6 @@ app.use('/api', (req, res) => {
 
 app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request was not valid JSON' });
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'That is too large to save. Try something smaller.' });
   serverError(res, err);
 });

@@ -101,6 +101,16 @@ export function PlannerKey({
           }
         />
         <Row
+          swatch={
+            <Box
+              aria-hidden
+              sx={{ width: 14, height: 14, borderRadius: '4px', boxSizing: 'border-box', border: `1.5px dashed ${colors.accent600}`, backgroundColor: colors.accent100 }}
+            />
+          }
+          label="Reflect on your day"
+          hint="A minute at the start of your wind-down. Click it to rate the day."
+        />
+        <Row
           swatch={<Box aria-hidden sx={{ width: 14, height: 2, backgroundColor: colors.error, mt: '6px' }} />}
           label="Now"
         />
@@ -121,7 +131,7 @@ export function PlannerKey({
         />
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, lineHeight: 1.4 }}>
           Travel time is still planned around when they're hidden.{' '}
-          <Box component={Link} to="/profile" sx={{ color: colors.violet600 }}>
+          <Box component={Link} to="/profile" sx={{ color: colors.accent600 }}>
             Edit travel times
           </Box>
         </Typography>

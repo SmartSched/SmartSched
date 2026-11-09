@@ -181,6 +181,38 @@ export function validateTravel(input) {
   return { travel: { places, minutes } };
 }
 
+// Appearance settings. Must match the checks in the appearance migration and ACCENTS in src/app/theme.ts.
+export const THEME_MODES = ['light', 'dark', 'system'];
+export const ACCENTS = ['violet', 'blue', 'teal', 'green', 'rose', 'orange'];
+
+// Either or both of theme_mode and accent. Returns { appearance } or { error }.
+export function validateAppearance(input) {
+  if (!input || typeof input !== 'object') return { error: 'Appearance settings are required' };
+  const appearance = {};
+  if (input.theme_mode !== undefined) {
+    if (!THEME_MODES.includes(input.theme_mode)) return { error: 'Theme must be light, dark or system' };
+    appearance.theme_mode = input.theme_mode;
+  }
+  if (input.accent !== undefined) {
+    if (!ACCENTS.includes(input.accent)) return { error: `Accent must be one of ${ACCENTS.join(', ')}` };
+    appearance.accent = input.accent;
+  }
+  if (Object.keys(appearance).length === 0) return { error: 'Nothing to change' };
+  return { appearance };
+}
+
+// A profile picture: a small image the browser already shrank, as a data URL, or null to remove it.
+// Under express.json's 100 KB body limit, which turns anything bigger away first.
+export const MAX_AVATAR_LENGTH = 90_000;
+export function validateAvatar(value) {
+  if (value === null) return { avatar: null };
+  if (typeof value !== 'string' || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) {
+    return { error: 'The picture must be a JPEG, PNG or WebP image' };
+  }
+  if (value.length > MAX_AVATAR_LENGTH) return { error: 'That picture is too large. Try a smaller one.' };
+  return { avatar: value };
+}
+
 // Minutes a finished task actually took: a whole number from 0 up to a week.
 export function isValidTimeSpent(value) {
   return Number.isInteger(value) && value >= 0 && value <= 7 * 24 * 60;

@@ -24,7 +24,7 @@ interface MiniWeekProps {
 }
 
 // A small week at a glance: the week's existing blocks in their colours, faded, and the blocks an option
-// would add in solid violet on top, so options can be compared side by side.
+// would add in the solid accent colour on top, so options can be compared side by side.
 export function MiniWeek({ dates, existing, added, downtime, startHour = 7, endHour = 23, height = 200, label }: MiniWeekProps) {
   const span = (endHour - startHour) * 60;
   const y = (minutes: number) => ((Math.min(Math.max(minutes, startHour * 60), endHour * 60) - startHour * 60) / span) * 100;
@@ -43,7 +43,7 @@ export function MiniWeek({ dates, existing, added, downtime, startHour = 7, endH
           top: `${top}%`,
           height: `max(${bottom - top}%, 3px)`,
           borderRadius: '3px',
-          backgroundColor: isAdded ? colors.violet600 : categoryColor(block.type ?? '') + '55',
+          backgroundColor: isAdded ? colors.accent600 : categoryColor(block.type ?? '') + '55',
           zIndex: isAdded ? 2 : 1,
         }}
       />

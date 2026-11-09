@@ -182,7 +182,7 @@ export function HomePage() {
           <Typography
             variant="h3"
             component="h1"
-            sx={{ color: colors.violet500, fontSize: { xs: '1.75rem', sm: '3rem' }, mb: 0.5 }}
+            sx={{ color: colors.accent500, fontSize: { xs: '1.75rem', sm: '3rem' }, mb: 0.5 }}
           >
             {greeting(now.getHours())}
             {displayName ? `, ${displayName}` : ''}
@@ -201,11 +201,11 @@ export function HomePage() {
                 width: 180,
                 height: 10,
                 borderRadius: '10px',
-                backgroundColor: colors.violet100,
-                '& .MuiLinearProgress-bar': { backgroundColor: colors.violet400, borderRadius: '10px' },
+                backgroundColor: colors.accent100,
+                '& .MuiLinearProgress-bar': { backgroundColor: colors.accent400, borderRadius: '10px' },
               }}
             />
-            <Typography variant="body2" sx={{ fontWeight: 600, color: colors.violet800, whiteSpace: 'nowrap' }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: colors.accent800, whiteSpace: 'nowrap' }}>
               {doneCount} of {todayBlocks.length} blocks done today
             </Typography>
           </Box>
@@ -249,18 +249,18 @@ export function HomePage() {
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 2.5, sm: 3.5 }, alignItems: 'flex-start' }}>
         <Box sx={{ flex: '999 1 560px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: { xs: 2.5, sm: 3.5 } }}>
           {featured && (
-            <Box component="section" sx={{ p: { xs: 2.25, sm: 3 }, backgroundColor: colors.violet100, borderRadius: '24px' }}>
+            <Box component="section" sx={{ p: { xs: 2.25, sm: 3 }, backgroundColor: colors.accent100, borderRadius: '24px' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: current ? colors.success : colors.violet400 }} />
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: current ? colors.success : colors.accent400 }} />
                 <Typography
-                  sx={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: colors.violet800 }}
+                  sx={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: colors.accent800 }}
                 >
                   {current ? 'Happening now' : 'Up next'}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography component="h2" sx={{ fontSize: { xs: 20, sm: 26 }, fontWeight: 700, color: colors.violet800, mb: 0.5 }}>
+                  <Typography component="h2" sx={{ fontSize: { xs: 20, sm: 26 }, fontWeight: 700, color: colors.accent800, mb: 0.5 }}>
                     {blockTitle(featured)}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 2.25, flexWrap: 'wrap', color: 'text.secondary', fontSize: 14 }}>
@@ -299,15 +299,15 @@ export function HomePage() {
                       height: 10,
                       borderRadius: '10px',
                       backgroundColor: colors.surface,
-                      '& .MuiLinearProgress-bar': { backgroundColor: colors.violet400, borderRadius: '10px' },
+                      '& .MuiLinearProgress-bar': { backgroundColor: colors.accent400, borderRadius: '10px' },
                     }}
                   />
-                  <Typography variant="body2" sx={{ mt: 1, color: colors.violet800 }}>
+                  <Typography variant="body2" sx={{ mt: 1, color: colors.accent800 }}>
                     {minutesLabel(toMinutes(current.end_time) - nowMinutes)} left
                   </Typography>
                 </>
               ) : (
-                <Typography variant="body2" sx={{ mt: 1.5, color: colors.violet800 }}>
+                <Typography variant="body2" sx={{ mt: 1.5, color: colors.accent800 }}>
                   Starts in {minutesLabel(toMinutes(featured.start_time) - nowMinutes)}
                 </Typography>
               )}
@@ -488,8 +488,8 @@ export function HomePage() {
                       backgroundColor: heavyDates.has(d.date)
                         ? colors.amber500
                         : d.date === today
-                          ? colors.violet500
-                          : colors.violet200,
+                          ? colors.accent500
+                          : colors.accent200,
                       transition: 'height 0.3s ease',
                     }}
                   />
@@ -504,7 +504,7 @@ export function HomePage() {
                     textAlign: 'center',
                     fontSize: 12,
                     fontWeight: d.date === today ? 700 : 600,
-                    color: d.date === today ? colors.violet600 : 'text.secondary',
+                    color: d.date === today ? colors.accent600 : 'text.secondary',
                   }}
                 >
                   {format(parseISO(d.date), 'EEE')}
@@ -531,14 +531,14 @@ export function HomePage() {
                 width: 44,
                 height: 44,
                 borderRadius: '50%',
-                backgroundColor: colors.violet100,
+                backgroundColor: colors.accent100,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
               }}
             >
-              <NightsStayOutlined sx={{ color: colors.violet600 }} aria-hidden />
+              <NightsStayOutlined sx={{ color: colors.accent600 }} aria-hidden />
             </Box>
             <Box sx={{ flex: 1 }}>
               <Typography component="h2" sx={{ fontWeight: 600 }}>

@@ -53,3 +53,13 @@ export function downtimeRanges(survey: Partial<SurveyAnswers> | null | undefined
   if (windDown < DAY) ranges.push({ start: windDown, end: DAY, label: 'Winding down and sleep' });
   return ranges;
 }
+
+export const CHECK_IN_MINUTES = 15;
+
+// When the planner shows the "reflect on your day" check-in: the start of the wind-down hour, so it comes
+// before bed. A wind-down that starts after midnight puts it at 11:30 PM instead, on the same day.
+export function checkInTime(survey: Partial<SurveyAnswers> | null | undefined) {
+  const { bedtime } = sleepPlan(survey);
+  const start = Math.min(bedtime - WIND_DOWN, DAY - 30);
+  return { start, end: start + CHECK_IN_MINUTES };
+}

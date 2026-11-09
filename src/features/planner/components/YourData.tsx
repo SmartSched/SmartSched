@@ -60,7 +60,7 @@ export function YourData() {
           {profile?.consented_at
             ? `You agreed to take part in testing on ${format(new Date(profile.consented_at), 'MMMM d, yyyy')}.`
             : 'You agreed to take part in testing.'}{' '}
-          <Box component={Link} to="/consent" sx={{ color: colors.violet600 }}>
+          <Box component={Link} to="/consent" sx={{ color: colors.accent600 }}>
             Read what's stored and how it's used
           </Box>
         </Typography>

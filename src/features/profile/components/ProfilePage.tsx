@@ -1,5 +1,6 @@
-import { ReactNode } from 'react';
-import { Avatar, Card, CardContent, Typography, Box, Button, Alert } from '@mui/material';
+import { ReactNode, useState } from 'react';
+import { Avatar, Card, CardContent, CircularProgress, Typography, Box, Button, Alert } from '@mui/material';
+import { PhotoCameraOutlined } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { Link } from 'react-router';
 import { useAuth } from '../../../app/lib/AuthContext';
@@ -7,6 +8,8 @@ import { useProfile } from '../../../app/lib/ProfileContext';
 import { CalendarImage } from '../../survey/components/SurveyPage';
 import { TravelTimes } from '../../planner/components/TravelTimes';
 import { YourData } from '../../planner/components/YourData';
+import { AppearanceSettings } from './AppearanceSettings';
+import { avatarFromFile } from '../lib/avatarImage';
 import {
   COMMITMENTS,
   FOCUS_TIMES,
@@ -32,25 +35,82 @@ function Answer({ question, children, wide }: { question: string; children: Reac
 
 export function ProfilePage() {
   const { user } = useAuth();
-  const { profile, error } = useProfile();
+  const { profile, error, saveAvatar } = useProfile();
+  const [pictureBusy, setPictureBusy] = useState(false);
+  const [pictureError, setPictureError] = useState<string | null>(null);
+
+  // Shrunk to a small square in the browser first, then saved on the profile.
+  const changePicture = async (file: File) => {
+    setPictureError(null);
+    setPictureBusy(true);
+    try {
+      await saveAvatar(await avatarFromFile(file));
+    } catch (err) {
+      setPictureError(err instanceof Error ? err.message : "Couldn't save the picture. Try again.");
+    } finally {
+      setPictureBusy(false);
+    }
+  };
+
+  const removePicture = async () => {
+    setPictureError(null);
+    setPictureBusy(true);
+    try {
+      await saveAvatar(null);
+    } catch {
+      setPictureError("Couldn't remove the picture. Try again.");
+    } finally {
+      setPictureBusy(false);
+    }
+  };
   const survey = profile?.survey;
   const calendar = CALENDAR_STYLES.find((c) => c.key === survey?.calendar_style);
 
   return (
     <Box sx={{ maxWidth: '720px', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Avatar sx={{ width: 56, height: 56, backgroundColor: colors.violet100, color: colors.violet800, fontWeight: 700, fontSize: 20 }}>
-          {(profile?.name || user?.email || '?').trim()[0]?.toUpperCase()}
-        </Avatar>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h5" component="h1" sx={{ color: colors.violet500 }} noWrap>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, flexWrap: 'wrap' }}>
+        <Box sx={{ position: 'relative' }}>
+          <Avatar
+            src={profile?.avatar ?? undefined}
+            alt=""
+            sx={{ width: 80, height: 80, backgroundColor: colors.accent100, color: colors.accent800, fontWeight: 700, fontSize: 28 }}
+          >
+            {(profile?.name || user?.email || '?').trim()[0]?.toUpperCase()}
+          </Avatar>
+          {pictureBusy && (
+            <CircularProgress size={80} thickness={2} sx={{ position: 'absolute', inset: 0 }} aria-label="Saving picture" />
+          )}
+        </Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography variant="h5" component="h1" sx={{ color: colors.accent500 }} noWrap>
             {profile?.name || 'Your profile'}
           </Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
             {user?.email}
           </Typography>
+          <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+            <Button component="label" size="small" variant="outlined" startIcon={<PhotoCameraOutlined />} disabled={pictureBusy}>
+              {profile?.avatar ? 'Change picture' : 'Add a picture'}
+              <input
+                hidden
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = ''; // so picking the same file again still fires
+                  if (file) changePicture(file);
+                }}
+              />
+            </Button>
+            {profile?.avatar && (
+              <Button size="small" color="inherit" onClick={removePicture} disabled={pictureBusy} sx={{ color: 'text.secondary' }}>
+                Remove
+              </Button>
+            )}
+          </Box>
         </Box>
       </Box>
+      {pictureError && <Alert severity="error">{pictureError}</Alert>}
 
       {error && <Alert severity="error">Couldn't load your profile: {error}</Alert>}
 
@@ -118,6 +178,8 @@ export function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {profile && <AppearanceSettings />}
 
       {profile && <TravelTimes />}
 
