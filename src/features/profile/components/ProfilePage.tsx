@@ -9,6 +9,7 @@ import { CalendarImage } from '../../survey/components/SurveyPage';
 import { TravelTimes } from '../../planner/components/TravelTimes';
 import { YourData } from '../../planner/components/YourData';
 import { AppearanceSettings } from './AppearanceSettings';
+import { LinkedCalendars } from './LinkedCalendars';
 import { avatarFromFile } from '../lib/avatarImage';
 import {
   COMMITMENTS,
@@ -180,6 +181,8 @@ export function ProfilePage() {
       </Card>
 
       {profile && <AppearanceSettings />}
+
+      {profile && <LinkedCalendars />}
 
       {profile && <TravelTimes />}
 

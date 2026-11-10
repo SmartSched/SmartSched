@@ -600,9 +600,11 @@ describe('POST /api/schedule/suggest', () => {
   const BODY = { now: '2026-10-22T12:00', weekStart: '2026-10-19', tzOffset: 420 };
   const fresh = { scheduler_preferences: prefs, preferences_updated_at: new Date().toISOString() };
 
-  // Queues the route's four loads, then `after` (the event count, or a refresh's reads and update).
+  // Queues the route's linked-calendar check (none linked) and four loads, then `after` (the event count, or a
+  // refresh's reads and update).
   function load(profile, after = []) {
     fake.state.results = [
+      { data: [], error: null },
       { data: [task], error: null },
       { data: [], error: null },
       { data: { survey, survey_updated_at: '2026-10-20T10:00:00Z', ...profile }, error: null },
@@ -714,14 +716,14 @@ describe('schedule events', () => {
   });
 
   it('logs a deleted task block, and not a deleted class', async () => {
-    fake.state.results = [{ data: [taskBlock], error: null }];
+    fake.state.results = [{ data: { feed_id: null }, error: null }, { data: [taskBlock], error: null }];
     expect((await request(app).delete('/api/time-blocks/b1').set(AUTH)).status).toBe(204);
     expect(loggedEvents()).toEqual([
       expect.objectContaining({ kind: 'block_deleted', block_id: 'b1', details: { label: 'Essay', date: '2026-10-23', start: '10:00', end: '10:45' } }),
     ]);
 
     fake.state.queries = [];
-    fake.state.results = [{ data: [{ ...taskBlock, type: 'class', task_id: null }], error: null }];
+    fake.state.results = [{ data: { feed_id: null }, error: null }, { data: [{ ...taskBlock, type: 'class', task_id: null }], error: null }];
     expect((await request(app).delete('/api/time-blocks/b1').set(AUTH)).status).toBe(204);
     expect(fake.state.queries.some((q) => q.table === 'schedule_events')).toBe(false);
   });
@@ -771,6 +773,7 @@ describe('scheduler waking up', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     fake.state.results = [
+      { data: [], error: null }, // no linked calendars
       { data: [task], error: null },
       { data: [], error: null },
       { data: { survey, survey_updated_at: '2026-10-20T10:00:00Z', scheduler_preferences: {}, preferences_updated_at: new Date().toISOString() }, error: null },
@@ -896,5 +899,51 @@ describe('the preference model', () => {
     const fetchSpy = fakeServices({});
     expect((await request(app).post('/api/preferences/refresh').set(AUTH).send(BODY)).status).toBe(200);
     expect(fetchSpy.mock.calls.some(([u]) => u.includes('/gradio_api/'))).toBe(false);
+  });
+});
+
+describe('linked calendars', () => {
+  const LINK = 'https://calendar.google.com/calendar/ical/me%40gmail.com/private-abc/basic.ics';
+  const ICS = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'BEGIN:VEVENT', 'UID:1', 'SUMMARY:Dentist', 'DTSTART:20991110T150000Z', 'DTEND:20991110T160000Z', 'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  it('refuses to edit or delete a block that came from a calendar', async () => {
+    const feedBlock = { id: 'b1', date: '2026-10-23', start_time: '10:00:00', end_time: '11:00:00', activity: 'Dentist', type: 'personal', feed_id: 'f1' };
+    fake.state.results = [{ data: feedBlock, error: null }];
+    expect((await request(app).patch('/api/time-blocks/b1').set(AUTH).send({ activity: 'x' })).status).toBe(409);
+    fake.state.results = [{ data: { feed_id: 'f1' }, error: null }];
+    expect((await request(app).delete('/api/time-blocks/b1').set(AUTH)).status).toBe(409);
+  });
+
+  it('rejects links that are not Google or Outlook calendars, without fetching them', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const res = await request(app).post('/api/calendar-feeds').set(AUTH).send({ url: 'http://169.254.169.254/x.ics', timeZone: 'UTC' });
+    expect(res.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('reports a link that does not load before saving anything', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('not found', { status: 404 }));
+    const res = await request(app).post('/api/calendar-feeds').set(AUTH).send({ url: LINK, timeZone: 'UTC' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Couldn't load/);
+    expect(fake.state.queries.some((q) => q.table === 'calendar_feeds' && q.calls.some(([m]) => m === 'insert'))).toBe(false);
+  });
+
+  it('saves the calendar, copies its events, and hides the secret link', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(ICS, { status: 200 }));
+    const feed = { id: 'f1', provider: 'google', url: LINK, time_zone: 'UTC', last_synced_at: null, last_error: null };
+    const synced = { ...feed, last_synced_at: '2026-11-09T12:00:00Z' };
+    // existing feeds, the insert, the old blocks deleted, the sync time saved, the feed read back
+    fake.state.results = [{ data: [], error: null }, { data: [feed], error: null }, { data: [], error: null }, { data: null, error: null }, { data: synced, error: null }];
+    const res = await request(app).post('/api/calendar-feeds').set(AUTH).send({ url: LINK, timeZone: 'UTC' });
+    expect(res.status).toBe(201);
+    expect(res.body.link).toBe('calendar.google.com/…/basic.ics');
+    expect(JSON.stringify(res.body)).not.toContain('private-abc');
+    expect(res.body.last_synced_at).toBe('2026-11-09T12:00:00Z');
+    expect(inserted('calendar_feeds')).toEqual([expect.objectContaining({ provider: 'google', url: LINK, time_zone: 'UTC' })]);
   });
 });

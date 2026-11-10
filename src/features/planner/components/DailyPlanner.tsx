@@ -56,13 +56,14 @@ import { checkInTime, downtimeRanges, type DowntimeRange } from '../../../app/li
 import { PlannerKey, readShowCommutes, saveShowCommutes } from './PlannerKey';
 import { MonthGrid } from './MonthGrid';
 import { useProfile } from '../../../app/lib/ProfileContext';
+import { PROVIDER_LABELS } from '../../../app/lib/calendarFeeds';
 import { CATEGORY_LABELS, categoryColor, colors, withAlpha } from '../../../app/theme';
 import { BurnoutBanner } from './BurnoutBanner';
 import { ListSkeleton } from '../../../shared/components/States';
 import { TimeSpentDialog } from '../../tasks/components/TimeSpentDialog';
 import { useCurrentTime } from '../../../shared/hooks/useCurrentTime';
 
-type BlockPayload = Omit<TimeBlock, 'id' | 'task' | 'series' | 'series_id' | 'auto'>;
+type BlockPayload = Omit<TimeBlock, 'id' | 'task' | 'series' | 'series_id' | 'auto' | 'feed_id' | 'feed'>;
 
 // What the server says about commutes after a save (see server/commute.js).
 interface CommuteReport {
@@ -700,7 +701,7 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
       )}
       <ButtonBase
         onClick={onClick}
-        aria-label={`Edit ${title}, ${timeRange}`}
+        aria-label={`${block.feed_id ? 'View' : 'Edit'} ${title}, ${timeRange}`}
         sx={{
           flex: 1,
           minWidth: 0,
@@ -727,6 +728,7 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
             {timeRange}
             {task ? ` · ${task.priority} priority` : ''}
             {block.location ? ` · ${placeLabel(block.location)}` : ''}
+            {block.feed ? ` · ${PROVIDER_LABELS[block.feed.provider]}` : ''}
           </Typography>
         )}
       </ButtonBase>
@@ -765,6 +767,8 @@ export function DailyPlanner() {
   const [nearbyVersion, setNearbyVersion] = useState(0);
   const [finishingTask, setFinishingTask] = useState<BlockTask | null>(null);
   const [leftBlocks, setLeftBlocks] = useState<Set<string>>(readLeftBlocks);
+  // Whether any Google / Outlook calendar is linked (null until the first sync answers), for the note at the bottom.
+  const [calendarsLinked, setCalendarsLinked] = useState<boolean | null>(null);
   const now = useCurrentTime();
 
   const weekStart = useMemo(
@@ -831,6 +835,25 @@ export function DailyPlanner() {
     apiGet('/api/tasks')
       .then(setTasks)
       .catch(() => {}); // the task picker and due dates just stay empty; the Tasks page shows the error
+  }, [user]);
+
+  // Linked Google / Outlook calendars are synced when the planner opens (the server skips ones synced in the
+  // last few minutes), and the view reloads if anything was brought in.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    apiPost('/api/calendar-feeds/sync', {})
+      .then((result: { synced: number; feeds: unknown[] }) => {
+        if (cancelled) return;
+        setCalendarsLinked(result.feeds.length > 0);
+        if (result.synced === 0) return;
+        setReloadVersion((v) => v + 1);
+        setNearbyVersion((v) => v + 1);
+      })
+      .catch(() => {}); // the last copy of the calendar still shows
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   useEffect(() => {
@@ -1340,6 +1363,16 @@ export function DailyPlanner() {
       />
       </Box>
 
+      {calendarsLinked === false && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 3, textAlign: 'center' }}>
+          Use Google Calendar or Outlook? You can{' '}
+          <MuiLink component={RouterLink} to="/profile">
+            link them on your Profile page
+          </MuiLink>{' '}
+          to see those events here, and suggested plans will fit around them.
+        </Typography>
+      )}
+
       <Drawer
         anchor="right"
         open={adding !== null || editingBlock !== null}
@@ -1349,7 +1382,7 @@ export function DailyPlanner() {
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', px: 3, pt: 2.5, pb: 1 }}>
           <Box>
             <Typography variant="h6" component="h2">
-              {editingBlock ? 'Edit block' : 'New block'}
+              {editingBlock?.feed_id ? editingBlock.activity : editingBlock ? 'Edit block' : 'New block'}
             </Typography>
             {panelWhen && (
               <Typography variant="body2" color="text.secondary">
@@ -1362,7 +1395,17 @@ export function DailyPlanner() {
           </IconButton>
         </Box>
         <Box sx={{ px: 3, pt: 1, pb: 3 }}>
-          {editingBlock ? (
+          {editingBlock?.feed_id ? (
+            <Box>
+              <Typography variant="body2" color="text.secondary">
+                {editingBlock.feed ? `From your ${PROVIDER_LABELS[editingBlock.feed.provider]}. ` : 'From a linked calendar. '}
+                To change or remove it, edit it there. SmartSched picks up the change the next time the planner opens.
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+                <Button onClick={closePanel}>Close</Button>
+              </Box>
+            </Box>
+          ) : editingBlock ? (
             <BlockForm
               key={editingBlock.id}
               initial={toFormValues(editingBlock)}

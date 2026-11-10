@@ -1,5 +1,7 @@
 // Planner logic with no React in it, so it can be unit-tested.
 
+import type { CalendarFeed } from './calendarFeeds';
+
 // The task a 'task' block is for, as the server attaches it.
 export interface BlockTask {
   id: string;
@@ -25,6 +27,8 @@ export interface TimeBlock {
   series_id?: string | null; // set when the block is one of a repeat
   series?: BlockSeries | null;
   auto?: boolean; // a commute the app added (it's recalculated when the day changes)
+  feed_id?: string | null; // set when the block is an event copied from a linked Google or Outlook calendar
+  feed?: { provider: CalendarFeed['provider'] } | null;
 }
 
 // The repeat rule a block came from, as the server attaches it.

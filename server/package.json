@@ -12,6 +12,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
+    "ical.js": "^2.2.1",
     "ws": "^8.21.1"
   },
   "devDependencies": {

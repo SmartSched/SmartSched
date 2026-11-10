@@ -19,6 +19,7 @@ import { expandSeries } from './series.js';
 import { planCommutes } from './commute.js';
 import { buildSolverInput, preferencesOutOfDate, savedPreferences, startsBefore } from './solverInput.js';
 import { askModel } from './model.js';
+import { addDays, checkFeedUrl, feedBlocks, fetchFeed, isTimeZone, localToday, maskFeedUrl, FEED_ERRORS } from './calendarFeed.js';
 
 // The Express app with every route. index.js starts it; the tests use it directly.
 export const app = express();
@@ -226,7 +227,11 @@ app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
 // Task blocks come back with their task, so the planner can show its title, priority and checkbox.
 const BLOCK_COLUMNS =
   '*, task:tasks(id, title, priority, type, completed, due_date, estimated_time, time_spent), ' +
-  'series:time_block_series(id, days_of_week, interval_weeks, start_date, end_date)';
+  'series:time_block_series(id, days_of_week, interval_weeks, start_date, end_date), ' +
+  'feed:calendar_feeds(provider)';
+
+// Blocks copied from a linked Google or Outlook calendar are changed there, not here.
+const FEED_BLOCK_MESSAGE = 'This comes from your linked calendar. Change it there, and SmartSched picks it up on the next sync.';
 
 // A task block has to point at one of the user's own tasks. Row-level security hides everyone else's,
 // so "not found" covers both a deleted task and someone else's.
@@ -346,6 +351,7 @@ app.patch('/api/time-blocks/:id', requireAuth, async (req, res) => {
     .maybeSingle();
   if (fetchError) return serverError(res, fetchError);
   if (!existing) return res.status(404).json({ error: 'Time block not found' });
+  if (existing.feed_id) return res.status(409).json({ error: FEED_BLOCK_MESSAGE });
 
   const { block, error: validationError } = validateTimeBlock({ ...existing, ...req.body });
   if (validationError) return res.status(400).json({ error: validationError });
@@ -367,6 +373,13 @@ app.patch('/api/time-blocks/:id', requireAuth, async (req, res) => {
 });
 
 app.delete('/api/time-blocks/:id', requireAuth, async (req, res) => {
+  const { data: existing, error: fetchError } = await req.supabase
+    .from('time_blocks')
+    .select('feed_id')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (fetchError) return serverError(res, fetchError);
+  if (existing?.feed_id) return res.status(409).json({ error: FEED_BLOCK_MESSAGE });
   const { data, error } = await req.supabase
     .from('time_blocks')
     .delete()
@@ -561,6 +574,9 @@ app.post('/api/schedule/suggest', requireAuth, async (req, res) => {
   const sinceDate = new Date(`${weekStart}T00:00:00Z`);
   sinceDate.setUTCDate(sinceDate.getUTCDate() - 7);
   const since = sinceDate.toISOString().slice(0, 10);
+
+  // Plan around the linked calendars as they are now. A calendar that can't be reached keeps its last copy.
+  await syncFeeds(req, { onlyStale: true });
 
   const [tasks, blocks, profile, reflections] = await Promise.all([
     req.supabase.from('tasks').select('*').eq('completed', false),
@@ -818,6 +834,139 @@ app.post('/api/preferences/refresh', requireAuth, async (req, res) => {
   const saved = await refreshPreferences(req, clock);
   if (!saved) return res.status(502).json({ error: "Couldn't update your preferences. Try again." });
   res.json({ preferences: saved.scheduler_preferences, updatedAt: saved.preferences_updated_at, version: PREFERENCES_VERSION });
+});
+
+// ---- Linked calendars (Google Calendar, Outlook) through their private iCal link ----
+//
+// Each sync copies the calendar's timed events from a week back to eight weeks ahead into time_blocks
+// (feed_id set, type 'personal'), replacing the last copy. The planner asks for a sync when it opens and
+// "Suggest a plan" does before planning; either way a calendar synced in the last FEED_FRESH_MS is left alone.
+const FEED_FRESH_MS = 15 * 60_000;
+const FEED_DAYS_BACK = 7;
+const FEED_DAYS_AHEAD = 56;
+const FEED_COLUMNS = 'id, provider, url, time_zone, last_synced_at, last_error, created_at';
+const MAX_FEEDS = 5;
+
+const feedForBrowser = (feed) => ({
+  id: feed.id,
+  provider: feed.provider,
+  link: maskFeedUrl(feed.url),
+  last_synced_at: feed.last_synced_at,
+  last_error: feed.last_error,
+});
+
+// Replaces a feed's blocks with what its calendar has now. icsText is passed when it was just fetched.
+// Returns the dates whose blocks changed. Fetch and parse problems are saved on the feed (the old blocks
+// stay); database errors are thrown.
+async function syncFeed(req, feed, icsText) {
+  const today = localToday(feed.time_zone);
+  const window = { from: addDays(today, -FEED_DAYS_BACK), to: addDays(today, FEED_DAYS_AHEAD), timeZone: feed.time_zone };
+  let rows;
+  try {
+    rows = feedBlocks(icsText ?? (await fetchFeed(feed.url)), window);
+  } catch (err) {
+    const message = Object.values(FEED_ERRORS).includes(err.message) ? err.message : FEED_ERRORS.parse;
+    if (!Object.values(FEED_ERRORS).includes(err.message)) console.error('Calendar sync failed', err);
+    await req.supabase.from('calendar_feeds').update({ last_error: message }).eq('id', feed.id);
+    return [];
+  }
+
+  const { data: old, error: deleteError } = await req.supabase
+    .from('time_blocks')
+    .delete()
+    .eq('feed_id', feed.id)
+    .select('date');
+  if (deleteError) throw deleteError;
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await req.supabase
+      .from('time_blocks')
+      .insert(rows.slice(i, i + 500).map((row) => ({ user_id: req.userId, feed_id: feed.id, ...row })));
+    if (error) throw error;
+  }
+  const { error: updateError } = await req.supabase
+    .from('calendar_feeds')
+    .update({ last_synced_at: new Date().toISOString(), last_error: null })
+    .eq('id', feed.id);
+  if (updateError) throw updateError;
+  return [...old.map((b) => b.date), ...rows.map((b) => b.date)];
+}
+
+// Syncs the user's calendars (only the ones not synced lately, when onlyStale), then rebuilds commutes on the
+// days that changed. Never throws: a failed sync shouldn't stop the request that asked for it.
+async function syncFeeds(req, { onlyStale }) {
+  try {
+    const { data: feeds, error } = await req.supabase.from('calendar_feeds').select(FEED_COLUMNS);
+    if (error) throw error;
+    const due = feeds.filter((f) => !onlyStale || !f.last_synced_at || Date.now() - Date.parse(f.last_synced_at) > FEED_FRESH_MS);
+    const dates = (await Promise.all(due.map((feed) => syncFeed(req, feed)))).flat();
+    if (dates.length) await recalcCommutes(req, dates);
+    return { synced: due.length };
+  } catch (err) {
+    console.error('Could not sync calendars', err);
+    return { synced: 0, failed: true };
+  }
+}
+
+app.get('/api/calendar-feeds', requireAuth, async (req, res) => {
+  const { data, error } = await req.supabase.from('calendar_feeds').select(FEED_COLUMNS).order('created_at');
+  if (error) return serverError(res, error);
+  res.json(data.map(feedForBrowser));
+});
+
+// Links a calendar: { url, timeZone }. The link is fetched first so a wrong one is reported before it's saved.
+app.post('/api/calendar-feeds', requireAuth, async (req, res) => {
+  const { url, provider, error: linkError } = checkFeedUrl(req.body.url);
+  if (linkError) return res.status(400).json({ error: linkError });
+  if (!isTimeZone(req.body.timeZone)) return res.status(400).json({ error: 'Time zone is required' });
+
+  const { data: existing, error: listError } = await req.supabase.from('calendar_feeds').select('id, url');
+  if (listError) return serverError(res, listError);
+  if (existing.some((f) => f.url === url)) return res.status(409).json({ error: 'That calendar is already linked.' });
+  if (existing.length >= MAX_FEEDS) return res.status(400).json({ error: `You can link up to ${MAX_FEEDS} calendars.` });
+
+  let icsText;
+  try {
+    icsText = await fetchFeed(url);
+    feedBlocks(icsText, { from: '2000-01-01', to: '2000-01-01', timeZone: req.body.timeZone }); // is it a calendar?
+  } catch (err) {
+    return res.status(400).json({ error: Object.values(FEED_ERRORS).includes(err.message) ? err.message : FEED_ERRORS.parse });
+  }
+
+  const { data, error } = await req.supabase
+    .from('calendar_feeds')
+    .insert({ user_id: req.userId, provider, url, time_zone: req.body.timeZone })
+    .select(FEED_COLUMNS);
+  if (error) return serverError(res, error);
+  const feed = data[0];
+  try {
+    const dates = await syncFeed(req, feed, icsText);
+    await recalcCommutes(req, dates);
+  } catch (err) {
+    return serverError(res, err);
+  }
+  const { data: synced } = await req.supabase.from('calendar_feeds').select(FEED_COLUMNS).eq('id', feed.id).maybeSingle();
+  res.status(201).json(feedForBrowser(synced?.url ? synced : feed));
+});
+
+// Syncs now. { force: true } syncs every calendar; otherwise only ones not synced in the last few minutes.
+app.post('/api/calendar-feeds/sync', requireAuth, async (req, res) => {
+  const result = await syncFeeds(req, { onlyStale: req.body?.force !== true });
+  if (result.failed) return res.status(502).json({ error: "Couldn't sync your calendars. Try again in a moment." });
+  const { data, error } = await req.supabase.from('calendar_feeds').select(FEED_COLUMNS).order('created_at');
+  if (error) return serverError(res, error);
+  res.json({ synced: result.synced, feeds: data.map(feedForBrowser) });
+});
+
+// Unlinks a calendar. Its blocks go with it (on delete cascade).
+app.delete('/api/calendar-feeds/:id', requireAuth, async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Calendar not found' });
+  const { data: old, error: fetchError } = await req.supabase.from('time_blocks').select('date').eq('feed_id', req.params.id);
+  if (fetchError) return serverError(res, fetchError);
+  const { data, error } = await req.supabase.from('calendar_feeds').delete().eq('id', req.params.id).select('id');
+  if (error) return serverError(res, error);
+  if (data.length === 0) return res.status(404).json({ error: 'Calendar not found' });
+  await recalcCommutes(req, old.map((b) => b.date));
+  res.status(204).end();
 });
 
 // Unknown API routes and anything thrown (like a request body that isn't valid JSON) get a JSON error
