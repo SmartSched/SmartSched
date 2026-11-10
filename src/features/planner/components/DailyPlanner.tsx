@@ -29,7 +29,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material';
-import { Add, CheckCircleOutline, ChevronLeft, ChevronRight, Close, NightsStayOutlined } from '@mui/icons-material';
+import { Add, CheckCircleOutline, ChevronLeft, ChevronRight, Close, DensitySmallOutlined, NightsStayOutlined } from '@mui/icons-material';
 import {
   addDays,
   addMonths,
@@ -53,7 +53,8 @@ import type { Task } from '../../../app/lib/tasks';
 import { allPlaces, placeLabel } from '../../../app/lib/places';
 import { readLeftBlocks, saveLeftBlocks } from '../../../app/lib/leftBlocks';
 import { checkInTime, downtimeRanges, type DowntimeRange } from '../../../app/lib/downtime';
-import { PlannerKey, readShowCommutes, saveShowCommutes } from './PlannerKey';
+import { gridSegments, makeScale, type GridScale } from '../lib/gridScale';
+import { PlannerKey, readCompact, readShowCommutes, saveCompact, saveShowCommutes } from './PlannerKey';
 import { MonthGrid } from './MonthGrid';
 import { useProfile } from '../../../app/lib/ProfileContext';
 import { PROVIDER_LABELS } from '../../../app/lib/calendarFeeds';
@@ -75,6 +76,8 @@ type ViewMode = 'day' | 'week' | 'month';
 
 const HOUR_HEIGHT = 64; // px per hour on the grid
 const MIN_BLOCK_HEIGHT = 26; // px, so very short blocks stay readable and clickable
+const COMPACT_HOUR_HEIGHT = 36;
+const COMPACT_MIN_BLOCK_HEIGHT = 18;
 const DEFAULT_START_HOUR = 7;
 const DEFAULT_END_HOUR = 22; // grid runs until 10 PM unless a block goes later
 const WEEK_STARTS_ON = 0; // 0 = Sunday
@@ -524,9 +527,9 @@ function durationText(block: TimeBlock) {
 }
 
 // The red line across today's column at the current time.
-function NowLine({ startHour, endHour, now }: { startHour: number; endHour: number; now: Date }) {
+function NowLine({ scale, now }: { scale: GridScale; now: Date }) {
   const minutes = now.getHours() * 60 + now.getMinutes();
-  if (minutes < startHour * 60 || minutes > endHour * 60) return null;
+  if (!scale.shows(minutes, minutes + 1)) return null;
   return (
     <Box
       aria-hidden
@@ -534,7 +537,7 @@ function NowLine({ startHour, endHour, now }: { startHour: number; endHour: numb
         position: 'absolute',
         left: -5,
         right: 0,
-        top: ((minutes - startHour * 60) / 60) * HOUR_HEIGHT - 1,
+        top: scale.toY(minutes) - 1,
         height: 2,
         backgroundColor: colors.error,
         zIndex: 2,
@@ -556,39 +559,107 @@ function NowLine({ startHour, endHour, now }: { startHour: number; endHour: numb
 
 // Grey bands over the hours we assume someone is asleep, winding down or getting up. Clicks pass through,
 // so a block can still be added there.
-function DowntimeShade({ ranges, startHour, endHour }: { ranges: DowntimeRange[]; startHour: number; endHour: number }) {
+function DowntimeShade({ ranges, scale }: { ranges: DowntimeRange[]; scale: GridScale }) {
   return (
     <>
-      {ranges.map((range) => {
-        const start = Math.max(range.start, startHour * 60);
-        const end = Math.min(range.end, endHour * 60);
-        if (end <= start) return null;
-        return (
-          <Box
-            key={range.start}
-            aria-hidden
-            title={range.label}
-            sx={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              top: ((start - startHour * 60) / 60) * HOUR_HEIGHT,
-              height: ((end - start) / 60) * HOUR_HEIGHT,
-              backgroundColor: colors.surfaceMuted,
-              backgroundImage: `repeating-linear-gradient(135deg, transparent 0 8px, ${withAlpha(colors.grey200, 50)} 8px 9px)`,
-              pointerEvents: 'none',
-            }}
-          />
-        );
-      })}
+      {scale.segments.flatMap((segment) =>
+        ranges.map((range) => {
+          const start = Math.max(range.start, segment.from * 60);
+          const end = Math.min(range.end, segment.to * 60);
+          if (end <= start) return null;
+          return (
+            <Box
+              key={`${segment.from}-${range.start}`}
+              aria-hidden
+              title={range.label}
+              sx={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: scale.toY(start),
+                height: ((end - start) / 60) * scale.hourHeight,
+                backgroundColor: colors.surfaceMuted,
+                backgroundImage: `repeating-linear-gradient(135deg, transparent 0 8px, ${withAlpha(colors.grey200, 50)} 8px 9px)`,
+                pointerEvents: 'none',
+              }}
+            />
+          );
+        }),
+      )}
     </>
+  );
+}
+
+// The hour lines in a day column, with a band where hours are left out.
+function GridLines({ scale }: { scale: GridScale }) {
+  return (
+    <>
+      {scale.segments.map((segment, i) => (
+        <Box key={segment.from}>
+          {i > 0 && <GapBand height={scale.gap} />}
+          {Array.from({ length: segment.to - segment.from }, (_, j) => (
+            <Box
+              key={j}
+              sx={{ height: scale.hourHeight, borderTop: i + j > 0 ? `1px dashed ${colors.grey200}` : 'none', boxSizing: 'border-box' }}
+            />
+          ))}
+        </Box>
+      ))}
+    </>
+  );
+}
+
+function GapBand({ height, label }: { height: number; label?: string }) {
+  return (
+    <Box
+      sx={{
+        height,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        pr: 1,
+        borderTop: `1px solid ${colors.grey200}`,
+        borderBottom: `1px solid ${colors.grey200}`,
+        backgroundImage: `repeating-linear-gradient(90deg, ${colors.grey200} 0 4px, transparent 4px 8px)`,
+        backgroundSize: '100% 1px',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      {label && (
+        <Typography sx={{ fontSize: 10, fontWeight: 600, color: 'text.secondary', backgroundColor: colors.surface, px: 0.5 }}>
+          {label}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+// The hour labels down the left of the grid, lined up with GridLines.
+function HourLabels({ scale, width, small }: { scale: GridScale; width: number; small?: boolean }) {
+  return (
+    <Box sx={{ width, flexShrink: 0 }}>
+      {scale.segments.map((segment, i) => (
+        <Box key={segment.from}>
+          {i > 0 && <GapBand height={scale.gap} label={`${formatHour(scale.segments[i - 1].to)}–${formatHour(segment.from)}`} />}
+          {Array.from({ length: segment.to - segment.from }, (_, j) => (
+            <Box key={j} sx={{ height: scale.hourHeight, pr: small ? 1 : 2, pt: 0.25, boxSizing: 'border-box' }}>
+              <Typography variant={small ? 'caption' : 'body2'} sx={{ color: 'text.secondary', fontWeight: 600, lineHeight: 1.2 }}>
+                {formatHour(segment.from + j)}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      ))}
+    </Box>
   );
 }
 
 // The evening "reflect on your day" check-in: not a saved block, just a reminder drawn at the start of the
 // wind-down hour. Ticked once that day has a reflection; opens the Reflect page for that day.
-function CheckIn({ date, done, time, startHour }: { date: string; done: boolean; time: { start: number; end: number }; startHour: number }) {
+function CheckIn({ date, done, time, scale }: { date: string; done: boolean; time: { start: number; end: number }; scale: GridScale }) {
   const navigate = useNavigate();
+  if (!scale.shows(time.start, time.end)) return null;
   return (
     <ButtonBase
       onClick={(e) => {
@@ -600,8 +671,8 @@ function CheckIn({ date, done, time, startHour }: { date: string; done: boolean;
         position: 'absolute',
         left: 3,
         right: 3,
-        top: ((time.start - startHour * 60) / 60) * HOUR_HEIGHT + 1,
-        height: Math.max(((time.end - time.start) / 60) * HOUR_HEIGHT - 2, MIN_BLOCK_HEIGHT - 4),
+        top: scale.toY(time.start) + 1,
+        height: Math.max(((time.end - time.start) / 60) * scale.hourHeight - 2, 16),
         zIndex: 1,
         justifyContent: 'flex-start',
         gap: 0.5,
@@ -628,9 +699,9 @@ function CheckIn({ date, done, time, startHour }: { date: string; done: boolean;
 }
 
 // Where in a day column the user clicked, as a start time rounded down to the half hour.
-function timeAtClick(e: MouseEvent<HTMLElement>, startHour: number) {
+function timeAtClick(e: MouseEvent<HTMLElement>, scale: GridScale) {
   const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
-  const minutes = startHour * 60 + Math.floor(((y / HOUR_HEIGHT) * 60) / 30) * 30;
+  const minutes = Math.floor(scale.fromY(y) / 30) * 30;
   const clamped = Math.min(Math.max(minutes, 0), 23 * 60);
   return `${String(Math.floor(clamped / 60)).padStart(2, '0')}:${String(clamped % 60).padStart(2, '0')}`;
 }
@@ -646,17 +717,18 @@ interface TimeBlockItemProps {
   block: TimeBlock;
   column: number;
   columns: number;
-  startHour: number;
+  scale: GridScale;
+  minHeight: number;
   dense?: boolean;
   onClick: () => void;
   onToggleTask: (block: TimeBlock) => void;
 }
 
-function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onToggleTask }: TimeBlockItemProps) {
+function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClick, onToggleTask }: TimeBlockItemProps) {
   const start = toMinutes(block.start_time);
   const end = toMinutes(block.end_time);
-  const top = ((start - startHour * 60) / 60) * HOUR_HEIGHT;
-  const height = Math.max(((end - start) / 60) * HOUR_HEIGHT, MIN_BLOCK_HEIGHT);
+  const top = scale.toY(start, 'start');
+  const height = Math.max(scale.toY(end, 'end') - top, minHeight);
   const compact = height < 48;
   const color = categoryColor(block.type);
   const timeRange = `${formatTime(block.start_time)} – ${formatTime(block.end_time)}`;
@@ -664,6 +736,8 @@ function TimeBlockItem({ block, column, columns, startHour, dense, onClick, onTo
   // Task blocks show the task's current title and priority, and a checkbox that completes the task.
   const task = block.type === 'task' ? block.task : null;
   const title = task?.title ?? block.activity;
+  // Compact view leaves 2–6 AM out; a block entirely in there isn't drawn.
+  if (!scale.shows(start, end)) return null;
 
   return (
     <Box
@@ -748,6 +822,9 @@ export function DailyPlanner() {
   // The add form's starting values while it's open (from the button or a click on an empty slot).
   const [adding, setAdding] = useState<BlockFormValues | null>(null);
   const [showCommutes, setShowCommutes] = useState(readShowCommutes);
+  const [compact, setCompact] = useState(readCompact);
+  const hourHeight = compact ? COMPACT_HOUR_HEIGHT : HOUR_HEIGHT;
+  const minBlockHeight = compact ? COMPACT_MIN_BLOCK_HEIGHT : MIN_BLOCK_HEIGHT;
   const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null);
   const [deletingBlock, setDeletingBlock] = useState<TimeBlock | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
@@ -890,8 +967,8 @@ export function DailyPlanner() {
     [timeBlocks, showCommutes],
   );
   const placedBlocks = useMemo(
-    () => layoutBlocks(visibleBlocks, (MIN_BLOCK_HEIGHT / HOUR_HEIGHT) * 60),
-    [visibleBlocks],
+    () => layoutBlocks(visibleBlocks, (minBlockHeight / hourHeight) * 60),
+    [visibleBlocks, minBlockHeight, hourHeight],
   );
   const blocksByDate = useMemo(() => {
     const map = new Map<string, TimeBlock[]>();
@@ -901,14 +978,22 @@ export function DailyPlanner() {
     return map;
   }, [visibleBlocks]);
 
-  // Widen the grid past 7 AM–10 PM when a block starts earlier or ends later.
-  const startHour = Math.min(DEFAULT_START_HOUR, ...visibleBlocks.map((b) => Math.floor(toMinutes(b.start_time) / 60)));
-  const endHour = Math.max(
-    DEFAULT_END_HOUR,
-    Math.ceil(checkIn.end / 60), // so the evening check-in is on the grid
-    ...visibleBlocks.map((b) => Math.ceil(toMinutes(b.end_time) / 60)),
+  // Normal view widens past 7 AM–10 PM when something starts earlier or ends later; compact view is shorter rows
+  // and never shows 2–6 AM.
+  const scale = useMemo(
+    () =>
+      makeScale(
+        gridSegments({
+          compact,
+          defaultStart: DEFAULT_START_HOUR,
+          defaultEnd: DEFAULT_END_HOUR,
+          starts: visibleBlocks.map((b) => toMinutes(b.start_time)),
+          ends: [...visibleBlocks.map((b) => toMinutes(b.end_time)), checkIn.end], // so the evening check-in fits
+        }),
+        hourHeight,
+      ),
+    [compact, visibleBlocks, checkIn.end, hourHeight],
   );
-  const hours = Array.from({ length: endHour - startHour }, (_, i) => i + startHour);
 
   const changeDay = (days: number) => {
     setSelectedDate((current) => format(addDays(parseISO(current), days), 'yyyy-MM-dd'));
@@ -1088,7 +1173,7 @@ export function DailyPlanner() {
 
   // A click on an empty part of a day column starts a block there.
   const openAddAt = (date: string, e: MouseEvent<HTMLElement>) => {
-    const start = timeAtClick(e, startHour);
+    const start = timeAtClick(e, scale);
     setEditingBlock(null);
     setAdding({ ...emptyForm(date), start_time: start, end_time: plusOneHour(start) });
   };
@@ -1149,6 +1234,21 @@ export function DailyPlanner() {
           <ToggleButton value="week" sx={{ px: 2 }}>Week</ToggleButton>
           <ToggleButton value="month" sx={{ px: 2 }}>Month</ToggleButton>
         </ToggleButtonGroup>
+        {viewMode !== 'month' && (
+          <ToggleButton
+            value="compact"
+            size="small"
+            selected={compact}
+            onChange={() => {
+              setCompact(!compact);
+              saveCompact(!compact);
+            }}
+            sx={{ px: 1.5, gap: 0.75 }}
+          >
+            <DensitySmallOutlined fontSize="small" aria-hidden />
+            Compact
+          </ToggleButton>
+        )}
         <Button variant="contained" startIcon={<Add />} onClick={() => setAdding(emptyForm(viewMode === 'day' ? selectedDate : today))}>
           Add block
         </Button>
@@ -1231,32 +1331,24 @@ export function DailyPlanner() {
               </Typography>
             )}
             <Box sx={{ display: 'flex' }}>
-              <Box sx={{ width: '80px', flexShrink: 0 }}>
-                {hours.map((hour) => (
-                  <Box key={hour} sx={{ height: HOUR_HEIGHT, pr: 2, pt: 0.5 }}>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                      {formatHour(hour)}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
+              <HourLabels scale={scale} width={compact ? 56 : 80} small={compact} />
               <Box
                 onClick={(e) => openAddAt(selectedDate, e)}
                 sx={{ flex: 1, position: 'relative', borderLeft: `2px solid ${colors.grey200}`, cursor: 'copy' }}
               >
-                {hours.map((hour, index) => (
-                  <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? `1px dashed ${colors.grey200}` : 'none' }} />
-                ))}
-                <DowntimeShade ranges={downtime} startHour={startHour} endHour={endHour} />
-                <CheckIn date={selectedDate} done={reflectedDates.has(selectedDate)} time={checkIn} startHour={startHour} />
-                {isToday && <NowLine startHour={startHour} endHour={endHour} now={new Date(now)} />}
+                <GridLines scale={scale} />
+                <DowntimeShade ranges={downtime} scale={scale} />
+                <CheckIn date={selectedDate} done={reflectedDates.has(selectedDate)} time={checkIn} scale={scale} />
+                {isToday && <NowLine scale={scale} now={new Date(now)} />}
                 {placedBlocks.map(({ block, column, columns }) => (
                   <TimeBlockItem
                     key={block.id}
                     block={block}
                     column={column}
                     columns={columns}
-                    startHour={startHour}
+                    scale={scale}
+                    minHeight={minBlockHeight}
+                    dense={compact}
                     onClick={() => openEdit(block)}
                     onToggleTask={handleToggleTask}
                   />
@@ -1268,7 +1360,7 @@ export function DailyPlanner() {
       ) : (
         <Card sx={{ borderRadius: '16px' }}>
           <CardContent sx={{ overflowX: 'auto' }}>
-            <Box sx={{ minWidth: 780 }}>
+            <Box sx={{ minWidth: compact ? 640 : 780 }}>
               <Box sx={{ display: 'flex' }}>
                 <Box sx={{ width: '56px', flexShrink: 0 }} />
                 {weekDates.map((date) => {
@@ -1302,17 +1394,9 @@ export function DailyPlanner() {
                 })}
               </Box>
               <Box sx={{ display: 'flex' }}>
-                <Box sx={{ width: '56px', flexShrink: 0 }}>
-                  {hours.map((hour) => (
-                    <Box key={hour} sx={{ height: HOUR_HEIGHT, pr: 1, pt: 0.5 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                        {formatHour(hour)}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
+                <HourLabels scale={scale} width={56} small />
                 {weekDates.map((date) => {
-                  const dayBlocks = layoutBlocks(blocksByDate.get(date) ?? []);
+                  const dayBlocks = layoutBlocks(blocksByDate.get(date) ?? [], (minBlockHeight / hourHeight) * 60);
                   return (
                     <Box
                       key={date}
@@ -1325,19 +1409,18 @@ export function DailyPlanner() {
                         cursor: 'copy',
                       }}
                     >
-                      {hours.map((hour, index) => (
-                        <Box key={hour} sx={{ height: HOUR_HEIGHT, borderTop: index > 0 ? `1px dashed ${colors.grey200}` : 'none' }} />
-                      ))}
-                      <DowntimeShade ranges={downtime} startHour={startHour} endHour={endHour} />
-                      <CheckIn date={date} done={reflectedDates.has(date)} time={checkIn} startHour={startHour} />
-                      {date === today && <NowLine startHour={startHour} endHour={endHour} now={new Date(now)} />}
+                      <GridLines scale={scale} />
+                      <DowntimeShade ranges={downtime} scale={scale} />
+                      <CheckIn date={date} done={reflectedDates.has(date)} time={checkIn} scale={scale} />
+                      {date === today && <NowLine scale={scale} now={new Date(now)} />}
                       {dayBlocks.map(({ block, column, columns }) => (
                         <TimeBlockItem
                           key={block.id}
                           block={block}
                           column={column}
                           columns={columns}
-                          startHour={startHour}
+                          scale={scale}
+                          minHeight={minBlockHeight}
                           dense
                           onClick={() => openEdit(block)}
                           onToggleTask={handleToggleTask}
@@ -1360,6 +1443,7 @@ export function DailyPlanner() {
           saveShowCommutes(show);
         }}
         hasSurvey={Boolean(profile?.survey)}
+        compact={compact && viewMode !== 'month'}
       />
       </Box>
 
