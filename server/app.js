@@ -227,7 +227,7 @@ app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
 // Task blocks come back with their task, so the planner can show its title, priority and checkbox.
 const BLOCK_COLUMNS =
   '*, task:tasks(id, title, priority, type, completed, due_date, estimated_time, time_spent), ' +
-  'series:time_block_series(id, days_of_week, interval_weeks, start_date, end_date), ' +
+  'series:time_block_series(id, days_of_week, interval_weeks, recurrence_type, day_of_month, week_of_month, weekday, start_date, end_date), ' +
   'feed:calendar_feeds(provider)';
 
 // Blocks copied from a linked Google or Outlook calendar are changed there, not here.
@@ -397,7 +397,7 @@ app.delete('/api/time-blocks/:id', requireAuth, async (req, res) => {
 
 // Writes out one block per date of a repeat.
 async function insertOccurrences(req, series) {
-  const { id, user_id, days_of_week, interval_weeks, start_date, end_date, created_at, ...fields } = series;
+  const { id, user_id, days_of_week, interval_weeks, recurrence_type, day_of_month, week_of_month, weekday, start_date, end_date, created_at, ...fields } = series;
   const rows = expandSeries(series).map((date) => ({ user_id: req.userId, ...fields, date, task_id: null, series_id: id }));
   return req.supabase.from('time_blocks').insert(rows).select(BLOCK_COLUMNS);
 }

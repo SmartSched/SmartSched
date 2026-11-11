@@ -18,12 +18,22 @@ const week = (day) => Math.floor((day + 4) / 7);
 
 // Every date from start_date to end_date on one of days_of_week, in every week (interval_weeks 1) or every
 // other week counting from the week start_date is in (interval_weeks 2).
-export function expandSeries({ days_of_week, interval_weeks = 1, start_date, end_date }) {
+export function expandSeries({
+  days_of_week = [], interval_weeks = 1, recurrence_type = 'weekly', day_of_month, week_of_month, weekday: monthlyWeekday,
+  start_date, end_date,
+}) {
   const first = dayNumber(start_date);
   const last = dayNumber(end_date);
   const dates = [];
   for (let day = first; day <= last; day++) {
-    if (days_of_week.includes(weekday(day)) && (week(day) - week(first)) % interval_weeks === 0) {
+    const date = new Date(day * DAY_MS);
+    const dayOfMonth = date.getUTCDate();
+    const isMonthlyDate = recurrence_type === 'monthly_date' && dayOfMonth === day_of_month;
+    const isMonthlyWeekday = recurrence_type === 'monthly_weekday'
+      && weekday(day) === monthlyWeekday && Math.ceil(dayOfMonth / 7) === week_of_month;
+    const isWeekly = recurrence_type === 'weekly'
+      && days_of_week.includes(weekday(day)) && (week(day) - week(first)) % interval_weeks === 0;
+    if (isWeekly || isMonthlyDate || isMonthlyWeekday) {
       dates.push(dateOf(day));
     }
   }

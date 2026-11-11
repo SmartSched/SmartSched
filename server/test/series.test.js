@@ -34,4 +34,16 @@ describe('expandSeries', () => {
   it('can be every day', () => {
     expect(expandSeries({ days_of_week: [0, 1, 2, 3, 4, 5, 6], start_date: '2026-09-28', end_date: '2026-10-04' })).toHaveLength(7);
   });
+
+  it('lists the same date each month, skipping months without that date', () => {
+    expect(expandSeries({ recurrence_type: 'monthly_date', day_of_month: 31, start_date: '2026-01-01', end_date: '2026-04-30' })).toEqual([
+      '2026-01-31', '2026-03-31',
+    ]);
+  });
+
+  it('lists an ordinal weekday each month', () => {
+    expect(expandSeries({ recurrence_type: 'monthly_weekday', week_of_month: 1, weekday: 1, start_date: '2026-01-01', end_date: '2026-03-31' })).toEqual([
+      '2026-01-05', '2026-02-02', '2026-03-02',
+    ]);
+  });
 });

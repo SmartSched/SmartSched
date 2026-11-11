@@ -188,7 +188,8 @@ describe('validateSeries', () => {
     expect(validateSeries(valid)).toEqual({
       series: {
         activity: 'CSC 453', type: 'class', location: 'campus', start_time: '10:00:00', end_time: '11:15:00',
-        days_of_week: [1, 3, 5], interval_weeks: 1, start_date: '2026-09-28', end_date: '2026-12-11',
+        days_of_week: [1, 3, 5], interval_weeks: 1, recurrence_type: 'weekly', day_of_month: null,
+        week_of_month: null, weekday: null, start_date: '2026-09-28', end_date: '2026-12-11',
       },
     });
   });
@@ -198,10 +199,21 @@ describe('validateSeries', () => {
     expect(validateSeries(rest).series?.interval_weeks).toBe(1);
   });
 
+  it('accepts monthly rules', () => {
+    expect(validateSeries({ ...valid, recurrence_type: 'monthly_date', day_of_month: 15 })).toMatchObject({
+      series: { recurrence_type: 'monthly_date', day_of_month: 15, days_of_week: [], interval_weeks: 1 },
+    });
+    expect(validateSeries({ ...valid, recurrence_type: 'monthly_weekday', week_of_month: 1, weekday: 1 })).toMatchObject({
+      series: { recurrence_type: 'monthly_weekday', week_of_month: 1, weekday: 1, days_of_week: [] },
+    });
+  });
+
   it('explains what\'s wrong', () => {
     expect(validateSeries({ ...valid, days_of_week: [] }).error).toBe('Pick at least one day of the week');
     expect(validateSeries({ ...valid, days_of_week: [7] }).error).toBe('Pick at least one day of the week');
     expect(validateSeries({ ...valid, interval_weeks: 3 }).error).toBe('Repeat every week or every other week');
+    expect(validateSeries({ ...valid, recurrence_type: 'monthly_date', day_of_month: 32 }).error).toBe('Pick a day of the month');
+    expect(validateSeries({ ...valid, recurrence_type: 'monthly_weekday', week_of_month: 6, weekday: 1 }).error).toBe('Pick which weekday of the month');
     expect(validateSeries({ ...valid, end_date: '2026-09-01' }).error).toMatch(/end on or after/);
     expect(validateSeries({ ...valid, end_date: '2027-12-01' }).error).toBe('A repeat can last up to a year');
     expect(validateSeries({ ...valid, type: 'task', task_id: 'x' }).error).toBe('Task blocks can\'t repeat');

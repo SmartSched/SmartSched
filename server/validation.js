@@ -126,8 +126,8 @@ function daysBetween(start, end) {
   return (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000;
 }
 
-// A repeating block: the block's own fields plus which weekdays (0 = Sunday), every 1 or 2 weeks, and the
-// first and last dates. Returns { series } or { error }.
+// A repeating block: weekly rules choose weekdays, while monthly rules choose a calendar date or ordinal weekday.
+// Returns { series } or { error }.
 export function validateSeries(input) {
   if (!input || typeof input !== 'object') return { error: 'Repeat details are required' };
   if (input.type === 'task') return { error: 'Task blocks can\'t repeat' };
@@ -137,18 +137,32 @@ export function validateSeries(input) {
   if (daysBetween(input.start_date, input.end_date) > MAX_SERIES_DAYS) return { error: 'A repeat can last up to a year' };
   const { block, error } = validateTimeBlock({ ...input, date: input.start_date });
   if (error) return { error };
+  const recurrence_type = input.recurrence_type ?? 'weekly';
+  if (!['weekly', 'monthly_date', 'monthly_weekday'].includes(recurrence_type)) return { error: 'Pick a valid repeat pattern' };
   const days = input.days_of_week;
-  if (!Array.isArray(days) || days.length === 0 || !days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) {
-    return { error: 'Pick at least one day of the week' };
-  }
   const interval = input.interval_weeks ?? 1;
-  if (interval !== 1 && interval !== 2) return { error: 'Repeat every week or every other week' };
+  if (recurrence_type === 'weekly') {
+    if (!Array.isArray(days) || days.length === 0 || !days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) {
+      return { error: 'Pick at least one day of the week' };
+    }
+    if (interval !== 1 && interval !== 2) return { error: 'Repeat every week or every other week' };
+  }
+  if (recurrence_type === 'monthly_date' && (!Number.isInteger(input.day_of_month) || input.day_of_month < 1 || input.day_of_month > 31)) {
+    return { error: 'Pick a day of the month' };
+  }
+  if (recurrence_type === 'monthly_weekday' && (!Number.isInteger(input.week_of_month) || input.week_of_month < 1 || input.week_of_month > 5 || !Number.isInteger(input.weekday) || input.weekday < 0 || input.weekday > 6)) {
+    return { error: 'Pick which weekday of the month' };
+  }
   const { date, task_id, ...fields } = block;
   return {
     series: {
       ...fields,
-      days_of_week: [...new Set(days)].sort((a, b) => a - b),
-      interval_weeks: interval,
+      days_of_week: recurrence_type === 'weekly' ? [...new Set(days)].sort((a, b) => a - b) : [],
+      interval_weeks: recurrence_type === 'weekly' ? interval : 1,
+      recurrence_type,
+      day_of_month: recurrence_type === 'monthly_date' ? input.day_of_month : null,
+      week_of_month: recurrence_type === 'monthly_weekday' ? input.week_of_month : null,
+      weekday: recurrence_type === 'monthly_weekday' ? input.weekday : null,
       start_date: input.start_date,
       end_date: input.end_date,
     },

@@ -91,6 +91,12 @@ function formatHour(hour: number) {
   return `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
 }
 
+function ordinal(value: number) {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
+  return `${value}${['th', 'st', 'nd', 'rd'][value % 10] ?? 'th'}`;
+}
+
 function formatDay(date: string) {
   const day = parseISO(date);
   return format(day, day.getFullYear() === new Date().getFullYear() ? 'EEEE, MMMM d' : 'EEEE, MMMM d, yyyy');
@@ -118,6 +124,10 @@ interface RepeatValues {
   enabled: boolean;
   days: number[]; // 0 = Sunday
   interval: 1 | 2;
+  recurrence_type: 'weekly' | 'monthly_date' | 'monthly_weekday';
+  day_of_month: number;
+  week_of_month: 1 | 2 | 3 | 4 | 5;
+  weekday: number;
   start_date: string;
   end_date: string;
 }
@@ -136,6 +146,10 @@ interface BlockFormValues {
 type SeriesPayload = Omit<BlockPayload, 'date' | 'task_id'> & {
   days_of_week: number[];
   interval_weeks: 1 | 2;
+  recurrence_type: 'weekly' | 'monthly_date' | 'monthly_weekday';
+  day_of_month: number | null;
+  week_of_month: number | null;
+  weekday: number | null;
   start_date: string;
   end_date: string;
 };
@@ -149,10 +163,15 @@ interface BlockSubmission {
 }
 
 function defaultRepeat(date: string): RepeatValues {
+  const selectedDate = parseISO(date);
   return {
     enabled: false,
-    days: [parseISO(date).getDay()],
+    days: [selectedDate.getDay()],
     interval: 1,
+    recurrence_type: 'weekly',
+    day_of_month: selectedDate.getDate(),
+    week_of_month: Math.ceil(selectedDate.getDate() / 7) as 1 | 2 | 3 | 4 | 5,
+    weekday: selectedDate.getDay(),
     start_date: date,
     end_date: format(addDays(parseISO(date), REPEAT_WEEKS * 7 - 1), 'yyyy-MM-dd'),
   };
@@ -185,6 +204,10 @@ function toFormValues(block: TimeBlock): BlockFormValues {
           enabled: true,
           days: block.series.days_of_week,
           interval: block.series.interval_weeks,
+          recurrence_type: block.series.recurrence_type ?? 'weekly',
+          day_of_month: block.series.day_of_month ?? parseISO(block.date).getDate(),
+          week_of_month: (block.series.week_of_month ?? Math.ceil(parseISO(block.date).getDate() / 7)) as 1 | 2 | 3 | 4 | 5,
+          weekday: block.series.weekday ?? parseISO(block.date).getDay(),
           start_date: block.series.start_date,
           end_date: block.series.end_date,
         }
@@ -250,8 +273,8 @@ function BlockForm({
       setError('End time must be after the start time.');
       return;
     }
-    if (repeating && (values.repeat.days.length === 0 || !values.repeat.start_date || !values.repeat.end_date)) {
-      setError('Pick the days it repeats on, and when it starts and ends.');
+    if (repeating && (values.repeat.recurrence_type === 'weekly' && values.repeat.days.length === 0 || !values.repeat.start_date || !values.repeat.end_date)) {
+      setError('Pick the repeat pattern, and when it starts and ends.');
       return;
     }
     if (repeating && values.repeat.end_date < values.repeat.start_date) {
@@ -274,6 +297,10 @@ function BlockForm({
           ...fields,
           days_of_week: values.repeat.days,
           interval_weeks: values.repeat.interval,
+          recurrence_type: values.repeat.recurrence_type,
+          day_of_month: values.repeat.recurrence_type === 'monthly_date' ? values.repeat.day_of_month : null,
+          week_of_month: values.repeat.recurrence_type === 'monthly_weekday' ? values.repeat.week_of_month : null,
+          weekday: values.repeat.recurrence_type === 'monthly_weekday' ? values.repeat.weekday : null,
           start_date: values.repeat.start_date,
           end_date: values.repeat.end_date,
         }
@@ -416,7 +443,7 @@ function BlockForm({
                 onChange={(e) => setRepeat({ enabled: e.target.checked })}
               />
             }
-            label={inSeries ? 'Repeats' : 'Repeat weekly'}
+            label={inSeries ? 'Repeats' : 'Repeat'}
             sx={{ m: 0 }}
           />
           {values.repeat.enabled && (
@@ -426,29 +453,71 @@ function BlockForm({
                   Changes here only apply if you save all in the series.
                 </Typography>
               )}
-              <ToggleButtonGroup
-                size="small"
-                value={values.repeat.days}
-                onChange={(_, days: number[]) => setRepeat({ days: [...days].sort((a, b) => a - b) })}
-                aria-label="Days it repeats on"
-              >
-                {WEEKDAY_LETTERS.map((letter, day) => (
-                  <ToggleButton key={day} value={day} aria-label={WEEKDAY_NAMES[day]} sx={{ width: 40 }}>
-                    {letter}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
               <FormControl fullWidth size="small">
-                <InputLabel>How often</InputLabel>
+                <InputLabel>Repeats</InputLabel>
                 <Select
-                  value={values.repeat.interval}
-                  label="How often"
-                  onChange={(e) => setRepeat({ interval: Number(e.target.value) as 1 | 2 })}
+                  value={values.repeat.recurrence_type}
+                  label="Repeats"
+                  onChange={(e) => setRepeat({ recurrence_type: e.target.value as RepeatValues['recurrence_type'] })}
                 >
-                  <MenuItem value={1}>Every week</MenuItem>
-                  <MenuItem value={2}>Every other week</MenuItem>
+                  <MenuItem value="weekly">Weekly</MenuItem>
+                  <MenuItem value="monthly_date">Monthly, on a date</MenuItem>
+                  <MenuItem value="monthly_weekday">Monthly, on a weekday</MenuItem>
                 </Select>
               </FormControl>
+              {values.repeat.recurrence_type === 'weekly' ? (
+                <>
+                  <ToggleButtonGroup
+                    size="small"
+                    value={values.repeat.days}
+                    onChange={(_, days: number[]) => setRepeat({ days: [...days].sort((a, b) => a - b) })}
+                    aria-label="Days it repeats on"
+                  >
+                    {WEEKDAY_LETTERS.map((letter, day) => (
+                      <ToggleButton key={day} value={day} aria-label={WEEKDAY_NAMES[day]} sx={{ width: 40 }}>
+                        {letter}
+                      </ToggleButton>
+                    ))}
+                  </ToggleButtonGroup>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>How often</InputLabel>
+                    <Select
+                      value={values.repeat.interval}
+                      label="How often"
+                      onChange={(e) => setRepeat({ interval: Number(e.target.value) as 1 | 2 })}
+                    >
+                      <MenuItem value={1}>Every week</MenuItem>
+                      <MenuItem value={2}>Every other week</MenuItem>
+                    </Select>
+                  </FormControl>
+                </>
+              ) : values.repeat.recurrence_type === 'monthly_date' ? (
+                <FormControl fullWidth size="small">
+                  <InputLabel>Day of month</InputLabel>
+                  <Select
+                    value={values.repeat.day_of_month}
+                    label="Day of month"
+                    onChange={(e) => setRepeat({ day_of_month: Number(e.target.value) })}
+                  >
+                    {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <MenuItem key={day} value={day}>{ordinal(day)} of each month</MenuItem>)}
+                  </Select>
+                </FormControl>
+              ) : (
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Week</InputLabel>
+                    <Select value={values.repeat.week_of_month} label="Week" onChange={(e) => setRepeat({ week_of_month: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}>
+                      {[1, 2, 3, 4, 5].map((week) => <MenuItem key={week} value={week}>{ordinal(week)}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Weekday</InputLabel>
+                    <Select value={values.repeat.weekday} label="Weekday" onChange={(e) => setRepeat({ weekday: Number(e.target.value) })}>
+                      {WEEKDAY_NAMES.map((day, index) => <MenuItem key={day} value={index}>{day}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </Box>
+              )}
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 <TextField
                   size="small"
