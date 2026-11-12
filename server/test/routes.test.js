@@ -94,6 +94,7 @@ const ROUTES = [
   ["delete", "/api/account"],
   ["put", "/api/profile/appearance"],
   ["put", "/api/profile/avatar"],
+  ["put", "/api/profile/name"],
   ["get", "/api/reflections?start=2026-11-01&end=2026-11-07"],
 ];
 
@@ -1864,5 +1865,79 @@ describe("linked calendars", () => {
         time_zone: "UTC",
       }),
     ]);
+  });
+});
+
+describe("encryption", () => {
+  const KEY = Buffer.alloc(32, 7).toString("base64");
+  let crypto;
+  beforeEach(async () => {
+    process.env.ENCRYPTION_KEY = KEY;
+    crypto = await import("../crypto.js");
+  });
+  afterEach(() => {
+    delete process.env.ENCRYPTION_KEY;
+  });
+
+  it("saves a task's title and description encrypted and sends them back readable", async () => {
+    const saved = {
+      id: TASK_ID,
+      title: crypto.encryptValue("Essay draft"),
+      description: crypto.encryptValue("for Dr. Smith"),
+      type: "homework",
+      priority: "high",
+    };
+    fake.state.results = [{ data: [saved], error: null }];
+    const res = await request(app)
+      .post("/api/tasks")
+      .set(AUTH)
+      .send({ title: "Essay draft", description: "for Dr. Smith", type: "homework", priority: "high" });
+    expect(res.status).toBe(201);
+    expect(res.body.title).toBe("Essay draft");
+    expect(res.body.description).toBe("for Dr. Smith");
+    const [row] = inserted("tasks");
+    expect(crypto.isEncrypted(row.title)).toBe(true);
+    expect(crypto.isEncrypted(row.description)).toBe(true);
+    expect(row.type).toBe("homework");
+  });
+
+  it("decrypts a block's embedded task too", async () => {
+    fake.state.results = [
+      {
+        data: [
+          {
+            id: "b1",
+            activity: crypto.encryptValue("Study"),
+            location: null,
+            task: { id: TASK_ID, title: crypto.encryptValue("Essay draft") },
+          },
+        ],
+        error: null,
+      },
+    ];
+    const res = await request(app).get("/api/time-blocks").set(AUTH);
+    expect(res.body[0].activity).toBe("Study");
+    expect(res.body[0].location).toBeNull();
+    expect(res.body[0].task.title).toBe("Essay draft");
+  });
+
+  it("saves the sign-up name encrypted", async () => {
+    fake.state.results = [
+      { data: [{ id: "user-1", name: crypto.encryptValue("Sam") }], error: null },
+    ];
+    const res = await request(app)
+      .put("/api/profile/name")
+      .set(AUTH)
+      .send({ name: "  Sam " });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe("Sam");
+    const [, row] = callsOn("profiles").find(([m]) => m === "upsert");
+    expect(crypto.decryptValue(row.name)).toBe("Sam");
+  });
+
+  it("turns away a missing name", async () => {
+    const res = await request(app).put("/api/profile/name").set(AUTH).send({ name: " " });
+    expect(res.status).toBe(400);
+    expect(fake.state.queries).toHaveLength(0);
   });
 });

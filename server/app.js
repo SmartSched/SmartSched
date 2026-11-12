@@ -24,6 +24,7 @@ import {
   startsBefore,
 } from "./solverInput.js";
 import { askModel } from "./model.js";
+import { withEncryption } from "./crypto.js";
 import { isValidPreferenceJson, summarizeLearningEvents } from "./learning.js";
 import {
   addDays,
@@ -65,7 +66,8 @@ async function requireAuth(req, res, next) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  req.supabase = client;
+  // Personal columns are encrypted on the way into Supabase and decrypted on the way out (crypto.js).
+  req.supabase = withEncryption(client);
   req.userId = data.user.id;
   next();
 }
@@ -107,6 +109,20 @@ app.put("/api/profile/survey", requireAuth, async (req, res) => {
   // New answers, new preferences. Needs the browser's clock; without it the next plan refreshes them.
   const clock = localClock(req.body);
   if (clock) await refreshPreferences(req, clock);
+  res.json(data[0]);
+});
+
+// The name typed at sign-up. It goes through here rather than straight from the browser so it's encrypted.
+app.put("/api/profile/name", requireAuth, async (req, res) => {
+  const name = req.body.name;
+  if (typeof name !== "string" || !name.trim() || name.trim().length > 100) {
+    return res.status(400).json({ error: "Name is required" });
+  }
+  const { data, error } = await req.supabase
+    .from("profiles")
+    .upsert({ id: req.userId, name: name.trim() }, { onConflict: "id" })
+    .select(PROFILE_COLUMNS);
+  if (error) return serverError(res, error);
   res.json(data[0]);
 });
 
