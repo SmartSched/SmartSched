@@ -33,6 +33,7 @@ import { AuthPage } from '../features/auth/components/AuthPage';
 import { ResetPasswordPage } from '../features/auth/components/ResetPasswordPage';
 import { PageLoader } from '../shared/components/States';
 import { Blob } from '../shared/juice/Blob';
+import { FeedbackButton } from '../shared/components/FeedbackButton';
 import { useJuicePrefs } from '../shared/juice/prefs';
 import { LandingPage } from '../features/landing/components/LandingPage';
 
@@ -292,6 +293,7 @@ function AppShell() {
 
       {showNav && isMobile && <BottomTabs />}
       {showBlob && <Blob />}
+      {showNav && <FeedbackButton aboveBuddy={showBlob} />}
     </Box>
   );
 }
