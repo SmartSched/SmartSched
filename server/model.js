@@ -8,42 +8,55 @@ export const MODEL_TIMEOUT_MS = 10 * 60_000;
 // The result from a Gradio event stream, or { error } when the job failed or the stream ended without one.
 export function parseGradioEvents(text) {
   let event = null;
-  for (const line of text.split('\n')) {
-    if (line.startsWith('event:')) event = line.slice(6).trim();
-    else if (line.startsWith('data:') && event === 'complete') return { result: JSON.parse(line.slice(5))[0] };
-    else if (line.startsWith('data:') && event === 'error') return { error: line.slice(5).trim() || 'error' };
+  for (const line of text.split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:") && event === "complete")
+      return { result: JSON.parse(line.slice(5))[0] };
+    else if (line.startsWith("data:") && event === "error")
+      return { error: line.slice(5).trim() || "error" };
   }
-  return { error: 'the stream ended without a result' };
+  return { error: "the stream ended without a result" };
 }
 
 // { prefs, problems, parsed, fallback, seconds, version } from the model, or null after logging why not.
-export async function askModel(bundle, survey) {
+export async function askModel(bundle, survey, behaviorSummary = null) {
   const base = `${process.env.MODEL_URL}/gradio_api/call/prefs`;
   // The Space is private, so Hugging Face wants a token; the token's (PRO) account pays the GPU quota.
-  const headers = { 'Content-Type': 'application/json' };
-  if (process.env.MODEL_HF_TOKEN) headers.Authorization = `Bearer ${process.env.MODEL_HF_TOKEN}`;
-  const key = process.env.MODEL_API_KEY ?? process.env.SERVICE_API_KEY ?? '';
+  const headers = { "Content-Type": "application/json" };
+  if (process.env.MODEL_HF_TOKEN)
+    headers.Authorization = `Bearer ${process.env.MODEL_HF_TOKEN}`;
+  const key = process.env.MODEL_API_KEY ?? process.env.SERVICE_API_KEY ?? "";
   const signal = AbortSignal.timeout(MODEL_TIMEOUT_MS);
 
   const started = await fetch(base, {
-    method: 'POST',
+    method: "POST",
     headers,
-    body: JSON.stringify({ data: [bundle, JSON.stringify(survey ?? {}), key] }),
+    // The existing model endpoint takes a single history bundle. Append only an aggregate observation section;
+    // it never receives task titles/descriptions or the raw behavior-event stream.
+    body: JSON.stringify({
+      data: [
+        behaviorSummary?.sample_size > 0
+          ? `${bundle}\n\nBEHAVIOR_SUMMARY (aggregate observations; use only as soft ranking evidence):\n${JSON.stringify(behaviorSummary)}\nReturn only the preference JSON schema.`
+          : bundle,
+        JSON.stringify(survey ?? {}),
+        key,
+      ],
+    }),
     signal,
   });
   if (!started.ok) {
-    console.error('Model said', started.status, await started.text());
+    console.error("Model said", started.status, await started.text());
     return null;
   }
   const { event_id: eventId } = await started.json();
   const stream = await fetch(`${base}/${eventId}`, { headers, signal });
   if (!stream.ok) {
-    console.error('Model stream said', stream.status, await stream.text());
+    console.error("Model stream said", stream.status, await stream.text());
     return null;
   }
   const { result, error } = parseGradioEvents(await stream.text());
   if (error) {
-    console.error('Model failed:', error);
+    console.error("Model failed:", error);
     return null;
   }
   return result;

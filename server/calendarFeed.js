@@ -1,4 +1,4 @@
-import ICAL from 'ical.js';
+import ICAL from "ical.js";
 
 // Google Calendar and Outlook calendars, linked through their private iCal (.ics) address. The server fetches
 // the file and turns its events into time blocks in the user's own time zone (see the calendar_feeds migration).
@@ -6,10 +6,10 @@ import ICAL from 'ical.js';
 // Only Google's and Microsoft's calendar hosts are fetched: the server mustn't be pointed at any address a
 // user types (its own network, other services).
 const PROVIDER_HOSTS = {
-  'calendar.google.com': 'google',
-  'outlook.office365.com': 'outlook',
-  'outlook.office.com': 'outlook',
-  'outlook.live.com': 'outlook',
+  "calendar.google.com": "google",
+  "outlook.office365.com": "outlook",
+  "outlook.office.com": "outlook",
+  "outlook.live.com": "outlook",
 };
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -21,16 +21,19 @@ const MAX_OCCURRENCES = 20_000; // per repeating event, counted from its first o
 
 export const FEED_ERRORS = {
   link: "That doesn't look like a calendar link. Paste the secret iCal address from Google Calendar, or the ICS link from Outlook's Publish calendar.",
-  fetch: "Couldn't load that calendar. Check the link is still valid (resetting it in Google or Outlook makes a new one).",
-  parse: "That link didn't return a calendar. Check it's the iCal / ICS link, not the HTML one.",
-  large: 'That calendar is too large to import.',
+  fetch:
+    "Couldn't load that calendar. Check the link is still valid (resetting it in Google or Outlook makes a new one).",
+  parse:
+    "That link didn't return a calendar. Check it's the iCal / ICS link, not the HTML one.",
+  large: "That calendar is too large to import.",
 };
 
 // Returns { url, provider } for a Google or Outlook .ics link, or { error }.
 export function checkFeedUrl(input) {
-  if (typeof input !== 'string') return { error: FEED_ERRORS.link };
+  if (typeof input !== "string") return { error: FEED_ERRORS.link };
   let text = input.trim();
-  if (text.toLowerCase().startsWith('webcal://')) text = `https://${text.slice('webcal://'.length)}`;
+  if (text.toLowerCase().startsWith("webcal://"))
+    text = `https://${text.slice("webcal://".length)}`;
   if (text.length > 2000) return { error: FEED_ERRORS.link };
   let url;
   try {
@@ -39,21 +42,29 @@ export function checkFeedUrl(input) {
     return { error: FEED_ERRORS.link };
   }
   const provider = PROVIDER_HOSTS[url.hostname.toLowerCase()];
-  if (url.protocol !== 'https:' || !provider || url.username || url.password || url.port) return { error: FEED_ERRORS.link };
-  if (!url.pathname.toLowerCase().endsWith('.ics')) return { error: FEED_ERRORS.link };
+  if (
+    url.protocol !== "https:" ||
+    !provider ||
+    url.username ||
+    url.password ||
+    url.port
+  )
+    return { error: FEED_ERRORS.link };
+  if (!url.pathname.toLowerCase().endsWith(".ics"))
+    return { error: FEED_ERRORS.link };
   return { url: url.toString(), provider };
 }
 
 // What the browser is shown instead of the secret link: the host and the file name.
 export function maskFeedUrl(link) {
   const url = new URL(link);
-  return `${url.hostname}/…/${url.pathname.split('/').pop()}`;
+  return `${url.hostname}/…/${url.pathname.split("/").pop()}`;
 }
 
 export function isTimeZone(value) {
-  if (typeof value !== 'string' || !value || value.length > 64) return false;
+  if (typeof value !== "string" || !value || value.length > 64) return false;
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
     return true;
   } catch {
     return false;
@@ -67,18 +78,22 @@ export async function fetchFeed(link) {
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     let res;
     try {
-      res = await fetch(current, { redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      res = await fetch(current, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
     } catch {
       throw new Error(FEED_ERRORS.fetch);
     }
-    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-      const next = checkFeedHost(new URL(res.headers.get('location'), current));
+    if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
+      const next = checkFeedHost(new URL(res.headers.get("location"), current));
       if (!next) throw new Error(FEED_ERRORS.fetch);
       current = next;
       continue;
     }
     if (!res.ok) throw new Error(FEED_ERRORS.fetch);
-    if (Number(res.headers.get('content-length')) > MAX_FEED_BYTES) throw new Error(FEED_ERRORS.large);
+    if (Number(res.headers.get("content-length")) > MAX_FEED_BYTES)
+      throw new Error(FEED_ERRORS.large);
     const text = await res.text();
     if (text.length > MAX_FEED_BYTES) throw new Error(FEED_ERRORS.large);
     return text;
@@ -87,12 +102,14 @@ export async function fetchFeed(link) {
 }
 
 function checkFeedHost(url) {
-  return url.protocol === 'https:' && PROVIDER_HOSTS[url.hostname.toLowerCase()] ? url.toString() : null;
+  return url.protocol === "https:" && PROVIDER_HOSTS[url.hostname.toLowerCase()]
+    ? url.toString()
+    : null;
 }
 
 // ---- Turning events into blocks ----
 
-const pad = (n) => String(n).padStart(2, '0');
+const pad = (n) => String(n).padStart(2, "0");
 
 function addDays(dateStr, n) {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -109,40 +126,60 @@ const formatters = new Map();
 function localParts(jsDate, timeZone) {
   let fmt = formatters.get(timeZone);
   if (!fmt) {
-    fmt = new Intl.DateTimeFormat('en-CA', {
+    fmt = new Intl.DateTimeFormat("en-CA", {
       timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
     });
     formatters.set(timeZone, fmt);
   }
-  const p = Object.fromEntries(fmt.formatToParts(jsDate).map((part) => [part.type, part.value]));
-  return { date: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
+  const p = Object.fromEntries(
+    fmt.formatToParts(jsDate).map((part) => [part.type, part.value]),
+  );
+  return {
+    date: `${p.year}-${p.month}-${p.day}`,
+    minutes: Number(p.hour) * 60 + Number(p.minute),
+  };
 }
 
 // An ICAL.Time as the user's local date and minutes after midnight. A "floating" time (no zone, or a zone the
 // file didn't describe) is already wall-clock time, so it's taken as it is.
 function toLocal(time, timeZone) {
   if (time.zone === ICAL.Timezone.localTimezone || !time.zone) {
-    return { date: `${time.year}-${pad(time.month)}-${pad(time.day)}`, minutes: time.hour * 60 + time.minute };
+    return {
+      date: `${time.year}-${pad(time.month)}-${pad(time.day)}`,
+      minutes: time.hour * 60 + time.minute,
+    };
   }
   return localParts(time.toJSDate(), timeZone);
 }
 
-const clock = (minutes) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}:00`;
+const clock = (minutes) =>
+  `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}:00`;
 
 // One event as blocks, split at midnight when it runs into the next day.
 function eventBlocks(activity, start, end) {
   const blocks = [];
   let date = start.date;
-  for (let day = 0; day <= MAX_EVENT_DAYS && date <= end.date; day++, date = addDays(date, 1)) {
+  for (
+    let day = 0;
+    day <= MAX_EVENT_DAYS && date <= end.date;
+    day++, date = addDays(date, 1)
+  ) {
     const from = date === start.date ? start.minutes : 0;
     const to = date === end.date ? end.minutes : 24 * 60 - 1; // ends 23:59, the last time a block can
-    if (to > from) blocks.push({ activity, date, start_time: clock(from), end_time: clock(to), type: 'personal' });
+    if (to > from)
+      blocks.push({
+        activity,
+        date,
+        start_time: clock(from),
+        end_time: clock(to),
+        type: "personal",
+      });
   }
   return blocks;
 }
@@ -151,13 +188,22 @@ function eventBlocks(activity, start, end) {
 // holidays, "on leave"), which would otherwise fill the whole day.
 function skipped(component, startDate) {
   if (startDate.isDate) return true;
-  if (String(component.getFirstPropertyValue('status') ?? '').toUpperCase() === 'CANCELLED') return true;
-  return String(component.getFirstPropertyValue('transp') ?? '').toUpperCase() === 'TRANSPARENT';
+  if (
+    String(component.getFirstPropertyValue("status") ?? "").toUpperCase() ===
+    "CANCELLED"
+  )
+    return true;
+  return (
+    String(component.getFirstPropertyValue("transp") ?? "").toUpperCase() ===
+    "TRANSPARENT"
+  );
 }
 
 function title(component) {
-  const summary = String(component.getFirstPropertyValue('summary') ?? '').trim();
-  return (summary || 'Busy').slice(0, 200);
+  const summary = String(
+    component.getFirstPropertyValue("summary") ?? "",
+  ).trim();
+  return (summary || "Busy").slice(0, 200);
 }
 
 // The .ics text's events as time blocks (type 'personal') dated from..to (YYYY-MM-DD, both included) in the
@@ -170,15 +216,17 @@ export function feedBlocks(icsText, { from, to, timeZone }) {
   } catch {
     throw new Error(FEED_ERRORS.parse);
   }
-  if (calendar.name !== 'vcalendar') throw new Error(FEED_ERRORS.parse);
-  for (const zone of calendar.getAllSubcomponents('vtimezone')) ICAL.TimezoneService.register(zone);
+  if (calendar.name !== "vcalendar") throw new Error(FEED_ERRORS.parse);
+  for (const zone of calendar.getAllSubcomponents("vtimezone"))
+    ICAL.TimezoneService.register(zone);
 
   // A repeating event comes as its rule plus one VEVENT per changed occurrence (same UID, with RECURRENCE-ID).
   const masters = new Map();
   const exceptions = [];
-  for (const component of calendar.getAllSubcomponents('vevent')) {
-    const uid = component.getFirstPropertyValue('uid') ?? Symbol('no uid');
-    if (component.hasProperty('recurrence-id')) exceptions.push([uid, component]);
+  for (const component of calendar.getAllSubcomponents("vevent")) {
+    const uid = component.getFirstPropertyValue("uid") ?? Symbol("no uid");
+    if (component.hasProperty("recurrence-id"))
+      exceptions.push([uid, component]);
     else masters.set(uid, new ICAL.Event(component));
   }
   const standalone = [];
@@ -209,7 +257,11 @@ export function feedBlocks(icsText, { from, to, timeZone }) {
       continue;
     }
     const iterator = event.iterator();
-    for (let i = 0, next; i < MAX_OCCURRENCES && (next = iterator.next()); i++) {
+    for (
+      let i = 0, next;
+      i < MAX_OCCURRENCES && (next = iterator.next());
+      i++
+    ) {
       if (next.toJSDate().getTime() > stopMs) break;
       const details = event.getOccurrenceDetails(next);
       add(details.item.component, details.startDate, details.endDate);
@@ -217,7 +269,9 @@ export function feedBlocks(icsText, { from, to, timeZone }) {
     if (blocks.length > MAX_BLOCKS) throw new Error(FEED_ERRORS.large);
   }
   if (blocks.length > MAX_BLOCKS) throw new Error(FEED_ERRORS.large);
-  return blocks.sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
+  return blocks.sort((a, b) =>
+    (a.date + a.start_time).localeCompare(b.date + b.start_time),
+  );
 }
 
 export { addDays };

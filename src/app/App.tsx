@@ -34,6 +34,7 @@ import { ResetPasswordPage } from '../features/auth/components/ResetPasswordPage
 import { PageLoader } from '../shared/components/States';
 import { Blob } from '../shared/juice/Blob';
 import { useJuicePrefs } from '../shared/juice/prefs';
+import { LandingPage } from '../features/landing/components/LandingPage';
 
 const NAV_LINKS = [
   { to: '/', label: 'Today', icon: <WbSunnyOutlined /> },
@@ -133,7 +134,7 @@ function AccountMenu() {
           onClick={async () => {
             setAnchor(null);
             await signOut();
-            navigate('/auth');
+            navigate('/');
           }}
         >
           <ListItemIcon>
@@ -229,13 +230,26 @@ function NotFound() {
   );
 }
 
+function RootPage() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <PageLoader />;
+  if (!user) return <LandingPage />;
+  return <RequireAuth><HomePage /></RequireAuth>;
+}
+
 function AppShell() {
   const isMobile = useMediaQuery((t: Theme) => t.breakpoints.down('sm'), { noSsr: true });
   const { user } = useAuth();
   const location = useLocation();
+  const isLanding = location.pathname === '/' && !user;
   const showNav = Boolean(user);
   const juice = useJuicePrefs();
   const showBlob = showNav && juice.blob && !['/survey', '/consent'].includes(location.pathname);
+
+  if (isLanding) {
+    return <RootPage />;
+  }
 
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: colors.surface, pb: showNav && isMobile ? `${TAB_BAR_HEIGHT + 16}px` : 0 }}>
@@ -264,7 +278,7 @@ function AppShell() {
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/" element={<RequireAuth><HomePage /></RequireAuth>} />
+            <Route path="/" element={<RootPage />} />
             <Route path="/schedule" element={<RequireAuth><TaskList /></RequireAuth>} />
             <Route path="/planner" element={<RequireAuth><DailyPlanner /></RequireAuth>} />
             <Route path="/reflection" element={<RequireAuth><DayReflection /></RequireAuth>} />

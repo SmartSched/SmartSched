@@ -36,6 +36,10 @@ export interface BlockSeries {
   id: string;
   days_of_week: number[]; // 0 = Sunday
   interval_weeks: 1 | 2;
+  recurrence_type?: 'weekly' | 'monthly_date' | 'monthly_weekday';
+  day_of_month?: number | null;
+  week_of_month?: number | null;
+  weekday?: number | null;
   start_date: string;
   end_date: string;
 }
