@@ -19,7 +19,7 @@ export function parseGradioEvents(text) {
 }
 
 // { prefs, problems, parsed, fallback, seconds, version } from the model, or null after logging why not.
-export async function askModel(bundle, survey) {
+export async function askModel(bundle, survey, behaviorSummary = null) {
   const base = `${process.env.MODEL_URL}/gradio_api/call/prefs`;
   // The Space is private, so Hugging Face wants a token; the token's (PRO) account pays the GPU quota.
   const headers = { "Content-Type": "application/json" };
@@ -31,7 +31,17 @@ export async function askModel(bundle, survey) {
   const started = await fetch(base, {
     method: "POST",
     headers,
-    body: JSON.stringify({ data: [bundle, JSON.stringify(survey ?? {}), key] }),
+    // The existing model endpoint takes a single history bundle. Append only an aggregate observation section;
+    // it never receives task titles/descriptions or the raw behavior-event stream.
+    body: JSON.stringify({
+      data: [
+        behaviorSummary?.sample_size > 0
+          ? `${bundle}\n\nBEHAVIOR_SUMMARY (aggregate observations; use only as soft ranking evidence):\n${JSON.stringify(behaviorSummary)}\nReturn only the preference JSON schema.`
+          : bundle,
+        JSON.stringify(survey ?? {}),
+        key,
+      ],
+    }),
     signal,
   });
   if (!started.ok) {

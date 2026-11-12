@@ -189,6 +189,46 @@ describe("tasks", () => {
     });
   });
 
+  it("records a structured learning event when a task is created", async () => {
+    fake.state.results = [
+      {
+        data: [
+          {
+            id: "t1",
+            type: "homework",
+            priority: "high",
+            estimated_time: 45,
+            due_date: null,
+          },
+        ],
+        error: null,
+      },
+    ];
+    expect(
+      (
+        await request(app)
+          .post("/api/tasks")
+          .set(AUTH)
+          .send({
+            title: "Essay",
+            type: "homework",
+            priority: "high",
+            estimated_time: 45,
+          })
+      ).status,
+    ).toBe(201);
+    expect(inserted("user_learning_events")[0]).toMatchObject({
+      user_id: "user-1",
+      event_type: "task_created",
+      data: {
+        task_type: "homework",
+        priority: "high",
+        estimated_minutes: 45,
+        due_date: null,
+      },
+    });
+  });
+
   it("needs a title", async () => {
     const res = await request(app)
       .post("/api/tasks")
@@ -201,6 +241,7 @@ describe("tasks", () => {
 
   it("sets completed_at when a task is checked off", async () => {
     fake.state.results = [
+      { data: { id: "t1", completed: false }, error: null },
       { data: [{ id: "t1", completed: true }], error: null },
     ];
     const res = await request(app)
@@ -217,6 +258,7 @@ describe("tasks", () => {
 
   it("records how long a finished task took, in whole minutes", async () => {
     fake.state.results = [
+      { data: { id: "t1", completed: false }, error: null },
       { data: [{ id: "t1", time_spent: 95 }], error: null },
     ];
     const res = await request(app)
@@ -717,17 +759,14 @@ describe("commutes", () => {
       travel,
       { data: [campus, work], error: null },
     ];
-    const res = await request(app)
-      .post("/api/time-blocks")
-      .set(AUTH)
-      .send({
-        activity: "Shift",
-        date: "2026-09-29",
-        start_time: "13:00",
-        end_time: "17:00",
-        type: "work",
-        location: "Work",
-      });
+    const res = await request(app).post("/api/time-blocks").set(AUTH).send({
+      activity: "Shift",
+      date: "2026-09-29",
+      start_time: "13:00",
+      end_time: "17:00",
+      type: "work",
+      location: "Work",
+    });
     expect(res.status).toBe(201);
     expect(res.body.block).toEqual(work);
     const commute = {
@@ -754,17 +793,14 @@ describe("commutes", () => {
       travel,
       { data: [campus, tightWork], error: null },
     ];
-    const res = await request(app)
-      .post("/api/time-blocks")
-      .set(AUTH)
-      .send({
-        activity: "Shift",
-        date: "2026-09-29",
-        start_time: "12:10",
-        end_time: "17:00",
-        type: "work",
-        location: "work",
-      });
+    const res = await request(app).post("/api/time-blocks").set(AUTH).send({
+      activity: "Shift",
+      date: "2026-09-29",
+      start_time: "12:10",
+      end_time: "17:00",
+      type: "work",
+      location: "work",
+    });
     expect(res.body.commutes).toEqual({
       added: [],
       tight: [
@@ -798,17 +834,14 @@ describe("commutes", () => {
       travel,
       { data: [campus, work, oldCommute], error: null },
     ];
-    await request(app)
-      .post("/api/time-blocks")
-      .set(AUTH)
-      .send({
-        activity: "Shift",
-        date: "2026-09-29",
-        start_time: "13:00",
-        end_time: "17:00",
-        type: "work",
-        location: "work",
-      });
+    await request(app).post("/api/time-blocks").set(AUTH).send({
+      activity: "Shift",
+      date: "2026-09-29",
+      start_time: "13:00",
+      end_time: "17:00",
+      type: "work",
+      location: "work",
+    });
     expect(callsOn("time_blocks")).toContainEqual(["in", "id", ["old"]]);
   });
 
@@ -1055,27 +1088,25 @@ function fakeScheduler({
     ],
     unscheduled: [],
   };
-  const spy = vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async (url) =>
-      url.endsWith("/history")
-        ? new Response(JSON.stringify({ bundle: "TODAY: ...", rules }), {
-            status: historyStatus,
-          })
-        : new Response(
-            JSON.stringify({
-              calendars: [
-                {
-                  id: "c001",
-                  why: "Study sits in your evenings.",
-                  style: "spaced",
-                  calendar,
-                },
-              ],
-            }),
-            { status: 200 },
-          ),
-    );
+  const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+    url.endsWith("/history")
+      ? new Response(JSON.stringify({ bundle: "TODAY: ...", rules }), {
+          status: historyStatus,
+        })
+      : new Response(
+          JSON.stringify({
+            calendars: [
+              {
+                id: "c001",
+                why: "Study sits in your evenings.",
+                style: "spaced",
+                calendar,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+  );
   const call = (path) => spy.mock.calls.find(([url]) => url.endsWith(path));
   return {
     sentTo: (path) => JSON.parse(call(path)[1].body),
@@ -1416,17 +1447,15 @@ describe("GET /api/preferences/history", () => {
     fake.state.results = [
       { data: { survey: { focus_time: "evening" } }, error: null },
     ];
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            bundle: "TODAY: 2026-10-22 Thu",
-            rules: { preferences: [] },
-          }),
-          { status: 200 },
-        ),
-      );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          bundle: "TODAY: 2026-10-22 Thu",
+          rules: { preferences: [] },
+        }),
+        { status: 200 },
+      ),
+    );
     const res = await request(app)
       .get("/api/preferences/history?now=2026-10-22T12:00&tzOffset=420")
       .set(AUTH);
@@ -1514,14 +1543,11 @@ describe("scheduler waking up", () => {
     delete process.env.SCHEDULER_RETRY_DELAY_MS;
   });
   const suggest = () =>
-    request(app)
-      .post("/api/schedule/suggest")
-      .set(AUTH)
-      .send({
-        now: "2026-10-22T12:00",
-        weekStart: "2026-10-19",
-        tzOffset: 420,
-      });
+    request(app).post("/api/schedule/suggest").set(AUTH).send({
+      now: "2026-10-22T12:00",
+      weekStart: "2026-10-19",
+      tzOffset: 420,
+    });
 
   it("tries once more when the host says it is starting (503)", async () => {
     const fetchSpy = vi

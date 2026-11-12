@@ -24,6 +24,7 @@ import {
   startsBefore,
 } from "./solverInput.js";
 import { askModel } from "./model.js";
+import { isValidPreferenceJson, summarizeLearningEvents } from "./learning.js";
 import {
   addDays,
   checkFeedUrl,
@@ -222,6 +223,12 @@ app.post("/api/tasks", requireAuth, async (req, res) => {
     })
     .select();
   if (error) return serverError(res, error);
+  await logLearningEvent(req, "task_created", {
+    task_type: data[0].type,
+    priority: data[0].priority,
+    estimated_minutes: data[0].estimated_time ?? null,
+    due_date: data[0].due_date ?? null,
+  });
   res.status(201).json(data[0]);
 });
 
@@ -258,6 +265,19 @@ app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "No fields to update" });
   }
+  // A repeated PATCH { completed: true } must not make a second completion observation. Read only for a
+  // completion attempt; ordinary task edits retain the existing single-write path.
+  let wasIncomplete = false;
+  if (updates.completed === true) {
+    const { data: before, error: beforeError } = await req.supabase
+      .from("tasks")
+      .select("completed")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (beforeError) return serverError(res, beforeError);
+    if (!before) return res.status(404).json({ error: "Task not found" });
+    wasIncomplete = !before.completed;
+  }
   const { data, error } = await req.supabase
     .from("tasks")
     .update(updates)
@@ -266,7 +286,27 @@ app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
   if (error) return serverError(res, error);
   if (data.length === 0)
     return res.status(404).json({ error: "Task not found" });
-  res.json(data[0]);
+  const task = data[0];
+  const changed = {};
+  for (const field of ["estimated_time", "due_date", "priority", "type"]) {
+    if (field in updates)
+      changed[field === "estimated_time" ? "estimated_minutes" : field] =
+        updates[field];
+  }
+  if (Object.keys(changed).length)
+    await logLearningEvent(req, "task_edited", {
+      task_type: task.type,
+      changed,
+    });
+  if (updates.completed === true && wasIncomplete) {
+    await logLearningEvent(req, "task_completed", {
+      task_type: task.type,
+      estimated_minutes: task.estimated_time ?? null,
+      actual_minutes: task.time_spent ?? 0,
+      due_date: task.due_date ?? null,
+    });
+  }
+  res.json(task);
 });
 
 app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
@@ -411,6 +451,21 @@ async function logEvent(req, kind, fields) {
   if (error) console.error(`Could not record ${kind}`, error);
 }
 
+// This log is separate from the legacy schedule_events history so new features can be aggregated without
+// task titles or descriptions. It is best-effort: logging must never make a completed user action fail.
+async function logLearningEvent(
+  req,
+  event_type,
+  data,
+  occurred_at = new Date().toISOString(),
+) {
+  const { error } = await req.supabase
+    .from("user_learning_events")
+    .insert({ user_id: req.userId, event_type, occurred_at, data });
+  if (error)
+    console.error(`Could not record learning event ${event_type}`, error);
+}
+
 const blockTime = (b) => ({
   date: b.date,
   start: b.start_time.slice(0, 5),
@@ -476,6 +531,11 @@ app.patch("/api/time-blocks/:id", requireAuth, async (req, res) => {
       task_id: existing.task_id,
       details: { label: existing.activity, from, to },
     });
+    await logLearningEvent(req, "study_block_moved", {
+      task_type: data[0].task?.type ?? null,
+      from,
+      to,
+    });
   }
   res.json({ block: data[0], commutes });
 });
@@ -504,6 +564,14 @@ app.delete("/api/time-blocks/:id", requireAuth, async (req, res) => {
       block_id: deleted.id,
       task_id: deleted.task_id,
       details: { label: deleted.activity, ...blockTime(deleted) },
+    });
+    await logLearningEvent(req, "study_block_deleted", {
+      task_id: deleted.task_id,
+      planned: blockTime(deleted),
+      reason:
+        typeof req.body?.reason === "string"
+          ? req.body.reason.slice(0, 80)
+          : null,
     });
   }
   res.status(204).end();
@@ -539,11 +607,9 @@ app.post("/api/block-series", requireAuth, async (req, res) => {
   const { series, error: validationError } = validateSeries(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
   if (expandSeries(series).length === 0) {
-    return res
-      .status(400)
-      .json({
-        error: "None of those days fall between the start and end dates",
-      });
+    return res.status(400).json({
+      error: "None of those days fall between the start and end dates",
+    });
   }
   const { data, error } = await req.supabase
     .from("time_block_series")
@@ -568,11 +634,9 @@ app.put("/api/block-series/:id", requireAuth, async (req, res) => {
   const { series, error: validationError } = validateSeries(req.body);
   if (validationError) return res.status(400).json({ error: validationError });
   if (expandSeries(series).length === 0) {
-    return res
-      .status(400)
-      .json({
-        error: "None of those days fall between the start and end dates",
-      });
+    return res.status(400).json({
+      error: "None of those days fall between the start and end dates",
+    });
   }
   const { data, error } = await req.supabase
     .from("time_block_series")
@@ -876,11 +940,9 @@ app.post("/api/schedule/accept", requireAuth, async (req, res) => {
     }
     // Options can sit on screen for a while; don't save a session that has already started.
     if (startsBefore(block, now)) {
-      return res
-        .status(409)
-        .json({
-          error: "Part of this plan has already started. Suggest a new plan.",
-        });
+      return res.status(409).json({
+        error: "Part of this plan has already started. Suggest a new plan.",
+      });
     }
     rows.push(block);
   }
@@ -944,6 +1006,21 @@ app.post("/api/schedule/accept", requireAuth, async (req, res) => {
       details: { week_start: weekStart, chosen, options, removed },
     });
   }
+  await logLearningEvent(req, "schedule_accepted", {
+    week_start: weekStart,
+    selected_option: Number.isInteger(chosen) ? chosen : null,
+    option_styles: Array.isArray(options)
+      ? options.filter((style) => PLAN_STYLES.includes(style))
+      : [],
+    planned_blocks: rows.map((block) => ({
+      date: block.date,
+      start: block.start_time.slice(0, 5),
+      end: block.end_time.slice(0, 5),
+      task_type:
+        data.find((saved) => saved.task_id === block.task_id)?.task?.type ??
+        null,
+    })),
+  });
   res.status(201).json({ blocks: data, commutes });
 });
 
@@ -961,7 +1038,7 @@ async function preferencesNeedRefresh(req, profile) {
   if (preferencesOutOfDate(profile, Date.now())) return true;
   if (!profile?.survey) return false;
   const { count, error } = await req.supabase
-    .from("schedule_events")
+    .from("user_learning_events")
     .select("id", { count: "exact", head: true })
     .gte("created_at", profile.preferences_updated_at);
   if (error) {
@@ -969,6 +1046,19 @@ async function preferencesNeedRefresh(req, profile) {
     return false;
   }
   return (count ?? 0) >= REFRESH_AFTER_EVENTS;
+}
+
+// The model gets an aggregate, not a raw event trail. Keeping the query here also means RLS is applied with
+// the caller's JWT, so one account can never influence another account's preferences.
+async function readLearningSummary(req) {
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await req.supabase
+    .from("user_learning_events")
+    .select("event_type, occurred_at, data")
+    .gte("occurred_at", since)
+    .order("occurred_at", { ascending: true });
+  if (error) throw error;
+  return summarizeLearningEvents(data ?? []);
 }
 
 // The browser's local time and getTimezoneOffset() from a body or query, or null.
@@ -1064,9 +1154,23 @@ async function refreshPreferences(req, clock) {
 // rules' JSON is saved and the user's request has gone ahead, and its JSON replaces the rules' only when the
 // reply was usable. A plan never waits on the model.
 async function preferencesFromModel(req, bundle, survey) {
-  const reply = await askModel(bundle, survey);
+  let behavior;
+  try {
+    behavior = await readLearningSummary(req);
+  } catch (err) {
+    // A behavior read failure is not a reason to discard the last valid rule preferences.
+    console.error("Could not summarize learning events", err);
+    return;
+  }
+  const reply = await askModel(bundle, survey, behavior);
   if (!reply) return;
-  if (!reply.parsed || reply.fallback) {
+  if (
+    !reply.parsed ||
+    reply.fallback ||
+    !isValidPreferenceJson(reply.prefs) ||
+    typeof reply.version !== "string" ||
+    !/^[\w.-]{1,80}$/.test(reply.version)
+  ) {
     console.warn("Model reply not usable, keeping the rules", reply.problems);
     return;
   }
@@ -1089,11 +1193,9 @@ async function preferencesFromModel(req, bundle, survey) {
 app.get("/api/preferences/history", requireAuth, async (req, res) => {
   const clock = localClock(req.query);
   if (!clock)
-    return res
-      .status(400)
-      .json({
-        error: "now (YYYY-MM-DDTHH:MM) and tzOffset (minutes) are required",
-      });
+    return res.status(400).json({
+      error: "now (YYYY-MM-DDTHH:MM) and tzOffset (minutes) are required",
+    });
   let result;
   try {
     result = await readHistory(req, clock);
@@ -1111,11 +1213,9 @@ app.get("/api/preferences/history", requireAuth, async (req, res) => {
 app.post("/api/preferences/refresh", requireAuth, async (req, res) => {
   const clock = localClock(req.body);
   if (!clock)
-    return res
-      .status(400)
-      .json({
-        error: "now (YYYY-MM-DDTHH:MM) and tzOffset (minutes) are required",
-      });
+    return res.status(400).json({
+      error: "now (YYYY-MM-DDTHH:MM) and tzOffset (minutes) are required",
+    });
   const saved = await refreshPreferences(req, clock);
   if (!saved)
     return res
@@ -1259,13 +1359,11 @@ app.post("/api/calendar-feeds", requireAuth, async (req, res) => {
       timeZone: req.body.timeZone,
     }); // is it a calendar?
   } catch (err) {
-    return res
-      .status(400)
-      .json({
-        error: Object.values(FEED_ERRORS).includes(err.message)
-          ? err.message
-          : FEED_ERRORS.parse,
-      });
+    return res.status(400).json({
+      error: Object.values(FEED_ERRORS).includes(err.message)
+        ? err.message
+        : FEED_ERRORS.parse,
+    });
   }
 
   const { data, error } = await req.supabase
