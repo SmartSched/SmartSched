@@ -114,8 +114,12 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
       setError('Give the task a title.');
       return;
     }
-    const estimated = values.estimatedTime ? Number(values.estimatedTime) : null;
-    if (estimated !== null && (!Number.isInteger(estimated) || estimated <= 0)) {
+    if (!values.due) {
+      setError('Pick a due date.');
+      return;
+    }
+    const estimated = Number(values.estimatedTime);
+    if (!values.estimatedTime || !Number.isInteger(estimated) || estimated <= 0) {
       setError('Estimated time must be a whole number of minutes.');
       return;
     }
@@ -127,7 +131,7 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
         description: values.description.trim() || null,
         type: values.type as Task['type'],
         priority: values.priority as Task['priority'],
-        due_date: values.due ? new Date(values.due).toISOString() : null,
+        due_date: new Date(values.due).toISOString(),
         estimated_time: estimated,
       });
     } catch (err: any) {
@@ -141,7 +145,8 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
       <TextField
         fullWidth
         size="small"
-        placeholder="Task title"
+        required
+        label="Title"
         value={values.title}
         onChange={(e) => setValues({ ...values, title: e.target.value })}
         sx={{ mb: 1.5 }}
@@ -152,13 +157,13 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
         size="small"
         multiline
         minRows={2}
-        placeholder="Description (optional)"
+        label="Description (optional)"
         value={values.description}
         onChange={(e) => setValues({ ...values, description: e.target.value })}
         sx={{ mb: 1.5 }}
       />
       <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
-        <FormControl size="small" sx={{ flex: 1 }}>
+        <FormControl size="small" required sx={{ flex: 1 }}>
           <InputLabel>Type</InputLabel>
           <Select value={values.type} label="Type" onChange={(e) => setValues({ ...values, type: e.target.value })}>
             <MenuItem value="study">Study</MenuItem>
@@ -168,7 +173,7 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
             <MenuItem value="work">Work</MenuItem>
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ flex: 1 }}>
+        <FormControl size="small" required sx={{ flex: 1 }}>
           <InputLabel>Priority</InputLabel>
           <Select value={values.priority} label="Priority" onChange={(e) => setValues({ ...values, priority: e.target.value })}>
             <MenuItem value="low">Low</MenuItem>
@@ -181,7 +186,8 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
         <TextField
           size="small"
           type="datetime-local"
-          label="Due (optional)"
+          required
+          label="Due"
           value={values.due}
           onChange={(e) => setValues({ ...values, due: e.target.value })}
           slotProps={{ inputLabel: { shrink: true } }}
@@ -190,6 +196,7 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
         <TextField
           size="small"
           type="number"
+          required
           label="Estimated minutes"
           value={values.estimatedTime}
           onChange={(e) => setValues({ ...values, estimatedTime: e.target.value })}

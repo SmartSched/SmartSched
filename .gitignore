@@ -14,3 +14,7 @@ ml/csp/train/
 ml/prefs.zip
 ml/prefs/data/
 ml/prefs/outputs/
+
+# Editor swap files (a vim .env.swp holds the secrets in .env)
+*.swp
+*.swo
