@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import {
   Box,
   Typography,
@@ -21,8 +21,8 @@ import { useSelectedDay } from '../../../app/lib/today';
 import { colors } from '../../../app/theme';
 import { ListSkeleton } from '../../../shared/components/States';
 import { ReflectionInsights } from './ReflectionInsights';
-import { DayStack, MonthBlanket, useDays } from './YourDays';
-import { quiltDates } from '../lib/days';
+import { MonthBlanket } from './YourDays';
+import { emitJuice } from '../../../shared/juice/events';
 
 const CRITERIA = [
   { key: 'productivity', label: 'Productivity', hint: 'How much of what you planned got done' },
@@ -57,10 +57,6 @@ export function DayReflection() {
   const [hadReflection, setHadReflection] = useState(false);
   // Bumped after a save so the summary below picks up the new ratings.
   const [insightsVersion, setInsightsVersion] = useState(0);
-  // The day just saved, so the stack below can fold it up and file it.
-  const [filed, setFiled] = useState<{ date: string; version: number } | null>(null);
-  const recentDates = useMemo(() => quiltDates(today), [today]);
-  const days = useDays(recentDates, insightsVersion);
 
   // The planner's bedtime check-in links here with ?date=, to open that day.
   const [searchParams] = useSearchParams();
@@ -128,7 +124,7 @@ export function DayReflection() {
     try {
       await apiPost('/api/reflections', { date: selectedDate, ratings, ...sleepTimes });
       setSaved(true);
-      setFiled({ date: selectedDate, version: insightsVersion + 1 });
+      emitJuice('day-filed'); // the corner buddy hops
       setInsightsVersion((v) => v + 1);
     } catch (err: any) {
       setError(err.message);
@@ -279,7 +275,6 @@ export function DayReflection() {
         </CardContent>
       </Card>
 
-      {days && <DayStack days={days.days} filed={filed} dataVersion={days.version} />}
       <MonthBlanket
         today={today}
         version={insightsVersion}

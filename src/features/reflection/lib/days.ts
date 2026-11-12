@@ -1,10 +1,8 @@
-// One summary per day, for the week quilt and the stack of past days. No React, so it can be tested.
-import { addDays, eachDayOfInterval, endOfMonth, format, parseISO, startOfMonth, startOfWeek, subDays } from 'date-fns';
+// One summary per day, for the month blanket. No React, so it can be tested.
+import { eachDayOfInterval, endOfMonth, format, parseISO, startOfMonth } from 'date-fns';
 import { toMinutes, type TimeBlock } from '../../../app/lib/planner';
 import type { Task } from '../../../app/lib/tasks';
 import type { ReflectionRow } from './insights';
-
-export const QUILT_WEEKS = 4;
 
 export type Pattern = 'stripes' | 'dots' | 'checks' | 'waves' | 'rings' | 'plain';
 
@@ -18,15 +16,6 @@ const PATTERN_FOR: Record<TimeBlock['type'], Pattern> = {
   break: 'rings',
   meal: 'rings',
   commute: 'plain',
-};
-
-export const PATTERN_LABELS: Record<Pattern, string> = {
-  stripes: 'mostly classes',
-  dots: 'mostly study and tasks',
-  checks: 'mostly work',
-  waves: 'mostly personal time',
-  rings: 'mostly meals and breaks',
-  plain: 'nothing much planned',
 };
 
 export interface DaySummary {
@@ -68,21 +57,4 @@ export function summarizeDay(date: string, blocks: TimeBlock[], reflections: Ref
 export function monthDates(month: string) {
   const first = parseISO(`${month}-01`);
   return eachDayOfInterval({ start: startOfMonth(first), end: endOfMonth(first) }).map((d) => format(d, 'yyyy-MM-dd'));
-}
-
-// The recent days the stack of past days covers: whole weeks (Sunday to Saturday) ending with this one.
-export function quiltDates(today: string, weeks = QUILT_WEEKS) {
-  const lastWeek = startOfWeek(parseISO(today), { weekStartsOn: 0 });
-  const first = subDays(lastWeek, (weeks - 1) * 7);
-  return Array.from({ length: weeks * 7 }, (_, i) => format(addDays(first, i), 'yyyy-MM-dd'));
-}
-
-// A patch's colour from how the day felt. Every mood gets a pleasant colour: lower is a calm blue-violet,
-// higher is warm. Nothing reads as a "bad" day.
-const MOOD_COLORS = ['#a5b4fc', '#93c5fd', '#5eead4', '#fcd34d', '#fdba74'];
-
-export function moodColor(ratings: Record<string, number> | null) {
-  if (!ratings) return null;
-  const mood = Math.round(ratings.mood || ratings.productivity || 3);
-  return MOOD_COLORS[Math.max(1, Math.min(5, mood)) - 1];
 }

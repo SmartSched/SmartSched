@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthDates, moodColor, quiltDates, summarizeDay } from './days';
+import { monthDates, summarizeDay } from './days';
 import type { TimeBlock } from '../../../app/lib/planner';
 import type { Task } from '../../../app/lib/tasks';
 
@@ -33,23 +33,6 @@ describe('summarizeDay', () => {
     expect(day.finished).toEqual(['Essay']);
     expect(day.ratings).toEqual({ mood: 4 });
     expect(day.pattern).toBe('plain');
-  });
-});
-
-describe('quiltDates', () => {
-  it('covers whole Sunday-to-Saturday weeks ending with this week', () => {
-    const dates = quiltDates('2026-11-10'); // a Tuesday
-    expect(dates).toHaveLength(28);
-    expect(dates[0]).toBe('2026-10-18');
-    expect(dates[27]).toBe('2026-11-14');
-  });
-});
-
-describe('moodColor', () => {
-  it('has a colour for every mood and none without a reflection', () => {
-    expect(moodColor(null)).toBeNull();
-    expect(moodColor({ mood: 1 })).toBeTruthy();
-    expect(moodColor({ mood: 5 })).not.toBe(moodColor({ mood: 1 }));
   });
 });
 
