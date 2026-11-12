@@ -3,7 +3,8 @@ import { Alert, Box, ButtonBase, Card, CardContent, FormControlLabel, Switch, To
 import { Check, DarkModeOutlined, LightModeOutlined, SettingsBrightnessOutlined } from '@mui/icons-material';
 import { useAppearance, type ThemeSetting } from '../../../app/lib/AppearanceContext';
 import { ACCENTS, ACCENT_LABELS, colors, resolveColors } from '../../../app/theme';
-import { setJuicePref, useJuicePrefs } from '../../../shared/juice/prefs';
+import { BUDDIES, BUDDY_LABELS, setJuicePref, useJuicePrefs } from '../../../shared/juice/prefs';
+import { BuddyPreview } from '../../../shared/juice/Blob';
 
 // Light, dark or follow the device, and the accent colour. Changes show at once and are saved to the account.
 export function AppearanceSettings() {
@@ -104,9 +105,49 @@ export function AppearanceSettings() {
             />
             <FormControlLabel
               control={<Switch checked={juice.blob} onChange={(e) => setJuicePref('blob', e.target.checked)} />}
-              label="Show the blob in the corner"
+              label="Show a buddy in the corner"
             />
           </Box>
+          {juice.blob && (
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="body2" sx={{ mb: 1 }} id="buddy-label">
+                Which buddy
+              </Typography>
+              <Box role="radiogroup" aria-labelledby="buddy-label" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {BUDDIES.map((option) => {
+                  const selected = option === juice.buddy;
+                  return (
+                    <ButtonBase
+                      key={option}
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setJuicePref('buddy', option)}
+                      sx={{
+                        width: 76,
+                        py: 1,
+                        flexDirection: 'column',
+                        gap: 0.5,
+                        borderRadius: '12px',
+                        border: `2px solid ${selected ? colors.accent600 : colors.grey200}`,
+                        backgroundColor: selected ? colors.accent100 : 'transparent',
+                        transition: 'transform 0.15s ease, border-color 0.15s ease',
+                        '&:hover': { transform: 'translateY(-2px)' },
+                        '&:focus-visible': { outline: `2px solid ${colors.textPrimary}`, outlineOffset: 2 },
+                      }}
+                    >
+                      <BuddyPreview buddy={option} />
+                      <Typography variant="caption" sx={{ fontWeight: selected ? 600 : 400 }}>
+                        {BUDDY_LABELS[option]}
+                      </Typography>
+                    </ButtonBase>
+                  );
+                })}
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                The blob takes your accent colour. The others keep their own.
+              </Typography>
+            </Box>
+          )}
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
             These are saved on this device only.
           </Typography>

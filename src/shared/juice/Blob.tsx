@@ -9,6 +9,7 @@ import { restingMood, type BlobMood } from './blobMood';
 import { burst } from './burst';
 import { onJuice } from './events';
 import { playBoop } from './sound';
+import { BUDDY_LABELS, useJuicePrefs, type Buddy } from './prefs';
 
 const INK = '#2a2238';
 const SIZE = { w: 72, h: 64 };
@@ -24,6 +25,8 @@ export function Blob() {
   const resting = restingMood(now.getHours() * 60 + now.getMinutes(), profile?.survey, pathname);
   const isMobile = useMediaQuery((t: Theme) => t.breakpoints.down('sm'), { noSsr: true });
   const reduceMotion = useReducedMotion();
+  const { buddy } = useJuicePrefs();
+  const name = BUDDY_LABELS[buddy].toLowerCase();
 
   const [flash, setFlash] = useState<BlobMood | null>(null);
   const flashTimer = useRef<number>();
@@ -159,8 +162,8 @@ export function Blob() {
       ref={scope}
       type="button"
       onClick={bop}
-      aria-label="Bop the blob"
-      title="Bop the blob"
+      aria-label={`Bop the ${name}`}
+      title={`Bop the ${name}`}
       sx={{
         position: 'fixed',
         right: { xs: 12, sm: 20 },
@@ -174,6 +177,7 @@ export function Blob() {
         cursor: 'pointer',
         WebkitTapHighlightColor: 'transparent',
         '&:focus-visible': { outline: `2px solid ${colors.accent600}`, outlineOffset: 2, borderRadius: '50%' },
+        '@keyframes buddySpin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
         '@keyframes blobBreathe': { from: { transform: 'scaleY(1)' }, to: { transform: 'scaleY(1.04) scaleX(0.985)' } },
         '@keyframes blobZ': {
           '0%': { opacity: 0, transform: 'translate(0, 0) scale(0.6)' },
@@ -201,11 +205,7 @@ export function Blob() {
           }}
         >
           <svg viewBox="0 0 80 72" width={SIZE.w} height={SIZE.h} aria-hidden style={{ overflow: 'visible' }}>
-            <path
-              d="M40 8 C61 8 75 25 75 45 C75 61 62 69 40 69 C18 69 5 61 5 45 C5 25 19 8 40 8 Z"
-              style={{ fill: colors.accent400 }}
-            />
-            <ellipse cx="27" cy="22" rx="8" ry="4.5" transform="rotate(-25 27 22)" fill="#fff" opacity="0.35" />
+            <BuddyBody buddy={buddy} spin={!reduceMotion} />
             <ellipse cx="22" cy="49" rx="4.5" ry="2.6" fill="#f472b6" opacity={mood === 'happy' || mood === 'cheer' ? 0.7 : 0.4} />
             <ellipse cx="58" cy="49" rx="4.5" ry="2.6" fill="#f472b6" opacity={mood === 'happy' || mood === 'cheer' ? 0.7 : 0.4} />
             <motion.g style={{ x: mood === 'sleep' ? 0 : lookX, y: mood === 'sleep' ? 0 : lookY }}>
@@ -221,7 +221,7 @@ export function Blob() {
                     x={62 + i * 3}
                     y={18 - i * 2}
                     fontSize={8 + i * 2}
-                    style={{ opacity: 0, animation: reduceMotion ? 'none' : `blobZ 3s ease-out ${i * 1}s infinite`, fill: colors.accent600 }}
+                    style={{ opacity: 0, animation: reduceMotion ? 'none' : `blobZ 3s ease-out ${i * 1}s infinite`, fill: buddy === 'blob' ? colors.accent600 : '#64748b' }}
                   >
                     z
                   </text>
@@ -232,6 +232,84 @@ export function Blob() {
         </Box>
       </motion.div>
     </Box>
+  );
+}
+
+// The body behind the face, in an 80×72 box. The face sits at the same place on every buddy: eyes at (30, 40) and
+// (50, 40), mouth at (40, 51), cheeks at (22, 49) and (58, 49). Only the blob follows the accent colour.
+function BuddyBody({ buddy, spin }: { buddy: Buddy; spin?: boolean }) {
+  switch (buddy) {
+    case 'cloud':
+      return (
+        <path
+          d="M17 68 C7 68 3 59 7 52 C2 44 8 33 19 34 C19 21 31 13 42 17 C50 8 66 12 67 27 C77 29 79 42 73 49 C78 59 71 68 61 68 Z"
+          fill="#f8fafc"
+          stroke="#94a3b8"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+      );
+    case 'sunflower': {
+      const petals = Array.from({ length: 14 }, (_, i) => (i * 360) / 14);
+      return (
+        <g>
+          <path d="M40 66 L40 76" stroke="#16a34a" strokeWidth="4" strokeLinecap="round" />
+          <g style={{ transformOrigin: '40px 42px', animation: spin ? 'buddySpin 40s linear infinite' : 'none' }}>
+            {petals.map((angle) => (
+              <ellipse key={angle} cx="40" cy="15" rx="6.5" ry="11" transform={`rotate(${angle} 40 42)`} fill="#facc15" stroke="#eab308" strokeWidth="1.2" />
+            ))}
+          </g>
+          <circle cx="40" cy="44" r="22" fill="#c98a3c" />
+          <circle cx="40" cy="44" r="22" fill="none" stroke="#a16207" strokeWidth="1.5" strokeDasharray="1.5 3" />
+        </g>
+      );
+    }
+    case 'sun': {
+      const rays = Array.from({ length: 12 }, (_, i) => (i * 360) / 12);
+      return (
+        <g>
+          <g style={{ transformOrigin: '40px 42px', animation: spin ? 'buddySpin 24s linear infinite' : 'none' }}>
+            {rays.map((angle) => (
+              <path key={angle} d="M40 6 L40 13" transform={`rotate(${angle} 40 42)`} stroke="#f59e0b" strokeWidth="4.5" strokeLinecap="round" />
+            ))}
+          </g>
+          <circle cx="40" cy="42" r="25" fill="#fbbf24" />
+          <ellipse cx="30" cy="27" rx="7" ry="4" transform="rotate(-25 30 27)" fill="#fff" opacity="0.4" />
+        </g>
+      );
+    }
+    case 'moon':
+      return (
+        <g>
+          <circle cx="40" cy="42" r="28" fill="#fef3c7" opacity="0.35" />
+          <circle cx="40" cy="42" r="25" fill="#fde68a" />
+          <circle cx="23" cy="30" r="4" fill="#fcd34d" />
+          <circle cx="56" cy="26" r="2.6" fill="#fcd34d" />
+          <circle cx="57" cy="58" r="3.2" fill="#fcd34d" />
+          <circle cx="27" cy="60" r="2" fill="#fcd34d" />
+        </g>
+      );
+    default:
+      return (
+        <g>
+          <path d="M40 8 C61 8 75 25 75 45 C75 61 62 69 40 69 C18 69 5 61 5 45 C5 25 19 8 40 8 Z" style={{ fill: colors.accent400 }} />
+          <ellipse cx="27" cy="22" rx="8" ry="4.5" transform="rotate(-25 27 22)" fill="#fff" opacity="0.35" />
+        </g>
+      );
+  }
+}
+
+// A still picture of a buddy with its resting face, for the picker in settings.
+export function BuddyPreview({ buddy, size = 44 }: { buddy: Buddy; size?: number }) {
+  return (
+    <svg viewBox="0 0 80 72" width={size} height={(size * 72) / 80} aria-hidden style={{ overflow: 'visible' }}>
+      <BuddyBody buddy={buddy} />
+      <ellipse cx="22" cy="49" rx="4.5" ry="2.6" fill="#f472b6" opacity={0.4} />
+      <ellipse cx="58" cy="49" rx="4.5" ry="2.6" fill="#f472b6" opacity={0.4} />
+      <Eye cx={30} cy={40} mood="idle" closed={false} side="left" />
+      <Eye cx={50} cy={40} mood="idle" closed={false} side="right" />
+      <Mouth mood="idle" yawning={false} />
+    </svg>
   );
 }
 
