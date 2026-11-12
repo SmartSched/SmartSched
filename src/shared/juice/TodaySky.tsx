@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import { format } from 'date-fns';
 import { Box } from '@mui/material';
 import { useAppearance } from '../../app/lib/AppearanceContext';
 import { colors, withAlpha } from '../../app/theme';
-import { celestial, skyColors } from './sky';
+import { celestial, skyColors, skyTime, sunTimes } from './sky';
 
 // A few fixed stars, as % positions, shown at night.
 const STARS = [
@@ -15,12 +16,35 @@ function previewMinutes() {
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
 
-// The Today header's background: a sky that follows the clock, with the sun or moon on its arc.
+// Roughly where the user is, without asking: longitude from the time zone's standard offset (15° an hour), and a
+// mid latitude in the right hemisphere. Close enough for sunrise and sunset to land within about half an hour.
+const SOUTHERN = /^(Australia|Antarctica)\/|^Pacific\/(Auckland|Chatham|Fiji)|^America\/(Argentina|Sao_Paulo|Santiago|Montevideo|Asuncion|Lima|La_Paz)|^Africa\/(Johannesburg|Maputo|Harare|Windhoek|Gaborone)|^Indian\/(Mauritius|Reunion)/;
+
+function guessLocation() {
+  const year = new Date().getFullYear();
+  const standardOffset = Math.max(new Date(year, 0, 1).getTimezoneOffset(), new Date(year, 6, 1).getTimezoneOffset());
+  let zone = '';
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? '';
+  } catch {
+    // Northern hemisphere then.
+  }
+  return { lat: SOUTHERN.test(zone) ? -35 : 40, lon: -standardOffset / 4 };
+}
+
+// The Today header's background: a sky that follows the clock and the real sunrise and sunset, with the sun or
+// moon on its arc.
 export function TodaySky({ minutes: clockMinutes, children }: { minutes: number; children: ReactNode }) {
   const { mode } = useAppearance();
   const minutes = previewMinutes() ?? clockMinutes;
-  const { top, bottom } = skyColors(minutes, mode);
-  const body = celestial(minutes);
+  // Today's real sunrise and sunset where the user (roughly) is, so it's dark here when it's dark outside.
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const sun = useMemo(() => {
+    const { lat, lon } = guessLocation();
+    return sunTimes(today, lat, lon, -new Date().getTimezoneOffset());
+  }, [today]);
+  const { top, bottom } = skyColors(skyTime(minutes, sun), mode);
+  const body = celestial(minutes, sun);
   const night = body.body === 'moon';
   // Stars fade in and out around dusk and dawn.
   const starOpacity = night ? Math.min(1, body.x * 6, (1 - body.x) * 6) * (mode === 'dark' ? 0.9 : 0.5) : 0;
@@ -60,12 +84,16 @@ export function TodaySky({ minutes: clockMinutes, children }: { minutes: number;
         <Box
           sx={{
             position: 'absolute',
-            left: `calc(${4 + body.x * 92}% - 18px)`,
-            top: `calc(${82 - body.y * 62}% - 18px)`,
+            // The arc stays in the top-right of the banner, clear of the greeting and the progress line below it:
+            // rising on the left of that area, highest at midday, setting on the right. It fades as it nears
+            // the horizon.
+            left: `calc(${55 + body.x * 40}% - 18px)`,
+            top: `calc(${42 - body.y * 30}% - 18px)`,
+            opacity: 0.45 + 0.55 * Math.min(1, body.y * 3),
             width: 36,
             height: 36,
             borderRadius: '50%',
-            transition: 'left 1s linear, top 1s linear',
+            transition: 'left 1s linear, top 1s linear, opacity 1s linear',
             ...(night
               ? {
                   // A crescent: the disc with a sky-coloured shadow taking a bite out of it.

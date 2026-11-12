@@ -46,12 +46,51 @@ export function skyColors(minutes: number, mode: ColorMode) {
   return { top: lerpHex(from.top, to.top, t), bottom: lerpHex(from.bottom, to.bottom, t) };
 }
 
-// Where the sun (6 AM to 8 PM) or moon (the rest) sits on its arc, as 0..1 across and 0..1 up.
-export function celestial(minutes: number) {
+export interface SunTimes {
+  rise: number; // local minutes after midnight
+  set: number;
+}
+
+// The fallback when sunrise and sunset can't be worked out.
+export const DEFAULT_SUN: SunTimes = { rise: 6 * 60, set: 20 * 60 };
+
+// Sunrise and sunset for a day ('yyyy-MM-dd') at a latitude and longitude (degrees, east positive), in local
+// minutes after midnight for a UTC offset in minutes (EST is -300). NOAA's simple solar formula: within a few
+// minutes. Where the sun doesn't rise or set that day (polar), the fallback times are used.
+export function sunTimes(date: string, lat: number, lon: number, utcOffset: number): SunTimes {
+  const [y, mo, d] = date.split('-').map(Number);
+  const dayOfYear = Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(y, 0, 0)) / 86_400_000);
+  const g = ((2 * Math.PI) / 365) * (dayOfYear - 1);
+  const eqTime =
+    229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  const decl =
+    0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) +
+    0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const rad = Math.PI / 180;
+  const cosHa = Math.cos(90.833 * rad) / (Math.cos(lat * rad) * Math.cos(decl)) - Math.tan(lat * rad) * Math.tan(decl);
+  if (cosHa < -1 || cosHa > 1) return DEFAULT_SUN;
+  const ha = Math.acos(cosHa) / rad;
+  return {
+    rise: Math.round(720 - 4 * (lon + ha) - eqTime + utcOffset),
+    set: Math.round(720 - 4 * (lon - ha) - eqTime + utcOffset),
+  };
+}
+
+// The sky colours are drawn for a day with sunrise at 6:30 and sunset at 7:30 PM. This stretches the real day onto
+// that one, so dawn colours come at the real sunrise and dusk at the real sunset.
+export function skyTime(minutes: number, sun: SunTimes) {
   const m = ((minutes % 1440) + 1440) % 1440;
-  const sunrise = 6 * 60;
-  const sunset = 20 * 60;
-  const isSun = m >= sunrise && m < sunset;
-  const progress = isSun ? (m - sunrise) / (sunset - sunrise) : ((m - sunset + 1440) % 1440) / (1440 - (sunset - sunrise));
+  const [rise, set] = [6 * 60 + 30, 19 * 60 + 30];
+  if (m < sun.rise) return (m / sun.rise) * rise;
+  if (m < sun.set) return rise + ((m - sun.rise) / (sun.set - sun.rise)) * (set - rise);
+  return set + ((m - sun.set) / (1440 - sun.set)) * (1440 - set);
+}
+
+// Where the sun (sunrise to sunset) or moon (the rest) sits on its arc, as 0..1 across and 0..1 up.
+export function celestial(minutes: number, sun: SunTimes = DEFAULT_SUN) {
+  const m = ((minutes % 1440) + 1440) % 1440;
+  const isSun = m >= sun.rise && m < sun.set;
+  const day = sun.set - sun.rise;
+  const progress = isSun ? (m - sun.rise) / day : ((m - sun.set + 1440) % 1440) / (1440 - day);
   return { body: isSun ? ('sun' as const) : ('moon' as const), x: progress, y: Math.sin(progress * Math.PI) };
 }
