@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Alert, Box, ButtonBase, Card, CardContent, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Alert, Box, ButtonBase, Card, CardContent, FormControlLabel, Switch, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { Check, DarkModeOutlined, LightModeOutlined, SettingsBrightnessOutlined } from '@mui/icons-material';
 import { useAppearance, type ThemeSetting } from '../../../app/lib/AppearanceContext';
 import { ACCENTS, ACCENT_LABELS, colors, resolveColors } from '../../../app/theme';
+import { setJuicePref, useJuicePrefs } from '../../../shared/juice/prefs';
 
 // Light, dark or follow the device, and the accent colour. Changes show at once and are saved to the account.
 export function AppearanceSettings() {
   const { setting, mode, accent, setSetting, setAccent } = useAppearance();
+  const juice = useJuicePrefs();
   const [error, setError] = useState<string | null>(null);
 
   const save = async (change: () => Promise<void>) => {
@@ -88,6 +90,25 @@ export function AppearanceSettings() {
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
             Planner block colours stay the same, so classes are always blue.
+          </Typography>
+        </Box>
+
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+            Extras
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <FormControlLabel
+              control={<Switch checked={juice.sound} onChange={(e) => setJuicePref('sound', e.target.checked)} />}
+              label="Soft sounds when you check things off"
+            />
+            <FormControlLabel
+              control={<Switch checked={juice.blob} onChange={(e) => setJuicePref('blob', e.target.checked)} />}
+              label="Show the blob in the corner"
+            />
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            These are saved on this device only.
           </Typography>
         </Box>
 

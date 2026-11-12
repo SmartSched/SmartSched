@@ -32,6 +32,8 @@ import { DayReflection } from '../features/reflection/components/DayReflection';
 import { AuthPage } from '../features/auth/components/AuthPage';
 import { ResetPasswordPage } from '../features/auth/components/ResetPasswordPage';
 import { PageLoader } from '../shared/components/States';
+import { Blob } from '../shared/juice/Blob';
+import { useJuicePrefs } from '../shared/juice/prefs';
 
 const NAV_LINKS = [
   { to: '/', label: 'Today', icon: <WbSunnyOutlined /> },
@@ -232,6 +234,8 @@ function AppShell() {
   const { user } = useAuth();
   const location = useLocation();
   const showNav = Boolean(user);
+  const juice = useJuicePrefs();
+  const showBlob = showNav && juice.blob && !['/survey', '/consent'].includes(location.pathname);
 
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: colors.surface, pb: showNav && isMobile ? `${TAB_BAR_HEIGHT + 16}px` : 0 }}>
@@ -273,6 +277,7 @@ function AppShell() {
       </Container>
 
       {showNav && isMobile && <BottomTabs />}
+      {showBlob && <Blob />}
     </Box>
   );
 }

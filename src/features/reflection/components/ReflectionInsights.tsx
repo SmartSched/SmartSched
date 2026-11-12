@@ -77,9 +77,7 @@ export function ReflectionInsights({ today, version }: { today: string; version:
   const times = useMemo(() => (data ? taskTimes(data.tasks) : []), [data]);
   const ratings = useMemo(() => (data ? averageRatings(data.reflections, Object.keys(RATING_LABELS)) : []), [data]);
 
-  const weekRows = week
-    ? [...week.rows, ...(sleep ? [{ key: 'sleep', label: 'Sleep', hours: Math.round(sleep.hours * 7 * 10) / 10 }] : [])]
-    : [];
+  const weekRows = week?.rows ?? [];
   const maxHours = Math.max(1, ...weekRows.map((r) => r.hours));
 
   return (
@@ -105,8 +103,7 @@ export function ReflectionInsights({ today, version }: { today: string; version:
               title="A typical week"
               note={
                 week && week.weeks > 0
-                  ? `Hours a week, averaged over ${week.weeks === 1 ? 'the one week' : `the ${week.weeks} weeks`} with anything planned.` +
-                    (sleep ? ` Sleep is ${sleep.source === 'reflections' ? `from ${sleep.nights} nights you logged` : 'what your survey plans for'}.` : '')
+                  ? `Hours a week, averaged over ${week.weeks === 1 ? 'the one week' : `the ${week.weeks} weeks`} with anything planned.`
                   : undefined
               }
             >
@@ -124,7 +121,7 @@ export function ReflectionInsights({ today, version }: { today: string; version:
                               height: 12,
                               width: `${(row.hours / maxHours) * 100}%`,
                               minWidth: row.hours > 0 ? 4 : 0,
-                              backgroundColor: row.key === 'sleep' ? colors.accent200 : colors.accent400,
+                              backgroundColor: colors.accent400,
                               borderRadius: '0 4px 4px 0',
                               transition: 'width 0.4s ease',
                             }}
@@ -140,6 +137,30 @@ export function ReflectionInsights({ today, version }: { today: string; version:
               ) : (
                 <Typography variant="body2" color="text.secondary">
                   Nothing planned in the last four weeks yet. Once your planner has a week or two in it, this fills in.
+                </Typography>
+              )}
+            </Section>
+
+            <Section
+              title="Sleep"
+              note={
+                sleep
+                  ? sleep.source === 'reflections'
+                    ? `Average of the ${sleep.nights} nights you logged bed and wake-up times for.`
+                    : 'What your survey plans for. Log bed and wake-up times when you reflect to see what you actually get.'
+                  : undefined
+              }
+            >
+              {sleep ? (
+                <Typography sx={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {sleep.hours} h{' '}
+                  <Box component="span" sx={{ fontSize: 14, fontWeight: 400, color: 'text.secondary' }}>
+                    a night
+                  </Box>
+                </Typography>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Nothing yet. Add bed and wake-up times when you reflect, or your sleep in the survey.
                 </Typography>
               )}
             </Section>

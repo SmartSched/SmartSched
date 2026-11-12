@@ -29,8 +29,22 @@ import {
   WAKE_TIME,
   EMPTY_SURVEY,
   SurveyAnswers,
+  formatWakeTime,
 } from '../../../app/lib/survey';
 import { colors } from '../../../app/theme';
+
+// Every 15 minutes from the earliest to the latest allowed wake-up time, as "HH:MM".
+const WAKE_TIME_OPTIONS = (() => {
+  const toMinutes = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const options: string[] = [];
+  for (let t = toMinutes(WAKE_TIME.earliest); t <= toMinutes(WAKE_TIME.latest); t += 15) {
+    options.push(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`);
+  }
+  return options;
+})();
 
 type CommitmentKey = (typeof COMMITMENTS)[number]['key'];
 type NonNegotiableKey = (typeof NON_NEGOTIABLES)[number]['key'];
@@ -102,7 +116,8 @@ export function SurveyPage() {
     deadline_style: initial.deadline_style,
     calendar_style: initial.calendar_style,
     sleep_hours: initial.sleep_hours ?? null,
-    wake_time: initial.wake_time ?? null,
+    // Saved times can come back as "HH:MM:SS"; the dropdown options are "HH:MM".
+    wake_time: initial.wake_time ? initial.wake_time.slice(0, 5) : null,
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -126,6 +141,8 @@ export function SurveyPage() {
     !!answers.calendar_style,
   ];
   const answeredCount = answered.filter(Boolean).length;
+  // Once the current question is answered, the old "answer this" message no longer applies.
+  const shownError = error && step < answered.length - 1 && answered[step] ? null : error;
 
   const toggleCommitment = (key: CommitmentKey) => {
     const next = { ...commitmentHours };
@@ -285,18 +302,23 @@ export function SurveyPage() {
                 </MenuItem>
               ))}
             </TextField>
+            {/* A dropdown rather than a native time input: Safari's time field can show a
+                typed time without ever reporting it, which left this question unanswerable. */}
             <TextField
+              select
               size="small"
-              type="time"
               label="Usual wake-up time"
               value={answers.wake_time ?? ''}
               onChange={(e) => setAnswers({ ...answers, wake_time: e.target.value || null })}
-              slotProps={{
-                inputLabel: { shrink: true },
-                htmlInput: { min: WAKE_TIME.earliest, max: WAKE_TIME.latest, step: 900 },
-              }}
               sx={{ width: '180px' }}
-            />
+              slotProps={{ select: { MenuProps: { slotProps: { paper: { sx: { maxHeight: 320 } } } } } }}
+            >
+              {WAKE_TIME_OPTIONS.map((time) => (
+                <MenuItem key={time} value={time}>
+                  {formatWakeTime(time)}
+                </MenuItem>
+              ))}
+            </TextField>
           </Box>
         </Question>
 ,
@@ -407,7 +429,7 @@ export function SurveyPage() {
           {questions[step]}
         </Box>
 
-        {error && <Alert severity="error">{error}</Alert>}
+        {shownError && <Alert severity="error">{shownError}</Alert>}
 
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 4, flexWrap: 'wrap' }}>
           {isEditing && (

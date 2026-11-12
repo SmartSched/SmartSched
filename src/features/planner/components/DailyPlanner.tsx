@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, FormEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   Card,
   CardContent,
@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   ButtonBase,
-  Checkbox,
   FormControlLabel,
   IconButton,
   TextField,
@@ -63,6 +62,9 @@ import { BurnoutBanner } from './BurnoutBanner';
 import { ListSkeleton } from '../../../shared/components/States';
 import { TimeSpentDialog } from '../../tasks/components/TimeSpentDialog';
 import { useCurrentTime } from '../../../shared/hooks/useCurrentTime';
+import { InkText, JuicyCheckbox } from '../../../shared/juice/Juicy';
+import { playThunk } from '../../../shared/juice/sound';
+import { canDrag, hhmm, useBlockDrag, type DragPreview } from '../lib/blockDrag';
 
 type BlockPayload = Omit<TimeBlock, 'id' | 'task' | 'series' | 'series_id' | 'auto' | 'feed_id' | 'feed'>;
 
@@ -722,9 +724,13 @@ interface TimeBlockItemProps {
   dense?: boolean;
   onClick: () => void;
   onToggleTask: (block: TimeBlock) => void;
+  // Dragging: picked up and following the pointer, or just dropped (plays a little landing squash).
+  lifted?: boolean;
+  landed?: boolean;
+  onDragStart?: (block: TimeBlock, e: ReactPointerEvent<HTMLElement>) => void;
 }
 
-function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClick, onToggleTask }: TimeBlockItemProps) {
+function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClick, onToggleTask, lifted, landed, onDragStart }: TimeBlockItemProps) {
   const start = toMinutes(block.start_time);
   const end = toMinutes(block.end_time);
   const top = scale.toY(start, 'start');
@@ -743,11 +749,12 @@ function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClic
     <Box
       // Clicks on a block mustn't reach the column underneath, which would start a new block there.
       onClick={(e) => e.stopPropagation()}
+      onPointerDown={onDragStart ? (e) => onDragStart(block, e) : undefined}
       sx={{
         position: 'absolute',
         top,
         height,
-        zIndex: 1,
+        zIndex: lifted ? 5 : 1,
         left: `calc(${(column * 100) / columns}% + ${gap}px)`,
         width: `calc(${100 / columns}% - ${gap * 2}px)`,
         backgroundColor: color + '20',
@@ -758,14 +765,28 @@ function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClic
         alignItems: compact ? 'center' : 'flex-start',
         overflow: 'hidden',
         boxSizing: 'border-box',
-        opacity: task?.completed ? 0.6 : 1,
-        transition: 'background-color 0.15s ease',
+        opacity: task?.completed && !lifted ? 0.6 : 1,
+        cursor: lifted ? 'grabbing' : onDragStart && canDrag(block) ? 'grab' : undefined,
+        '& .MuiButtonBase-root': { cursor: 'inherit' },
+        // Lifted: raised with a shadow and a slight tilt, snapping between 15-minute steps with a little
+        // overshoot. Everything else glides when blocks around it shift to make room.
+        transform: lifted ? 'scale(1.04) rotate(-0.8deg)' : 'none',
+        boxShadow: lifted ? '0 14px 30px rgba(0,0,0,0.22)' : 'none',
+        transition: lifted
+          ? 'top 0.14s cubic-bezier(.3,1.6,.5,1), left 0.2s cubic-bezier(.3,1.4,.5,1), width 0.2s ease, transform 0.15s ease, box-shadow 0.15s ease'
+          : 'top 0.3s cubic-bezier(.3,1.3,.5,1), left 0.3s cubic-bezier(.3,1.3,.5,1), width 0.3s ease, height 0.3s ease, background-color 0.15s ease, transform 0.2s ease, box-shadow 0.25s ease',
+        animation: landed ? 'blockLand 0.45s cubic-bezier(.3,1.5,.5,1)' : 'none',
+        '@keyframes blockLand': {
+          '0%': { transform: 'scale(1.04, 0.9)' },
+          '45%': { transform: 'scale(0.98, 1.05)' },
+          '100%': { transform: 'scale(1, 1)' },
+        },
         '&:hover': { backgroundColor: color + '35' },
         '&:focus-within': { outline: `2px solid ${colors.accent600}`, outlineOffset: 1 },
       }}
     >
       {task && (
-        <Checkbox
+        <JuicyCheckbox
           size="small"
           checked={task.completed}
           onChange={() => onToggleTask(block)}
@@ -793,9 +814,9 @@ function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClic
         <Typography
           variant={dense ? 'caption' : 'body2'}
           noWrap
-          sx={{ fontWeight: 600, color: 'text.primary', minWidth: 0, maxWidth: '100%', textDecoration: task?.completed ? 'line-through' : 'none' }}
+          sx={{ fontWeight: 600, color: 'text.primary', minWidth: 0, maxWidth: '100%' }}
         >
-          {title}
+          {task ? <InkText done={task.completed}>{title}</InkText> : title}
         </Typography>
         {!dense && (
           <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
@@ -966,18 +987,6 @@ export function DailyPlanner() {
     () => (showCommutes ? timeBlocks : timeBlocks.filter((b) => b.type !== 'commute')),
     [timeBlocks, showCommutes],
   );
-  const placedBlocks = useMemo(
-    () => layoutBlocks(visibleBlocks, (minBlockHeight / hourHeight) * 60),
-    [visibleBlocks, minBlockHeight, hourHeight],
-  );
-  const blocksByDate = useMemo(() => {
-    const map = new Map<string, TimeBlock[]>();
-    for (const block of visibleBlocks) {
-      map.set(block.date, [...(map.get(block.date) ?? []), block]);
-    }
-    return map;
-  }, [visibleBlocks]);
-
   // Normal view widens past 7 AM–10 PM when something starts earlier or ends later; compact view is shorter rows
   // and never shows 2–6 AM.
   const scale = useMemo(
@@ -994,6 +1003,31 @@ export function DailyPlanner() {
       ),
     [compact, visibleBlocks, checkIn.end, hourHeight],
   );
+
+  // While a block is being dragged it's laid out where it would land, so the blocks around it make room.
+  const { preview: dragPreview, landedId, startDrag } = useBlockDrag(scale, (block, to) => dropBlock(block, to));
+  const displayBlocks = useMemo(
+    () =>
+      dragPreview
+        ? visibleBlocks.map((b) =>
+            b.id === dragPreview.id
+              ? { ...b, date: dragPreview.date, start_time: hhmm(dragPreview.start), end_time: hhmm(dragPreview.end) }
+              : b,
+          )
+        : visibleBlocks,
+    [visibleBlocks, dragPreview],
+  );
+  const placedBlocks = useMemo(
+    () => layoutBlocks(displayBlocks.filter((b) => b.date === selectedDate), (minBlockHeight / hourHeight) * 60),
+    [displayBlocks, selectedDate, minBlockHeight, hourHeight],
+  );
+  const blocksByDate = useMemo(() => {
+    const map = new Map<string, TimeBlock[]>();
+    for (const block of displayBlocks) {
+      map.set(block.date, [...(map.get(block.date) ?? []), block]);
+    }
+    return map;
+  }, [displayBlocks]);
 
   const changeDay = (days: number) => {
     setSelectedDate((current) => format(addDays(parseISO(current), days), 'yyyy-MM-dd'));
@@ -1127,6 +1161,26 @@ export function DailyPlanner() {
       reportCommutes(commutes, `Moved “${moved.task?.title ?? moved.activity}” to ${formatSlot(moved)}.`);
       reload();
     } catch {
+      setActionError("Couldn't move the block. Try again.");
+    }
+  };
+
+  // A block dropped somewhere new: shown there straight away, then saved (and put back if saving fails).
+  const dropBlock = async (block: TimeBlock, to: DragPreview) => {
+    const slot = { date: to.date, start_time: hhmm(to.start), end_time: hhmm(to.end) };
+    playThunk();
+    setTimeBlocks((current) => current.map((b) => (b.id === block.id ? { ...b, ...slot } : b)));
+    try {
+      const { block: moved, commutes }: { block: TimeBlock; commutes: CommuteReport } = await apiPatch(
+        `/api/time-blocks/${block.id}`,
+        slot,
+      );
+      setTimeBlocks((current) => current.map((b) => (b.id === moved.id ? moved : b)));
+      setNearbyBlocks((current) => current.map((b) => (b.id === moved.id ? moved : b)));
+      reportCommutes(commutes);
+      reload();
+    } catch {
+      setTimeBlocks((current) => current.map((b) => (b.id === block.id ? block : b)));
       setActionError("Couldn't move the block. Try again.");
     }
   };
@@ -1333,6 +1387,7 @@ export function DailyPlanner() {
             <Box sx={{ display: 'flex' }}>
               <HourLabels scale={scale} width={compact ? 56 : 80} small={compact} />
               <Box
+                data-day-column={selectedDate}
                 onClick={(e) => openAddAt(selectedDate, e)}
                 sx={{ flex: 1, position: 'relative', borderLeft: `2px solid ${colors.grey200}`, cursor: 'copy' }}
               >
@@ -1351,6 +1406,9 @@ export function DailyPlanner() {
                     dense={compact}
                     onClick={() => openEdit(block)}
                     onToggleTask={handleToggleTask}
+                    lifted={dragPreview?.id === block.id}
+                    landed={landedId === block.id}
+                    onDragStart={startDrag}
                   />
                 ))}
               </Box>
@@ -1400,6 +1458,7 @@ export function DailyPlanner() {
                   return (
                     <Box
                       key={date}
+                      data-day-column={date}
                       onClick={(e) => openAddAt(date, e)}
                       sx={{
                         flex: 1,
@@ -1424,6 +1483,9 @@ export function DailyPlanner() {
                           dense
                           onClick={() => openEdit(block)}
                           onToggleTask={handleToggleTask}
+                          lifted={dragPreview?.id === block.id}
+                          landed={landedId === block.id}
+                          onDragStart={startDrag}
                         />
                       ))}
                     </Box>

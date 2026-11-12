@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Alert, Box, Button, Card, Checkbox, Chip, LinearProgress, Snackbar, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, Chip, LinearProgress, Snackbar, Typography } from '@mui/material';
 import { NightsStayOutlined, PlaceOutlined, ScheduleOutlined, WarningAmberRounded } from '@mui/icons-material';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { Link } from 'react-router';
@@ -17,6 +17,8 @@ import { EmptyState, ListSkeleton } from '../../../shared/components/States';
 import { TimeSpentDialog } from '../../tasks/components/TimeSpentDialog';
 import { useHomeDashboard } from '../hooks/useHomeDashboard';
 import { useCurrentTime } from '../../../shared/hooks/useCurrentTime';
+import { InkText, JuicyCheckbox, celebrate, useLinger } from '../../../shared/juice/Juicy';
+import { TodaySky } from '../../../shared/juice/TodaySky';
 
 // "13:10" -> "1:10 PM"
 function clock(time: string) {
@@ -96,6 +98,7 @@ export function HomePage() {
   const [finishingTask, setFinishingTask] = useState<BlockTask | Task | null>(null);
   const [moving, setMoving] = useState(false);
   const [notice, setNotice] = useState<{ text: string; severity: 'success' | 'error' } | null>(null);
+  const { lingering, linger } = useLinger();
 
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -119,7 +122,11 @@ export function HomePage() {
     return { block, slot };
   }, [nearbyBlocks, now, leftBlocks]);
 
-  const dueSoon = useMemo(() => sortTasks(tasks).filter((t) => !t.completed).slice(0, 5), [tasks]);
+  // Just-finished tasks stay a moment so the ink line can play before they leave the list.
+  const dueSoon = useMemo(
+    () => sortTasks(tasks).filter((t) => !t.completed || lingering.has(t.id)).slice(0, 5),
+    [tasks, lingering],
+  );
 
   const heavyDates = new Set(warnings.map((w) => w.date));
   const weekHours = weekDates.map((date) => {
@@ -133,8 +140,10 @@ export function HomePage() {
   const updateTask = async (taskId: string, changes: { completed: boolean; time_spent?: number }) => {
     try {
       applyTask(await apiPatch(`/api/tasks/${taskId}`, changes));
+      return true;
     } catch {
       setNotice({ severity: 'error', text: "Couldn't update the task. Try again." });
+      return false;
     }
   };
 
@@ -148,7 +157,14 @@ export function HomePage() {
     if (!finishingTask) return;
     const taskId = finishingTask.id;
     setFinishingTask(null);
-    await updateTask(taskId, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
+    // Was this the last open task block today, or the last open task in Due soon?
+    const openToday = todayBlocks.filter((b) => b.task && !b.task.completed);
+    const lastToday = openToday.length > 0 && openToday.every((b) => b.task!.id === taskId);
+    const openTasks = tasks.filter((t) => !t.completed);
+    const lastOpen = openTasks.length > 0 && openTasks.every((t) => t.id === taskId);
+    linger(taskId);
+    const ok = await updateTask(taskId, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
+    if (ok && (lastToday || lastOpen)) celebrate();
   };
 
   const moveMissed = async () => {
@@ -177,6 +193,7 @@ export function HomePage() {
 
   return (
     <Box sx={{ maxWidth: 1240, mx: 'auto', display: 'flex', flexDirection: 'column', gap: { xs: 2.5, sm: 3.5 } }}>
+      <TodaySky minutes={nowMinutes}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
         <Box>
           <Typography
@@ -211,6 +228,7 @@ export function HomePage() {
           </Box>
         )}
       </Box>
+      </TodaySky>
 
       {missed && (
         <Alert
@@ -377,15 +395,8 @@ export function HomePage() {
                         }}
                       />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography
-                          noWrap
-                          sx={{
-                            fontWeight: 600,
-                            color: done ? colors.grey500 : 'text.primary',
-                            textDecoration: done && block.type === 'task' ? 'line-through' : 'none',
-                          }}
-                        >
-                          {blockTitle(block)}
+                        <Typography noWrap sx={{ fontWeight: 600, color: done ? colors.grey500 : 'text.primary' }}>
+                          {block.type === 'task' ? <InkText done={done}>{blockTitle(block)}</InkText> : blockTitle(block)}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" noWrap>
                           {meta}
@@ -397,7 +408,7 @@ export function HomePage() {
                         <Chip size="small" label="Not checked off" sx={{ backgroundColor: colors.infoBg, color: colors.infoInk }} />
                       )}
                       {block.task && (
-                        <Checkbox
+                        <JuicyCheckbox
                           checked={block.task.completed}
                           onChange={() => toggleTask(block.task!)}
                           slotProps={{ input: { 'aria-label': `${block.task.completed ? 'Reopen' : 'Check off'} ${block.task.title}` } }}
@@ -430,13 +441,15 @@ export function HomePage() {
                       key={task.id}
                       sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', px: 1.5, py: 1, borderTop: `1px solid ${colors.grey200}` }}
                     >
-                      <Checkbox
-                        checked={false}
+                      <JuicyCheckbox
+                        checked={task.completed}
                         onChange={() => toggleTask(task)}
                         slotProps={{ input: { 'aria-label': `Complete ${task.title}` } }}
                       />
                       <Box sx={{ flex: 1, minWidth: 0, pt: 1 }}>
-                        <Typography sx={{ fontWeight: 600, mb: 0.75 }}>{task.title}</Typography>
+                        <Typography sx={{ fontWeight: 600, mb: 0.75 }}>
+                          <InkText done={task.completed}>{task.title}</InkText>
+                        </Typography>
                         <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
                           {due && (
                             <Chip

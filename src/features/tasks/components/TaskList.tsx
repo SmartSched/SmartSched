@@ -6,7 +6,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  Checkbox,
   Chip,
   Box,
   Button,
@@ -45,6 +44,7 @@ import { useCurrentTime } from '../../../shared/hooks/useCurrentTime';
 import { TimeSpentDialog } from './TimeSpentDialog';
 import { colors } from '../../../app/theme';
 import { EmptyState, ListSkeleton } from '../../../shared/components/States';
+import { InkText, JuicyCheckbox, celebrate, useLinger } from '../../../shared/juice/Juicy';
 
 
 interface TaskFormValues {
@@ -252,11 +252,13 @@ export function TaskList() {
 
   const sortedTasks = useMemo(() => sortTasks(tasks), [tasks]);
   const [showDone, setShowDone] = useState(false);
+  // Just-finished tasks stay in their group a moment so the ink line can play before they move to Finished.
+  const { lingering, linger } = useLinger();
 
   // Open tasks by when they're due; finished ones go in their own section, folded away.
   const groups = useMemo(() => {
     const weekAhead = now + 7 * 24 * 60 * 60 * 1000;
-    const open = sortedTasks.filter((t) => !t.completed);
+    const open = sortedTasks.filter((t) => !t.completed || lingering.has(t.id));
     const due = (t: Task) => (t.due_date ? new Date(t.due_date).getTime() : null);
     return [
       { key: 'overdue', title: 'Overdue', tasks: open.filter((t) => due(t) !== null && due(t)! < now) },
@@ -264,8 +266,8 @@ export function TaskList() {
       { key: 'later', title: 'Due later', tasks: open.filter((t) => due(t) !== null && due(t)! > weekAhead) },
       { key: 'undated', title: 'No due date', tasks: open.filter((t) => due(t) === null) },
     ].filter((group) => group.tasks.length > 0);
-  }, [sortedTasks, now]);
-  const doneTasks = useMemo(() => sortedTasks.filter((t) => t.completed), [sortedTasks]);
+  }, [sortedTasks, now, lingering]);
+  const doneTasks = useMemo(() => sortedTasks.filter((t) => t.completed && !lingering.has(t.id)), [sortedTasks, lingering]);
   const ratios = useMemo(() => estimateRatios(tasks), [tasks]);
   const ratioEntries = Object.entries(ratios) as [Task['type'], EstimateRatio][];
 
@@ -305,8 +307,13 @@ export function TaskList() {
   const updateCompleted = async (task: Task, changes: { completed: boolean; time_spent?: number }) => {
     const { completed } = changes;
     setToggling(task.id, true);
+    // Finishing the last open task in its group gets a small celebration.
+    const group = groups.find((g) => g.tasks.some((t) => t.id === task.id));
+    const lastInGroup = completed && group !== undefined && group.tasks.every((t) => t.id === task.id || t.completed);
+    if (completed) linger(task.id);
     try {
       await updateTask(task.id, changes);
+      if (lastInGroup) celebrate();
     } catch {
       setActionError("Couldn't update task. Try again.");
     } finally {
@@ -433,7 +440,7 @@ const handleAcceptPlan = async (plan: any) => {
           '&:hover': { backgroundColor: colors.surfaceMuted },
         }}
       >
-        <Checkbox
+        <JuicyCheckbox
           checked={task.completed}
           disabled={togglingIds.has(task.id)}
           onChange={() => handleToggleTask(task)}
@@ -444,10 +451,9 @@ const handleAcceptPlan = async (plan: any) => {
             sx={{
               fontWeight: 600,
               color: task.completed ? colors.grey500 : 'text.primary',
-              textDecoration: task.completed ? 'line-through' : 'none',
             }}
           >
-            {task.title}
+            <InkText done={task.completed}>{task.title}</InkText>
           </Typography>
           {task.description && (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, whiteSpace: 'pre-line' }}>
