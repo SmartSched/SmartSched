@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Card, CardContent, IconButton, Tooltip, Typography } from '@mui/material';
-import { ChevronLeft, ChevronRight } from '@mui/icons-material';
+import { Box, ButtonBase, Card, CardContent, Chip, Dialog, DialogContent, DialogTitle, IconButton, Tooltip, Typography } from '@mui/material';
+import { ChevronLeft, ChevronRight, Close } from '@mui/icons-material';
 import { AnimatePresence, motion, stagger, useAnimate, useReducedMotion } from 'motion/react';
 import { addMonths, format, parseISO } from 'date-fns';
 import { apiGet } from '../../../app/lib/api';
@@ -179,13 +179,85 @@ function BlanketPatch({ section, day, future, isToday, delay, onPick }: {
   );
 }
 
+// How strongly a day shows in a section: null when nothing was recorded, else 0..1.
+function strength(section: BlanketSection, day: DaySummary) {
+  const value = section.value(day);
+  return value === null ? null : Math.min(1, value / section.max);
+}
+
+function fillFor(section: BlanketSection, t: number | null) {
+  return t ? `color-mix(in srgb, ${section.color} ${Math.round(18 + t * 72)}%, var(--ss-surface))` : colors.surfaceMuted;
+}
+
+// One section as a small panel: the month at a glance, no numbers. Clicking it opens the larger view.
+function MiniPanel({ section, days, today, index, onOpen }: {
+  section: BlanketSection;
+  days: DaySummary[];
+  today: string;
+  index: number;
+  onOpen: () => void;
+}) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 24, delay: reduceMotion ? 0 : index * 0.06 }}
+      style={{ minWidth: 0 }}
+    >
+      <ButtonBase
+        onClick={onOpen}
+        aria-label={`${section.label}: open a larger view`}
+        sx={{
+          width: '100%',
+          display: 'block',
+          p: { xs: 0.5, sm: 0.75 },
+          borderRadius: '10px',
+          backgroundColor: colors.surface,
+          transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+          '&:hover': { transform: 'translateY(-2px)', boxShadow: colors.shadow },
+          '&:focus-visible': { outline: `2px solid ${colors.accent600}`, outlineOffset: 2 },
+        }}
+      >
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '2px' }}>
+          {days.map((day) => {
+            const future = day.date > today;
+            const t = future ? null : strength(section, day);
+            return (
+              <Box
+                key={day.date}
+                sx={{
+                  aspectRatio: '1',
+                  borderRadius: '2px',
+                  backgroundColor: future ? 'transparent' : fillFor(section, t),
+                  opacity: future ? 1 : t === null ? 0.6 : 1,
+                  boxShadow: day.date === today ? `inset 0 0 0 1.5px ${colors.accent600}` : future ? `inset 0 0 0 1px ${colors.grey200}` : 'none',
+                }}
+              />
+            );
+          })}
+        </Box>
+      </ButtonBase>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mt: 0.75 }}>
+        <Box sx={{ width: 7, height: 7, borderRadius: '2px', backgroundColor: section.color, flexShrink: 0 }} />
+        <Typography noWrap sx={{ fontSize: { xs: 10, sm: 12 }, fontWeight: 600, color: colors.accent800 }}>
+          {section.label}
+        </Typography>
+      </Box>
+    </motion.div>
+  );
+}
+
 export function MonthBlanket({ today, version, onPick }: { today: string; version: number; onPick: (date: string) => void }) {
   const [month, setMonth] = useState(today.slice(0, 7));
+  const [open, setOpen] = useState<number | null>(null);
   const dates = useMemo(() => monthDates(month), [month]);
   const data = useDays(dates, version);
   const days = data?.days ?? [];
   const thisMonth = today.slice(0, 7);
+  const monthName = format(parseISO(`${month}-01`), 'MMMM yyyy');
   const step = (n: number) => setMonth((m) => format(addMonths(parseISO(`${m}-01`), n), 'yyyy-MM'));
+  const section = open === null ? null : SECTIONS[open];
 
   return (
     <Card>
@@ -193,10 +265,10 @@ export function MonthBlanket({ today, version, onPick }: { today: string; versio
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h6" component="h2">
-              {format(parseISO(`${month}-01`), 'MMMM yyyy')}
+              {monthName}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Your month as a blanket. A stronger patch means more of it that day.
+              Your month as a blanket. Stronger colour means more of it that day.
             </Typography>
           </Box>
           <IconButton aria-label="Previous month" onClick={() => step(-1)} sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}>
@@ -213,40 +285,56 @@ export function MonthBlanket({ today, version, onPick }: { today: string; versio
         </Box>
 
         <Box
+          key={month}
           sx={{
-            p: { xs: 1, sm: 1.5 },
-            borderRadius: '16px',
+            p: { xs: 0.75, sm: 1.25 },
+            borderRadius: '14px',
             backgroundColor: colors.accent100,
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            gap: { xs: 1, sm: 1.5 },
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+            gap: { xs: 0.75, sm: 1.25 },
           }}
         >
-          {SECTIONS.map((section, s) => (
-            <Box
-              key={`${section.key}-${month}`}
-              component="section"
-              aria-label={`${section.label}, ${format(parseISO(`${month}-01`), 'MMMM')}`}
-              sx={{
-                flex: { xs: '1 1 100%', sm: '0 1 calc(50% - 6px)' },
-                minWidth: 0,
-                p: 1.25,
-                borderRadius: '12px',
-                backgroundColor: colors.surface,
-                // Stitched seams between the panels.
-                outline: `1.5px dashed ${colors.accent200}`,
-                outlineOffset: -5,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, px: 0.5, mb: 1 }}>
-                <Box sx={{ width: 10, height: 10, borderRadius: '3px', backgroundColor: section.color, alignSelf: 'center' }} />
-                <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{section.label}</Typography>
-                <Typography variant="caption" color="text.secondary" noWrap>
-                  {section.note}
-                </Typography>
+          {SECTIONS.map((s, i) => (
+            <MiniPanel key={s.key} section={s} days={days} today={today} index={i} onOpen={() => setOpen(i)} />
+          ))}
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.25 }}>
+          Click a panel to see it larger.
+        </Typography>
+      </CardContent>
+
+      <Dialog open={section !== null} onClose={() => setOpen(null)} fullWidth maxWidth="xs">
+        {section && (
+          <>
+            <DialogTitle sx={{ pb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: section.color }} />
+                <Box component="span" sx={{ flex: 1 }}>
+                  {section.label}
+                </Box>
+                <IconButton aria-label="Close" onClick={() => setOpen(null)} size="small">
+                  <Close fontSize="small" />
+                </IconButton>
               </Box>
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 0.5, p: 0.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                {monthName} · {section.note}
+              </Typography>
+            </DialogTitle>
+            <DialogContent>
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 2 }}>
+                {SECTIONS.map((s, i) => (
+                  <Chip
+                    key={s.key}
+                    label={s.label}
+                    size="small"
+                    onClick={() => setOpen(i)}
+                    variant={i === open ? 'filled' : 'outlined'}
+                    sx={i === open ? { backgroundColor: colors.accent100, color: colors.accent800 } : undefined}
+                  />
+                ))}
+              </Box>
+              <Box key={section.key} sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 0.75 }}>
                 {days.map((day, i) => (
                   <BlanketPatch
                     key={day.date}
@@ -254,18 +342,40 @@ export function MonthBlanket({ today, version, onPick }: { today: string; versio
                     day={day}
                     future={day.date > today}
                     isToday={day.date === today}
-                    delay={s * 0.08 + i * 0.008}
-                    onPick={onPick}
+                    delay={i * 0.01}
+                    onPick={(date) => {
+                      setOpen(null);
+                      onPick(date);
+                    }}
                   />
                 ))}
               </Box>
-            </Box>
-          ))}
-        </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
-          Faded patches are days without a reflection. Six days to a row, starting on the 1st.
-        </Typography>
-      </CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Less
+                </Typography>
+                <Box
+                  sx={{
+                    flex: 1,
+                    maxWidth: 140,
+                    height: 8,
+                    borderRadius: '4px',
+                    background: `linear-gradient(90deg, ${fillFor(section, 0.05)}, ${fillFor(section, 1)})`,
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  More
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                {section.key === 'classes' || section.key === 'tasks'
+                  ? 'Click a day to open it.'
+                  : 'Faded days have no reflection. Click a day to open it.'}
+              </Typography>
+            </DialogContent>
+          </>
+        )}
+      </Dialog>
     </Card>
   );
 }
