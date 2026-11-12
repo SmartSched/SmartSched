@@ -60,6 +60,7 @@ export function YourData() {
           {profile?.consented_at
             ? `You agreed to take part in testing on ${format(new Date(profile.consented_at), 'MMMM d, yyyy')}.`
             : 'You agreed to take part in testing.'}{' '}
+          Your tasks, reflections and other personal details are stored encrypted.{' '}
           <Box component={Link} to="/consent" sx={{ color: colors.accent600 }}>
             Read what's stored and how it's used
           </Box>

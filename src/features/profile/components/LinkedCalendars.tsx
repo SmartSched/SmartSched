@@ -155,8 +155,8 @@ export function LinkedCalendars() {
           </Typography>
         </Collapse>
         <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1.5 }}>
-          The link gives read access to that calendar, so it's kept on the server and never shown in full here.
-          All-day events and ones marked free aren't brought in.
+          The link gives read access to that calendar, so it's encrypted before it's saved and never shown in full
+          here. The events brought in are encrypted too. All-day events and ones marked free aren't brought in.
         </Typography>
 
         {error && (

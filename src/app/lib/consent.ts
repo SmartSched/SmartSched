@@ -25,6 +25,14 @@ export const CONSENT_SECTIONS: { heading: string; points: string[] }[] = [
     ],
   },
   {
+    heading: 'How it is kept',
+    points: [
+      'Your name, task names and notes, planner blocks (including events from linked calendars), reflections, survey answers and linked calendar links are encrypted before they are saved to the database. Anyone looking at the database directly sees scrambled text.',
+      "The app's server decrypts them only to show them to you, to plan your week, and to retrain the model as described above.",
+      'Your email address is kept by the sign-in service and is not encrypted. Your password is never stored as you typed it.',
+    ],
+  },
+  {
     heading: 'Your choices',
     points: [
       'Taking part is optional, and you can stop at any time.',
