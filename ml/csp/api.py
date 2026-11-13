@@ -83,6 +83,12 @@ def schedule(request: ScheduleRequest, x_api_key: str | None = Header(default=No
         raise HTTPException(status_code=422, detail="No valid calendars could be generated for this week.")
 
     inp = plan["inp"]
+    # One line per request so an odd plan can be traced: task id prefix, due, minutes this week / full estimate.
+    week = ", ".join(f"{t['id'][:8]} due {t['due']} {t['minutes']}/{t.get('full_minutes', t['minutes'])}"
+                     for t in inp["tasks"] if not t.get("routine"))
+    print(f"/schedule now {inp['now']} week {inp['week']['start']}..{inp['week']['end']} "
+          f"session {inp['prefs']['session_minutes']} | {week} | {plan['note']}; "
+          f"unscheduled chunks {plan['unscheduled_chunks']}", flush=True)
     return {
         "status": "ok",
         "solver": plan["note"],
