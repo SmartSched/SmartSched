@@ -4,7 +4,8 @@ score(cal) = -(base + sum over preferences of STRENGTH x CONFIDENCE x penalty)
 
 Every penalty is 0 (fully satisfied) to 1 (badly broken), so the preference JSON's words alone decide
 how much each one counts. base covers what every user wants: all the work fits (high priority
-counts double), routines get their sessions, no tiny fragments.
+counts double), routines get their sessions, no tiny fragments, and sessions spaced out when there's
+room (a break on each side, no stretch past COMFY_STRETCH minutes; see spacing).
 
 The sleep item is scored too, as a large penalty for any block inside the sleep window or its buffers.
 The pipeline's own calendars can't have one (it's a hard rule there), but when a calendar built from
@@ -23,10 +24,15 @@ import statistics
 from collections import defaultdict
 from datetime import datetime
 
-from hard import DAY, MEAL_GAP, WAKE_BUFFER, WIND_DOWN, _has_gap, meal_windows, week_days
+from hard import (BREAK_GAP, DAY, MEAL_GAP, WAKE_BUFFER, WIND_DOWN, _has_gap, meal_windows, stretch_days,
+                  stretch_ok, stretches, week_days)
 from schema import CONFIDENCE, DAY_NAMES, STRENGTH, bed_minutes, hhmm, tmin
 
 SLEEP_WEIGHT = 6.0
+COMFY_STRETCH = 150   # minutes of busy time in a row before spacing starts to count against a calendar
+TIGHT_WEIGHT = 0.6    # all sessions back to back with something
+LONG_WEIGHT = 0.4     # per hour a stretch runs past COMFY_STRETCH
+SITTING_GAP = 45      # minutes between sessions that still count as one sitting for "clustered"
 DAY_SETS = {"all": set(range(7)), "weekdays": set(range(5)), "weekends": {5, 6}}
 
 
@@ -157,7 +163,10 @@ def pen_distribution(view, p):
     used = len(per_day)
     if style == "spaced":
         return 0.5 * b2b + 0.5 * (1 - used / spread)
-    return 0.5 * (1 - b2b) + 0.5 * (used - 1) / max(1, spread - 1)  # clustered
+    # Clustered: sessions share a sitting (start within SITTING_GAP of the last thing ending), so a short
+    # break between them still counts and doesn't fight the spacing in base().
+    together = _b2b(view, blocks, SITTING_GAP) / len(blocks)
+    return 0.5 * (1 - together) + 0.5 * (used - 1) / max(1, spread - 1)
 
 
 PENALTIES = {"activity_window": pen_activity_window, "session_length": pen_session_length,
@@ -172,6 +181,30 @@ def pen_sleep(view, sleep):
     inside = sum(_overlap(b[2], b[3], 0, wake + WAKE_BUFFER) + _overlap(b[2], b[3], min(DAY, bed - WIND_DOWN), DAY)
                  for b in view.blocks)
     return min(1.0, inside / 60)
+
+
+def spacing(view):
+    """0 when every study session has BREAK_GAP free minutes before and after it and no stretch with a
+    session in it passes COMFY_STRETCH; otherwise the share of sessions that touch something, and the
+    hours stretches run over. Soft, so a full week can still pack sessions together."""
+    if not view.study:
+        return 0.0
+    per_day = stretch_days(view.inp)
+    tight = long_hours = 0.0
+    by_day = defaultdict(list)
+    for b in view.study:
+        by_day[b[0]].append((b[2], b[3]))
+    for day, study in by_day.items():
+        fixed_busy, rests = per_day[day]
+        busy = fixed_busy + study
+        for j, (s, e) in enumerate(study):
+            me = len(fixed_busy) + j
+            tight += any(i != me and s - oe < BREAK_GAP and os_ - e < BREAK_GAP for i, (os_, oe) in enumerate(busy))
+        n = len(fixed_busy)
+        for s, e, members in stretches(busy, rests):
+            if any(i >= n for i in members):
+                long_hours += max(0, e - s - COMFY_STRETCH) / 60
+    return TIGHT_WEIGHT * tight / len(view.study) + LONG_WEIGHT * long_hours
 
 
 def base(view):
@@ -192,7 +225,7 @@ def base(view):
         done += w * min(t["minutes"], scheduled[t["id"]])
     fragments = sum(1 for b in view.study if b[3] - b[2] < 25)
     return (6 * (need - done) / need if need else 0) + (2 * routine_missing / routine_need if routine_need else 0) \
-        + 0.2 * fragments
+        + 0.2 * fragments + spacing(view)
 
 
 def style_of(inp, cal):
@@ -262,6 +295,8 @@ def improve(inp, prefs, cal, step=30, passes=3, seed=0):
     for f in inp["fixed"]:
         fixed[f["date"]].append((tmin(f["start"]), tmin(f["end"])))
     meals = {days[i]: w for i, (_, w) in enumerate(meal_windows(inp))}
+    busy_fixed = dict(zip(days, stretch_days(inp)))
+    routines = {t["id"] for t in tasks.values() if t.get("routine")}
     grid = range(-(-a_start // step) * step, a_end, step)
 
     blocks = [dict(b) for b in cal["blocks"]]
@@ -281,7 +316,13 @@ def improve(inp, prefs, cal, step=30, passes=3, seed=0):
         if t.get("routine") and any(b["task"] == t["id"] and b["date"] == d for j, b in enumerate(blocks) if j != i):
             return False
         busy = fixed[d] + others + [(s, e)]
-        return all(_has_gap(lo, hi, busy, MEAL_GAP) for _, lo, hi in meals[d])
+        if not all(_has_gap(lo, hi, busy, MEAL_GAP) for _, lo, hi in meals[d]):
+            return False
+        study = [(tmin(b["start"]), tmin(b["end"])) for j, b in enumerate(blocks)
+                 if j != i and b["date"] == d and b["task"] not in routines]
+        if t["id"] not in routines:
+            study.append((s, e))
+        return stretch_ok(*busy_fixed[d], study, inp.get("max_stretch"))
 
     for _ in range(passes):
         moved = False

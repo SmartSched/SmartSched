@@ -6,8 +6,9 @@
 1. hard.build: sleep window and buffers -> available hours; session length and estimate adjustments;
    routines become things the solver places.
 2. Solver (csp/solver.py): only valid calendars, half of the samples steered toward the preferred
-   windows, every placement checked against the meal rule.
-3. score.score ranks them; the best few get a local-improvement pass (score.improve).
+   windows, every placement checked against the meal and break rules (the break rule is dropped when
+   keeping it would leave more work unscheduled).
+3. score.score ranks them (spaced-out sessions score better when there's room); the best few get a local-improvement pass (score.improve).
 4. score.top3 picks the best plus two good, different alternatives; score.explain says why.
 
 The week JSON has now, week, day_off, fixed, tasks, and optionally routines (else they come from the
@@ -42,7 +43,16 @@ def plan_week(week, survey, prefs, limit=150, seed=0, improve_top=4, step=15, ti
     inp = hard.build(week, survey, prefs)
     weight = score.guide_weight(inp, prefs)
     result = solve(inp, limit=limit, step=step, seed=seed, guided=weight is not None, weight=weight,
-                   check=hard.meal_check(inp), time_limit=time_limit)
+                   check=hard.day_check(inp), time_limit=time_limit)
+    if result.unscheduled_chunks:
+        # Too full to keep every stretch under the break limit and fit everything: fitting the work wins.
+        relaxed = dict(inp, max_stretch=None)
+        loose = solve(relaxed, limit=limit, step=step, seed=seed, guided=weight is not None, weight=weight,
+                      check=hard.day_check(relaxed), time_limit=time_limit / 2 if time_limit else None)
+        if loose.calendars and loose.unscheduled_chunks < result.unscheduled_chunks:
+            inp, result = relaxed, loose
+            inp["notes"] = inp["notes"] + [f"the week is too full to keep a break every {hard.MAX_STRETCH // 60} "
+                                           "hours, so some sessions run back to back"]
     cals = list(result.calendars)
     scores = [score.score(inp, prefs, c) for c in cals]
 

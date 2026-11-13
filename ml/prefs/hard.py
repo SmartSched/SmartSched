@@ -12,12 +12,27 @@ Hard constraints, on top of the solver's own (no overlaps, deadlines, day off, n
   WAKE_BUFFER minutes after waking. Together these become the solver's daily available hours (capped
   at 23:59, since blocks can't cross midnight).
 - Meals: at least MEAL_GAP free minutes somewhere in each meal window, on every day where the fixed
-  commitments leave that possible. This one needs the placed blocks, so it is a per-day check
-  that the solver runs at every placement (meal_check).
+  commitments leave that possible.
+- Breaks: no stretch of busy time with a study session in it runs past MAX_STRETCH minutes. Busy time is
+  study sessions plus fixed classes, work, commutes and tasks; a gap of BREAK_GAP minutes, or a fixed break
+  or meal, ends a stretch. This matches the "in a row without a break" warning in
+  src/app/lib/burnout.ts, so the planner never makes that warning fire itself. A fixed stretch that is
+  already too long only stops sessions from being added next to it. When the week is too full to keep
+  this and fit every task, schedule.plan_week drops the rule (inp["max_stretch"] = None) rather than
+  leave work out.
+The last two need the placed blocks, so they are a per-day check that the solver runs at every
+placement (day_check).
 
 build() turns a week + survey + preference JSON into the solver's input. That is also where the
 preference JSON's adjustments land: session_length sets the chunk size and estimate_multiplier
 stretches task estimates.
+
+build() also decides how much of each task this week has to hold (week_minutes). A task due after the week
+only needs its fair share: the part of the time until it's due (minus the deadline_buffer) that falls in
+the rest of this week, times WEEK_SHARE_MARGIN, and at least one session. Without this, a project due in
+three weeks fills every free evening of this one. The rest is planned in a later week. Small tasks (one
+session or less) keep their whole estimate. Front-loaded users get the same share: front-loading means doing
+work early, not doing a month of it in one week.
 """
 
 import copy
@@ -32,6 +47,11 @@ BED_BAND = (tmin("21:30"), tmin("25:00"))   # minutes after the previous midnigh
 WAKE_BAND = (tmin("05:30"), tmin("10:00"))
 MEALS = [("lunch", tmin("11:30"), tmin("14:00")), ("dinner", tmin("17:30"), tmin("20:00"))]
 MEAL_GAP = 30
+WEEK_SHARE_MARGIN = 1.25
+MAX_STRETCH = 240   # burnout.ts NO_BREAK_HOURS
+BREAK_GAP = 15      # burnout.ts BREAK_MINUTES
+BUSY_FIXED = {"class", "study", "work", "task", "commute"}   # burnout.ts BUSY_TYPES
+REST_FIXED = {"break", "meal"}                                 # burnout.ts REST_TYPES
 DEFAULT_BED = {"early_morning": "22:00", "morning": "23:00", "afternoon": "23:30", "evening": "23:30",
                "late_night": "00:30"}
 
@@ -110,6 +130,8 @@ def build(week, survey, prefs):
         if factors.get(t["type"], 1) != 1:
             t["minutes"] = round_up(int(t["minutes"] * factors[t["type"]]))
 
+    week_minutes(inp, prefs)
+
     routines = routines_for(week, survey)
     inp["routines"] = routines
     for r in routines:
@@ -127,7 +149,29 @@ def build(week, survey, prefs):
             notes.append(f"{f['label']} on {f['date']} ({f['start']}-{f['end']}) is inside the sleep window or "
                          "its buffers; fixed commitments win")
     inp["notes"] = notes
+    inp["max_stretch"] = MAX_STRETCH
     return inp
+
+
+def week_minutes(inp, prefs):
+    """Cuts each task due after this week down to its fair share for this week (see the module docstring).
+    The full amount stays in t["full_minutes"]."""
+    prefs = prefs or {}
+    items = prefs.get("preferences", [])
+    buffer = max([p["hours_before"] for p in items if p["kind"] == "deadline_buffer"], default=0)
+    session = inp["prefs"]["session_minutes"]
+    now = datetime.fromisoformat(inp["now"])
+    week_end = datetime.fromisoformat(f"{inp['week']['end']}T23:59")
+    for t in inp["tasks"]:
+        t["full_minutes"] = t["minutes"]
+        due = datetime.fromisoformat(t["due"])
+        aim = max(week_end, due - timedelta(hours=buffer))
+        if due <= week_end or t["minutes"] <= session or week_end <= now:
+            continue
+        share = (week_end - now) / (aim - now)
+        part = max(session, round_up(int(t["minutes"] * share * WEEK_SHARE_MARGIN)))
+        if t["minutes"] - part >= session / 2:  # a tiny leftover isn't worth another week
+            t["minutes"] = part
 
 
 def week_days(inp):
@@ -165,16 +209,55 @@ def meal_windows(inp):
     return out
 
 
-def meal_check(inp):
-    """check(day, placed) for the solver: every meal window that day still has a free gap."""
+def stretch_days(inp):
+    """Per day index, (busy fixed intervals, start times of fixed breaks and meals) for the break rule.
+    Fixed items without a type count as busy."""
+    out = []
+    for d in week_days(inp):
+        today = [f for f in inp["fixed"] if f["date"] == d.isoformat()]
+        out.append(([(tmin(f["start"]), tmin(f["end"])) for f in today if f.get("type", "class") in BUSY_FIXED],
+                    [tmin(f["start"]) for f in today if f.get("type") in REST_FIXED]))
+    return out
+
+
+def stretches(busy, rests):
+    """Busy intervals merged into stretches with no break: [(start, end, [interval indexes])]. A gap under
+    BREAK_GAP minutes with no fixed break or meal starting in it doesn't end a stretch."""
+    out = []
+    for i in sorted(range(len(busy)), key=lambda i: busy[i]):
+        s, e = busy[i]
+        if out and s - out[-1][1] < BREAK_GAP and not any(out[-1][1] <= r <= s for r in rests):
+            out[-1][1] = max(out[-1][1], e)
+            out[-1][2].append(i)
+        else:
+            out.append([s, e, [i]])
+    return out
+
+
+def stretch_ok(fixed_busy, rests, study, limit):
+    """True when no stretch that has one of the `study` intervals in it is longer than `limit` minutes."""
+    if not limit or not study:
+        return True
+    n = len(fixed_busy)
+    return all(e - s <= limit or all(i < n for i in members)
+               for s, e, members in stretches(fixed_busy + study, rests))
+
+
+def day_check(inp):
+    """check(day, placed) for the solver: every meal window that day still has a free gap, and no study
+    session makes a stretch without a break run past inp["max_stretch"]."""
     per_day = meal_windows(inp)
+    per_day_busy = stretch_days(inp)
+    limit = inp.get("max_stretch")
 
     def check(day, placed):
         busy, windows = per_day[day]
-        if not windows:
-            return True
-        busy = busy + [(s, e) for s, e, _ in placed]
-        return all(_has_gap(lo, hi, busy, MEAL_GAP) for _, lo, hi in windows)
+        if windows:
+            all_busy = busy + [(s, e) for s, e, _ in placed]
+            if not all(_has_gap(lo, hi, all_busy, MEAL_GAP) for _, lo, hi in windows):
+                return False
+        fixed_busy, rests = per_day_busy[day]
+        return stretch_ok(fixed_busy, rests, [(s, e) for s, e, c in placed if not c.routine], limit)
     return check
 
 
@@ -222,9 +305,14 @@ def validate(inp, cal):
         need = t["minutes"] * (t["times"] if t.get("routine") else 1)
         if scheduled.get(t["id"], 0) > need:
             problems.append(f"{t['id']}: more minutes scheduled than needed")
-    for i, (busy, windows) in enumerate(meal_windows(inp)):
+    routines = {t["id"] for t in tasks.values() if t.get("routine")}
+    for i, ((busy, windows), (fixed_busy, rests)) in enumerate(zip(meal_windows(inp), stretch_days(inp))):
         placed = [(tmin(b["start"]), tmin(b["end"])) for b in cal["blocks"] if b["date"] == days[i]]
         for name, lo, hi in windows:
             if not _has_gap(lo, hi, busy + placed, MEAL_GAP):
                 problems.append(f"{days[i]}: no {MEAL_GAP}-minute gap for {name} between {hhmm(lo)} and {hhmm(hi)}")
+        study = [(tmin(b["start"]), tmin(b["end"])) for b in cal["blocks"]
+                 if b["date"] == days[i] and b["task"] not in routines]
+        if not stretch_ok(fixed_busy, rests, study, inp.get("max_stretch")):
+            problems.append(f"{days[i]}: more than {inp['max_stretch']} minutes in a row without a break")
     return problems
