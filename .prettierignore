@@ -1,8 +1,11 @@
 node_modules/
 dist/
 coverage/
+.vercel/
+.vercel_python_packages/
 server/node_modules/
 supabase/.temp/
 ml/**/outputs/
 ml/**/train/
 ml/outs from csp/
+vercel.json
