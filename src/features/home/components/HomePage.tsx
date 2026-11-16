@@ -111,6 +111,7 @@ export function HomePage() {
   const now = useMemo(() => new Date(nowMs), [nowMs]);
   const [leftBlocks, setLeftBlocks] = useState<Set<string>>(readLeftBlocks);
   const [finishingTask, setFinishingTask] = useState<BlockTask | Task | null>(null);
+  const [finishingBlock, setFinishingBlock] = useState<TimeBlock | null>(null);
   const [moving, setMoving] = useState(false);
   const [notice, setNotice] = useState<{ text: string; severity: 'success' | 'error' } | null>(null);
   const { lingering, linger } = useLinger();
@@ -169,13 +170,42 @@ export function HomePage() {
   };
 
   const toggleBlock = async (block: TimeBlock) => {
+    if (!block.completed) {
+      setFinishingBlock(block);
+      return;
+    }
     try {
-      const { block: updated }: { block: TimeBlock } = await apiPatch(`/api/time-blocks/${block.id}/completion`, {
-        completed: !block.completed,
-      });
+      const { block: updated, task }: { block: TimeBlock; task: Task | null } = await apiPatch(
+        `/api/time-blocks/${block.id}/completion`,
+        {
+          completed: !block.completed,
+        },
+      );
       applyBlock(updated);
+      if (task) applyTask(task);
     } catch {
       setNotice({ severity: 'error', text: "Couldn't update the study block. Try again." });
+    }
+  };
+
+  const finishBlock = async (minutes: number | null) => {
+    if (!finishingBlock?.task) return;
+    const block = finishingBlock;
+    try {
+      // The task remains open; this is its actual total time so far, for estimate-vs-actual learning.
+      if (minutes !== null) applyTask(await apiPatch(`/api/tasks/${block.task.id}`, { time_spent: minutes }));
+      const { block: updated, task }: { block: TimeBlock; task: Task | null } = await apiPatch(
+        `/api/time-blocks/${block.id}/completion`,
+        {
+          completed: true,
+        },
+      );
+      applyBlock(updated);
+      if (task) applyTask(task);
+      setFinishingBlock(null);
+    } catch {
+      setNotice({ severity: 'error', text: "Couldn't save the study block. Try again." });
+      throw new Error("Couldn't save the study block. Try again.");
     }
   };
 
@@ -718,6 +748,12 @@ export function HomePage() {
       </Box>
 
       <TimeSpentDialog task={finishingTask} onFinish={finishTask} onCancel={() => setFinishingTask(null)} />
+      <TimeSpentDialog
+        task={finishingBlock?.task ?? null}
+        blockCompletion
+        onFinish={finishBlock}
+        onCancel={() => setFinishingBlock(null)}
+      />
 
       <Snackbar
         open={notice !== null}

@@ -26,13 +26,15 @@ export async function suggestTimeSpent(task: FinishingTask): Promise<{ minutes: 
 
 interface TimeSpentDialogProps {
   task: FinishingTask | null;
+  // A block can be completed while its task remains open. time_spent still records the task total so far.
+  blockCompletion?: boolean;
   // Called with the minutes, or null to finish the task without recording a time.
   onFinish: (minutes: number | null) => Promise<void>;
   onCancel: () => void;
 }
 
 // Asked when a task is checked off, so estimates can be compared with how long things really take.
-export function TimeSpentDialog({ task, onFinish, onCancel }: TimeSpentDialogProps) {
+export function TimeSpentDialog({ task, blockCompletion = false, onFinish, onCancel }: TimeSpentDialogProps) {
   const [minutes, setMinutes] = useState('');
   const [from, setFrom] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -83,6 +85,7 @@ export function TimeSpentDialog({ task, onFinish, onCancel }: TimeSpentDialogPro
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             “{task?.title}”{task?.estimated_time ? ` — you estimated ${task.estimated_time} min.` : ''}
+            {blockCompletion ? ' Record the total time you have spent on it so far.' : ''}
           </Typography>
           <TextField
             fullWidth

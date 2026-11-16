@@ -61,7 +61,7 @@ import { Link as RouterLink, useNavigate } from 'react-router';
 import { useAuth } from '../../../app/lib/AuthContext';
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '../../../app/lib/api';
 import { useSelectedDay } from '../../../app/lib/today';
-import { layoutBlocks, toMinutes, type BlockTask, type TimeBlock } from '../../../app/lib/planner';
+import { layoutBlocks, toMinutes, type TimeBlock } from '../../../app/lib/planner';
 import { burnoutWarnings } from '../../../app/lib/burnout';
 import { findOpenSlot, missedTaskBlocks, type Slot } from '../../../app/lib/reschedule';
 import type { Task } from '../../../app/lib/tasks';
@@ -1018,7 +1018,7 @@ export function DailyPlanner() {
   // Blocks from two weeks back to two weeks ahead, for spotting missed task blocks (#9) and finding room.
   const [nearbyBlocks, setNearbyBlocks] = useState<TimeBlock[]>([]);
   const [nearbyVersion, setNearbyVersion] = useState(0);
-  const [finishingTask, setFinishingTask] = useState<BlockTask | null>(null);
+  const [finishingBlock, setFinishingBlock] = useState<TimeBlock | null>(null);
   const [leftBlocks, setLeftBlocks] = useState<Set<string>>(readLeftBlocks);
   // Whether any Google / Outlook calendar is linked (null until the first sync answers), for the note at the bottom.
   const [calendarsLinked, setCalendarsLinked] = useState<boolean | null>(null);
@@ -1291,31 +1291,45 @@ export function DailyPlanner() {
     setNearbyBlocks(refresh);
   };
 
-  const updateTask = async (taskId: string, changes: { completed: boolean; time_spent?: number }) => {
-    try {
-      applyTask(await apiPatch(`/api/tasks/${taskId}`, changes));
-    } catch {
-      setActionError("Couldn't update the task. Try again.");
-    }
-  };
-
   const handleToggleBlock = async (block: TimeBlock) => {
+    if (!block.completed) {
+      setFinishingBlock(block);
+      return;
+    }
     try {
-      const { block: updated }: { block: TimeBlock } = await apiPatch(`/api/time-blocks/${block.id}/completion`, {
-        completed: !block.completed,
-      });
+      const { block: updated, task }: { block: TimeBlock; task: Task | null } = await apiPatch(
+        `/api/time-blocks/${block.id}/completion`,
+        {
+          completed: !block.completed,
+        },
+      );
       showSavedBlock(updated);
       setNearbyBlocks((current) => current.map((b) => (b.id === updated.id ? updated : b)));
+      if (task) applyTask(task);
     } catch {
       setActionError("Couldn't update the study block. Try again.");
     }
   };
 
-  const finishTask = async (minutes: number | null) => {
-    if (!finishingTask) return;
-    const taskId = finishingTask.id;
-    setFinishingTask(null);
-    await updateTask(taskId, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
+  const finishBlock = async (minutes: number | null) => {
+    if (!finishingBlock?.task) return;
+    const block = finishingBlock;
+    try {
+      if (minutes !== null) applyTask(await apiPatch(`/api/tasks/${block.task.id}`, { time_spent: minutes }));
+      const { block: updated, task }: { block: TimeBlock; task: Task | null } = await apiPatch(
+        `/api/time-blocks/${block.id}/completion`,
+        {
+          completed: true,
+        },
+      );
+      showSavedBlock(updated);
+      setNearbyBlocks((current) => current.map((b) => (b.id === updated.id ? updated : b)));
+      if (task) applyTask(task);
+      setFinishingBlock(null);
+    } catch {
+      setActionError("Couldn't save the study block. Try again.");
+      throw new Error("Couldn't save the study block. Try again.");
+    }
   };
 
   const isShown = (date: string) =>
@@ -1817,7 +1831,12 @@ export function DailyPlanner() {
         </DialogActions>
       </Dialog>
 
-      <TimeSpentDialog task={finishingTask} onFinish={finishTask} onCancel={() => setFinishingTask(null)} />
+      <TimeSpentDialog
+        task={finishingBlock?.task ?? null}
+        blockCompletion
+        onFinish={finishBlock}
+        onCancel={() => setFinishingBlock(null)}
+      />
 
       <Snackbar
         open={notice !== null}

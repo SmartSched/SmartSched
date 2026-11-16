@@ -488,15 +488,15 @@ app.patch("/api/time-blocks/:id", requireAuth, async (req, res) => {
   res.json({ block: data[0], commutes });
 });
 
-// Completing a scheduled session is independent from completing its task. The task list remains the
-// place to mark all of a task done (and record its overall time spent).
+// A session can be completed independently. Once every session for its task is complete, the task closes too;
+// the task list can still close a task directly without changing its blocks.
 app.patch("/api/time-blocks/:id/completion", requireAuth, async (req, res) => {
   if (typeof req.body.completed !== "boolean")
     return res.status(400).json({ error: "completed must be true or false" });
 
   const { data: existing, error: fetchError } = await req.supabase
     .from("time_blocks")
-    .select("*, task:tasks(type)")
+    .select("*, task:tasks(id, type, estimated_time, time_spent, due_date, completed)")
     .eq("id", req.params.id)
     .maybeSingle();
   if (fetchError) return serverError(res, fetchError);
@@ -531,7 +531,36 @@ app.patch("/api/time-blocks/:id/completion", requireAuth, async (req, res) => {
       completedAt,
     );
   }
-  res.json({ block: data[0] });
+
+  let completedTask = null;
+  if (req.body.completed && !existing.completed && existing.task_id && !existing.task?.completed) {
+    const { data: taskBlocks, error: blocksError } = await req.supabase
+      .from("time_blocks")
+      .select("completed")
+      .eq("task_id", existing.task_id)
+      .eq("type", "task");
+    if (blocksError) return serverError(res, blocksError);
+    if (taskBlocks.length > 0 && taskBlocks.every((block) => block.completed)) {
+      // Guard the transition so simultaneous completion of the final sessions produces one task event.
+      const { data: tasks, error: taskError } = await req.supabase
+        .from("tasks")
+        .update({ completed: true, completed_at: completedAt })
+        .eq("id", existing.task_id)
+        .eq("completed", false)
+        .select();
+      if (taskError) return serverError(res, taskError);
+      completedTask = tasks[0] ?? null;
+      if (completedTask) {
+        await logLearningEvent(req, "task_completed", {
+          task_type: completedTask.type,
+          estimated_minutes: completedTask.estimated_time ?? null,
+          actual_minutes: completedTask.time_spent ?? 0,
+          due_date: completedTask.due_date ?? null,
+        });
+      }
+    }
+  }
+  res.json({ block: data[0], task: completedTask });
 });
 
 app.delete("/api/time-blocks/:id", requireAuth, async (req, res) => {
