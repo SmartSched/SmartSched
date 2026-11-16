@@ -78,8 +78,8 @@ export function TravelTimes() {
           Travel times
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          How long it usually takes you to get between places. When two blocks in a row are in different places,
-          the planner adds a commute before the second one. Leave a trip blank if you never make it.
+          How long it usually takes you to get between places. When two blocks in a row are in different places, the
+          planner adds a commute before the second one. Leave a trip blank if you never make it.
         </Typography>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 2 }}>
@@ -87,7 +87,13 @@ export function TravelTimes() {
             <Chip key={place} label={placeLabel(place)} />
           ))}
           {places.map((place) => (
-            <Chip key={place} label={placeLabel(place)} onDelete={() => removePlace(place)} color="secondary" variant="outlined" />
+            <Chip
+              key={place}
+              label={placeLabel(place)}
+              onDelete={() => removePlace(place)}
+              color="secondary"
+              variant="outlined"
+            />
           ))}
           <Box component="form" onSubmit={addPlace} sx={{ display: 'flex', gap: 1 }}>
             <TextField

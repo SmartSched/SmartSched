@@ -6,9 +6,7 @@ export const LEAD_MINUTES = 30;
 
 // A local YYYY-MM-DDTHH:MM plus n minutes (as plain clock arithmetic; no time zone is involved).
 function addMinutes(localIso, n) {
-  return new Date(Date.parse(`${localIso.slice(0, 16)}:00Z`) + n * 60000)
-    .toISOString()
-    .slice(0, 16);
+  return new Date(Date.parse(`${localIso.slice(0, 16)}:00Z`) + n * 60000).toISOString().slice(0, 16);
 }
 
 function addDays(dateStr, n) {
@@ -20,9 +18,7 @@ function addDays(dateStr, n) {
 // tzOffset is the browser's new Date().getTimezoneOffset() (420 for Pacific daylight time).
 function toLocal(iso, tzOffset) {
   if (iso.length === 10) return `${iso}T23:59`;
-  return new Date(Date.parse(iso) - tzOffset * 60000)
-    .toISOString()
-    .slice(0, 16);
+  return new Date(Date.parse(iso) - tzOffset * 60000).toISOString().slice(0, 16);
 }
 
 // now is the browser's local YYYY-MM-DDTHH:MM, like the block's date and start_time.
@@ -54,26 +50,13 @@ export function preferencesOutOfDate(profile, nowMs) {
 
 // The week the Python scheduler plans. Study hours (from sleep) and session length come from the survey and
 // preference JSON on the Python side (ml/prefs/hard.py build), so they aren't set here.
-export function buildSolverInput({
-  now,
-  weekStart,
-  tasks,
-  blocks,
-  reflections,
-  tzOffset = 0,
-}) {
+export function buildSolverInput({ now, weekStart, tasks, blocks, reflections, tzOffset = 0 }) {
   const weekEnd = addDays(weekStart, 6);
   const planFrom = addMinutes(now, LEAD_MINUTES);
   // Task blocks that accepting a plan won't replace (see /api/schedule/accept) are fixed like classes:
   // ones for tasks that are done, individually completed sessions, and ones that already started.
-  const unfinished = new Set(
-    tasks.filter((t) => !t.completed).map((t) => t.id),
-  );
-  const stays = (b) =>
-    b.type !== "task" ||
-    !unfinished.has(b.task_id) ||
-    b.completed ||
-    startsBefore(b, now);
+  const unfinished = new Set(tasks.filter((t) => !t.completed).map((t) => t.id));
+  const stays = (b) => b.type !== "task" || !unfinished.has(b.task_id) || b.completed || startsBefore(b, now);
 
   const solverTasks = tasks
     .filter((t) => !t.completed && t.due_date && t.estimated_time > 0)

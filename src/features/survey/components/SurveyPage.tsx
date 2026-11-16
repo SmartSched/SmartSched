@@ -80,7 +80,17 @@ export function CalendarImage({ src, label }: { src: string; label: string }) {
   );
 }
 
-function Question({ number, title, hint, children }: { number: number; title: string; hint?: string; children: ReactNode }) {
+function Question({
+  number,
+  title,
+  hint,
+  children,
+}: {
+  number: number;
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
   return (
     <Card sx={{ borderRadius: '16px' }}>
       <CardContent sx={{ p: 3 }}>
@@ -125,8 +135,7 @@ export function SurveyPage() {
 
   const checkedCommitments = Object.entries(commitmentHours) as [CommitmentKey, string][];
   const commitmentsValid =
-    checkedCommitments.length > 0 &&
-    checkedCommitments.every(([, hours]) => Number(hours) > 0 && Number(hours) <= 168);
+    checkedCommitments.length > 0 && checkedCommitments.every(([, hours]) => Number(hours) > 0 && Number(hours) <= 168);
 
   const wakeTimeValid =
     !!answers.wake_time && answers.wake_time >= WAKE_TIME.earliest && answers.wake_time <= WAKE_TIME.latest;
@@ -207,164 +216,150 @@ export function SurveyPage() {
   };
 
   const questions = [
-        <Question
-          number={1}
-          title="What's already locked into your week?"
-          hint="Select all that apply, with rough hours per week."
-        >
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {COMMITMENTS.map(({ key, label }) => {
-              const checked = key in commitmentHours;
-              return (
-                <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                  <FormControlLabel
-                    control={<Checkbox checked={checked} onChange={() => toggleCommitment(key)} />}
-                    label={label}
-                    sx={{ flex: 1, minWidth: '240px' }}
-                  />
-                  {checked && (
-                    <TextField
-                      size="small"
-                      type="number"
-                      label="Hours / week"
-                      value={commitmentHours[key]}
-                      onChange={(e) => setCommitmentHours({ ...commitmentHours, [key]: e.target.value })}
-                      slotProps={{ htmlInput: { min: 1, max: 168, step: 0.5 } }}
-                      sx={{ width: '140px' }}
-                    />
-                  )}
-                </Box>
-              );
-            })}
-          </Box>
-        </Question>
-,
-        <Question number={2} title="When do you actually focus best?">
-          <RadioGroup
-            value={answers.focus_time ?? ''}
-            onChange={(e) => setAnswers({ ...answers, focus_time: e.target.value as SurveyAnswers['focus_time'] })}
-          >
-            {FOCUS_TIMES.map(({ key, label }) => (
-              <FormControlLabel key={key} value={key} control={<Radio />} label={label} />
-            ))}
-          </RadioGroup>
-        </Question>
-,
-        <Question number={3} title="How long can you work before you need a real break?">
-          <RadioGroup
-            value={answers.work_session ?? ''}
-            onChange={(e) => setAnswers({ ...answers, work_session: e.target.value as SurveyAnswers['work_session'] })}
-          >
-            {WORK_SESSIONS.map(({ key, label }) => (
-              <FormControlLabel key={key} value={key} control={<Radio />} label={label} />
-            ))}
-          </RadioGroup>
-        </Question>
-,
-        <Question
-          number={4}
-          title="What has to stay in your week, even during your busiest stretch?"
-          hint="Select all that apply."
-        >
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            {NON_NEGOTIABLES.map(({ key, label }) => (
+    <Question
+      number={1}
+      title="What's already locked into your week?"
+      hint="Select all that apply, with rough hours per week."
+    >
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {COMMITMENTS.map(({ key, label }) => {
+          const checked = key in commitmentHours;
+          return (
+            <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
               <FormControlLabel
-                key={key}
-                control={
-                  <Checkbox
-                    checked={answers.non_negotiables.includes(key)}
-                    onChange={() => toggleNonNegotiable(key)}
-                  />
-                }
+                control={<Checkbox checked={checked} onChange={() => toggleCommitment(key)} />}
                 label={label}
+                sx={{ flex: 1, minWidth: '240px' }}
               />
-            ))}
-          </Box>
-        </Question>
-,
-        <Question
-          number={5}
-          title="How much sleep do you need, and when do you usually wake up?"
-          hint="Your plans keep study out of your sleep, the hour before bed, and the 45 minutes after you wake up."
-        >
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <TextField
-              select
-              size="small"
-              label="Sleep a night"
-              value={answers.sleep_hours ?? ''}
-              onChange={(e) => setAnswers({ ...answers, sleep_hours: Number(e.target.value) })}
-              sx={{ width: '180px' }}
-            >
-              {SLEEP_HOURS.map((hours) => (
-                <MenuItem key={hours} value={hours}>
-                  {hours} hours
-                </MenuItem>
-              ))}
-            </TextField>
-            {/* A dropdown rather than a native time input: Safari's time field can show a
-                typed time without ever reporting it, which left this question unanswerable. */}
-            <TextField
-              select
-              size="small"
-              label="Usual wake-up time"
-              value={answers.wake_time ?? ''}
-              onChange={(e) => setAnswers({ ...answers, wake_time: e.target.value || null })}
-              sx={{ width: '180px' }}
-              slotProps={{ select: { MenuProps: { slotProps: { paper: { sx: { maxHeight: 320 } } } } } }}
-            >
-              {WAKE_TIME_OPTIONS.map((time) => (
-                <MenuItem key={time} value={time}>
-                  {formatWakeTime(time)}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Box>
-        </Question>
-,
-        <Question number={6} title="Be honest, how do you usually handle a deadline?">
-          <RadioGroup
-            value={answers.deadline_style ?? ''}
-            onChange={(e) =>
-              setAnswers({ ...answers, deadline_style: e.target.value as SurveyAnswers['deadline_style'] })
+              {checked && (
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Hours / week"
+                  value={commitmentHours[key]}
+                  onChange={(e) => setCommitmentHours({ ...commitmentHours, [key]: e.target.value })}
+                  slotProps={{ htmlInput: { min: 1, max: 168, step: 0.5 } }}
+                  sx={{ width: '140px' }}
+                />
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+    </Question>,
+    <Question number={2} title="When do you actually focus best?">
+      <RadioGroup
+        value={answers.focus_time ?? ''}
+        onChange={(e) => setAnswers({ ...answers, focus_time: e.target.value as SurveyAnswers['focus_time'] })}
+      >
+        {FOCUS_TIMES.map(({ key, label }) => (
+          <FormControlLabel key={key} value={key} control={<Radio />} label={label} />
+        ))}
+      </RadioGroup>
+    </Question>,
+    <Question number={3} title="How long can you work before you need a real break?">
+      <RadioGroup
+        value={answers.work_session ?? ''}
+        onChange={(e) => setAnswers({ ...answers, work_session: e.target.value as SurveyAnswers['work_session'] })}
+      >
+        {WORK_SESSIONS.map(({ key, label }) => (
+          <FormControlLabel key={key} value={key} control={<Radio />} label={label} />
+        ))}
+      </RadioGroup>
+    </Question>,
+    <Question
+      number={4}
+      title="What has to stay in your week, even during your busiest stretch?"
+      hint="Select all that apply."
+    >
+      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+        {NON_NEGOTIABLES.map(({ key, label }) => (
+          <FormControlLabel
+            key={key}
+            control={
+              <Checkbox checked={answers.non_negotiables.includes(key)} onChange={() => toggleNonNegotiable(key)} />
             }
-          >
-            {DEADLINE_STYLES.map(({ key, label }) => (
-              <FormControlLabel key={key} value={key} control={<Radio />} label={label} />
-            ))}
-          </RadioGroup>
-        </Question>
-,
-        <Question number={7} title="Choose the calendar that describes you best.">
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-            {CALENDAR_STYLES.map(({ key, label, image }) => {
-              const selected = answers.calendar_style === key;
-              return (
-                <Card
-                  key={key}
-                  sx={{
-                    borderRadius: '12px',
-                    border: selected ? `3px solid ${colors.accent500}` : '3px solid transparent',
-                    outline: selected ? 'none' : `1px solid ${colors.grey200}`,
-                  }}
-                >
-                  <CardActionArea
-                    onClick={() => setAnswers({ ...answers, calendar_style: key })}
-                    aria-pressed={selected}
-                  >
-                    <CalendarImage src={image} label={label} />
-                    <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Radio checked={selected} size="small" sx={{ p: 0 }} tabIndex={-1} />
-                      <Typography variant="body2" sx={{ fontWeight: selected ? 600 : 400 }}>
-                        {label}
-                      </Typography>
-                    </Box>
-                  </CardActionArea>
-                </Card>
-              );
-            })}
-          </Box>
-        </Question>,
+            label={label}
+          />
+        ))}
+      </Box>
+    </Question>,
+    <Question
+      number={5}
+      title="How much sleep do you need, and when do you usually wake up?"
+      hint="Your plans keep study out of your sleep, the hour before bed, and the 45 minutes after you wake up."
+    >
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <TextField
+          select
+          size="small"
+          label="Sleep a night"
+          value={answers.sleep_hours ?? ''}
+          onChange={(e) => setAnswers({ ...answers, sleep_hours: Number(e.target.value) })}
+          sx={{ width: '180px' }}
+        >
+          {SLEEP_HOURS.map((hours) => (
+            <MenuItem key={hours} value={hours}>
+              {hours} hours
+            </MenuItem>
+          ))}
+        </TextField>
+        {/* A dropdown rather than a native time input: Safari's time field can show a
+                typed time without ever reporting it, which left this question unanswerable. */}
+        <TextField
+          select
+          size="small"
+          label="Usual wake-up time"
+          value={answers.wake_time ?? ''}
+          onChange={(e) => setAnswers({ ...answers, wake_time: e.target.value || null })}
+          sx={{ width: '180px' }}
+          slotProps={{ select: { MenuProps: { slotProps: { paper: { sx: { maxHeight: 320 } } } } } }}
+        >
+          {WAKE_TIME_OPTIONS.map((time) => (
+            <MenuItem key={time} value={time}>
+              {formatWakeTime(time)}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Box>
+    </Question>,
+    <Question number={6} title="Be honest, how do you usually handle a deadline?">
+      <RadioGroup
+        value={answers.deadline_style ?? ''}
+        onChange={(e) => setAnswers({ ...answers, deadline_style: e.target.value as SurveyAnswers['deadline_style'] })}
+      >
+        {DEADLINE_STYLES.map(({ key, label }) => (
+          <FormControlLabel key={key} value={key} control={<Radio />} label={label} />
+        ))}
+      </RadioGroup>
+    </Question>,
+    <Question number={7} title="Choose the calendar that describes you best.">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+        {CALENDAR_STYLES.map(({ key, label, image }) => {
+          const selected = answers.calendar_style === key;
+          return (
+            <Card
+              key={key}
+              sx={{
+                borderRadius: '12px',
+                border: selected ? `3px solid ${colors.accent500}` : '3px solid transparent',
+                outline: selected ? 'none' : `1px solid ${colors.grey200}`,
+              }}
+            >
+              <CardActionArea onClick={() => setAnswers({ ...answers, calendar_style: key })} aria-pressed={selected}>
+                <CalendarImage src={image} label={label} />
+                <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Radio checked={selected} size="small" sx={{ p: 0 }} tabIndex={-1} />
+                  <Typography variant="body2" sx={{ fontWeight: selected ? 600 : 400 }}>
+                    {label}
+                  </Typography>
+                </Box>
+              </CardActionArea>
+            </Card>
+          );
+        })}
+      </Box>
+    </Question>,
   ];
 
   const last = questions.length - 1;
@@ -377,7 +372,11 @@ export function SurveyPage() {
   return (
     <Box sx={{ maxWidth: '720px', mx: 'auto' }}>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" component="h1" sx={{ color: colors.accent500, mb: 1, fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>
+        <Typography
+          variant="h4"
+          component="h1"
+          sx={{ color: colors.accent500, mb: 1, fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
+        >
           {isEditing ? 'Edit your survey' : "Let's get to know your week"}
         </Typography>
         <Typography variant="body1" color="text.secondary">
@@ -388,7 +387,16 @@ export function SurveyPage() {
       </Box>
 
       <Box sx={{ mb: 2.5 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 2, flexWrap: 'wrap' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 1,
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
+        >
           <Typography variant="body2" sx={{ fontWeight: 600, color: colors.accent800 }}>
             Question {step + 1} of {questions.length}
           </Typography>
@@ -420,7 +428,12 @@ export function SurveyPage() {
           variant="determinate"
           value={(answeredCount / answered.length) * 100}
           aria-label={`${answeredCount} of ${answered.length} answered`}
-          sx={{ height: 8, borderRadius: 4, backgroundColor: colors.accent100, '& .MuiLinearProgress-bar': { backgroundColor: colors.accent400 } }}
+          sx={{
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: colors.accent100,
+            '& .MuiLinearProgress-bar': { backgroundColor: colors.accent400 },
+          }}
         />
       </Box>
 

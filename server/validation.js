@@ -3,23 +3,9 @@
 // Keys must match src/app/lib/survey.ts.
 export const SURVEY_OPTIONS = {
   commitments: ["classes", "work", "commute", "standing"],
-  focus_time: [
-    "early_morning",
-    "morning",
-    "afternoon",
-    "evening",
-    "late_night",
-  ],
+  focus_time: ["early_morning", "morning", "afternoon", "evening", "late_night"],
   work_session: ["25", "45", "90", "120_plus"],
-  non_negotiables: [
-    "sleep",
-    "meals",
-    "exercise",
-    "friends",
-    "family",
-    "day_off",
-    "hobby",
-  ],
+  non_negotiables: ["sleep", "meals", "exercise", "friends", "family", "day_off", "hobby"],
   deadline_style: ["steady", "day_before", "night_before", "depends"],
   calendar_style: ["calendar1", "calendar2", "calendar3", "calendar4"],
 };
@@ -31,40 +17,27 @@ export const WAKE_TIME = { earliest: "04:00", latest: "12:00" };
 
 // Returns { survey } with only known fields, or { error } describing the first problem.
 export function validateSurvey(input) {
-  if (!input || typeof input !== "object")
-    return { error: "Survey answers are required" };
+  if (!input || typeof input !== "object") return { error: "Survey answers are required" };
 
   const commitments = {};
   for (const [key, hours] of Object.entries(input.commitments ?? {})) {
-    if (!SURVEY_OPTIONS.commitments.includes(key))
-      return { error: `Unknown commitment: ${key}` };
+    if (!SURVEY_OPTIONS.commitments.includes(key)) return { error: `Unknown commitment: ${key}` };
     if (typeof hours !== "number" || !(hours > 0) || hours > 168) {
       return { error: "Commitment hours must be between 0 and 168 per week" };
     }
     commitments[key] = hours;
   }
-  if (Object.keys(commitments).length === 0)
-    return { error: "Pick at least one weekly commitment" };
+  if (Object.keys(commitments).length === 0) return { error: "Pick at least one weekly commitment" };
 
-  for (const field of [
-    "focus_time",
-    "work_session",
-    "deadline_style",
-    "calendar_style",
-  ]) {
-    if (!SURVEY_OPTIONS[field].includes(input[field]))
-      return { error: `Invalid answer for ${field}` };
+  for (const field of ["focus_time", "work_session", "deadline_style", "calendar_style"]) {
+    if (!SURVEY_OPTIONS[field].includes(input[field])) return { error: `Invalid answer for ${field}` };
   }
 
   const nonNegotiables = input.non_negotiables;
   if (!Array.isArray(nonNegotiables) || nonNegotiables.length === 0) {
     return { error: "Pick at least one thing that has to stay in your week" };
   }
-  if (
-    !nonNegotiables.every((item) =>
-      SURVEY_OPTIONS.non_negotiables.includes(item),
-    )
-  ) {
+  if (!nonNegotiables.every((item) => SURVEY_OPTIONS.non_negotiables.includes(item))) {
     return { error: "Invalid answer for non_negotiables" };
   }
 
@@ -78,13 +51,8 @@ export function validateSurvey(input) {
     return { error: "Sleep must be between 6 and 10 hours, in half hours" };
   }
   // Stored as HH:MM: the scheduler reads it that way.
-  const wakeTime =
-    typeof input.wake_time === "string" ? input.wake_time.slice(0, 5) : "";
-  if (
-    !TIME_PATTERN.test(wakeTime) ||
-    wakeTime < WAKE_TIME.earliest ||
-    wakeTime > WAKE_TIME.latest
-  ) {
+  const wakeTime = typeof input.wake_time === "string" ? input.wake_time.slice(0, 5) : "";
+  if (!TIME_PATTERN.test(wakeTime) || wakeTime < WAKE_TIME.earliest || wakeTime > WAKE_TIME.latest) {
     return { error: "Wake-up time must be between 4:00 AM and noon" };
   }
 
@@ -102,20 +70,10 @@ export function validateSurvey(input) {
   };
 }
 
-export const TIME_BLOCK_TYPES = [
-  "class",
-  "study",
-  "break",
-  "personal",
-  "commute",
-  "meal",
-  "work",
-  "task",
-];
+export const TIME_BLOCK_TYPES = ["class", "study", "break", "personal", "commute", "meal", "work", "task"];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isUuid(value) {
   return typeof value === "string" && UUID_PATTERN.test(value);
@@ -124,9 +82,7 @@ export function isUuid(value) {
 export function isValidDate(value) {
   if (typeof value !== "string" || !DATE_PATTERN.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
-  return (
-    !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value)
-  );
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
 }
 
 // "09:30" and "09:30:00" both become "09:30:00" so times compare correctly as strings.
@@ -144,38 +100,24 @@ function normalizePlace(value) {
 
 // Returns { block } with only known fields, or { error } describing the first problem.
 export function validateTimeBlock(input) {
-  const activity =
-    typeof input.activity === "string" ? input.activity.trim() : "";
+  const activity = typeof input.activity === "string" ? input.activity.trim() : "";
   if (!activity) return { error: "Activity is required" };
-  if (!isValidDate(input.date))
-    return { error: "Date must be a valid YYYY-MM-DD date" };
-  if (
-    typeof input.start_time !== "string" ||
-    !TIME_PATTERN.test(input.start_time)
-  ) {
+  if (!isValidDate(input.date)) return { error: "Date must be a valid YYYY-MM-DD date" };
+  if (typeof input.start_time !== "string" || !TIME_PATTERN.test(input.start_time)) {
     return { error: "Start time must be HH:MM" };
   }
-  if (
-    typeof input.end_time !== "string" ||
-    !TIME_PATTERN.test(input.end_time)
-  ) {
+  if (typeof input.end_time !== "string" || !TIME_PATTERN.test(input.end_time)) {
     return { error: "End time must be HH:MM" };
   }
   const start_time = normalizeTime(input.start_time);
   const end_time = normalizeTime(input.end_time);
-  if (end_time <= start_time)
-    return { error: "End time must be after start time" };
-  if (!TIME_BLOCK_TYPES.includes(input.type))
-    return { error: "Invalid block type" };
+  if (end_time <= start_time) return { error: "End time must be after start time" };
+  if (!TIME_BLOCK_TYPES.includes(input.type)) return { error: "Invalid block type" };
   // Task blocks point at their task; any other type drops a leftover task_id (e.g. after changing the type).
-  if (input.type === "task" && !isUuid(input.task_id))
-    return { error: "Pick a task for this block" };
+  if (input.type === "task" && !isUuid(input.task_id)) return { error: "Pick a task for this block" };
   const task_id = input.type === "task" ? input.task_id : null;
   const location = input.location == null ? "" : normalizePlace(input.location);
-  if (
-    typeof input.location === "number" ||
-    location.length > MAX_PLACE_LENGTH
-  ) {
+  if (typeof input.location === "number" || location.length > MAX_PLACE_LENGTH) {
     return { error: "Location must be a short place name" };
   }
   return {
@@ -194,24 +136,17 @@ export function validateTimeBlock(input) {
 const MAX_SERIES_DAYS = 366;
 
 function daysBetween(start, end) {
-  return (
-    (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) /
-    86_400_000
-  );
+  return (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000;
 }
 
 // A repeating block: weekly rules choose weekdays, while monthly rules choose a calendar date or ordinal weekday.
 // Returns { series } or { error }.
 export function validateSeries(input) {
-  if (!input || typeof input !== "object")
-    return { error: "Repeat details are required" };
+  if (!input || typeof input !== "object") return { error: "Repeat details are required" };
   if (input.type === "task") return { error: "Task blocks can't repeat" };
-  if (!isValidDate(input.start_date))
-    return { error: "Start date must be a valid YYYY-MM-DD date" };
-  if (!isValidDate(input.end_date))
-    return { error: "End date must be a valid YYYY-MM-DD date" };
-  if (input.end_date < input.start_date)
-    return { error: "The repeat has to end on or after the day it starts" };
+  if (!isValidDate(input.start_date)) return { error: "Start date must be a valid YYYY-MM-DD date" };
+  if (!isValidDate(input.end_date)) return { error: "End date must be a valid YYYY-MM-DD date" };
+  if (input.end_date < input.start_date) return { error: "The repeat has to end on or after the day it starts" };
   if (daysBetween(input.start_date, input.end_date) > MAX_SERIES_DAYS)
     return { error: "A repeat can last up to a year" };
   const { block, error } = validateTimeBlock({
@@ -225,21 +160,14 @@ export function validateSeries(input) {
   const days = input.days_of_week;
   const interval = input.interval_weeks ?? 1;
   if (recurrence_type === "weekly") {
-    if (
-      !Array.isArray(days) ||
-      days.length === 0 ||
-      !days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)
-    ) {
+    if (!Array.isArray(days) || days.length === 0 || !days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) {
       return { error: "Pick at least one day of the week" };
     }
-    if (interval !== 1 && interval !== 2)
-      return { error: "Repeat every week or every other week" };
+    if (interval !== 1 && interval !== 2) return { error: "Repeat every week or every other week" };
   }
   if (
     recurrence_type === "monthly_date" &&
-    (!Number.isInteger(input.day_of_month) ||
-      input.day_of_month < 1 ||
-      input.day_of_month > 31)
+    (!Number.isInteger(input.day_of_month) || input.day_of_month < 1 || input.day_of_month > 31)
   ) {
     return { error: "Pick a day of the month" };
   }
@@ -258,16 +186,11 @@ export function validateSeries(input) {
   return {
     series: {
       ...fields,
-      days_of_week:
-        recurrence_type === "weekly"
-          ? [...new Set(days)].sort((a, b) => a - b)
-          : [],
+      days_of_week: recurrence_type === "weekly" ? [...new Set(days)].sort((a, b) => a - b) : [],
       interval_weeks: recurrence_type === "weekly" ? interval : 1,
       recurrence_type,
-      day_of_month:
-        recurrence_type === "monthly_date" ? input.day_of_month : null,
-      week_of_month:
-        recurrence_type === "monthly_weekday" ? input.week_of_month : null,
+      day_of_month: recurrence_type === "monthly_date" ? input.day_of_month : null,
+      week_of_month: recurrence_type === "monthly_weekday" ? input.week_of_month : null,
       weekday: recurrence_type === "monthly_weekday" ? input.weekday : null,
       start_date: input.start_date,
       end_date: input.end_date,
@@ -282,30 +205,22 @@ export function pairKey(a, b) {
 
 // The user's own places and minutes between pairs of places. Returns { travel } or { error }.
 export function validateTravel(input) {
-  if (!input || typeof input !== "object")
-    return { error: "Travel times are required" };
+  if (!input || typeof input !== "object") return { error: "Travel times are required" };
   const places = [];
   for (const raw of input.places ?? []) {
     const place = normalizePlace(raw);
     if (!place || place.length > MAX_PLACE_LENGTH || place.includes("|"))
       return { error: "Place names must be short, without |" };
-    if (!BUILT_IN_PLACES.includes(place) && !places.includes(place))
-      places.push(place);
+    if (!BUILT_IN_PLACES.includes(place) && !places.includes(place)) places.push(place);
   }
   if (places.length > 12) return { error: "Add up to 12 of your own places" };
   const known = [...BUILT_IN_PLACES, ...places];
   const minutes = {};
   for (const [key, value] of Object.entries(input.minutes ?? {})) {
     const [a, b, extra] = key.split("|");
-    if (
-      extra !== undefined ||
-      !known.includes(a) ||
-      !known.includes(b) ||
-      a === b
-    )
+    if (extra !== undefined || !known.includes(a) || !known.includes(b) || a === b)
       return { error: `Unknown trip: ${key}` };
-    if (!Number.isInteger(value) || value < 1 || value > 240)
-      return { error: "Travel times must be 1 to 240 minutes" };
+    if (!Number.isInteger(value) || value < 1 || value > 240) return { error: "Travel times must be 1 to 240 minutes" };
     minutes[pairKey(a, b)] = value;
   }
   return { travel: { places, minutes } };
@@ -317,21 +232,17 @@ export const ACCENTS = ["violet", "blue", "teal", "green", "rose", "orange"];
 
 // Either or both of theme_mode and accent. Returns { appearance } or { error }.
 export function validateAppearance(input) {
-  if (!input || typeof input !== "object")
-    return { error: "Appearance settings are required" };
+  if (!input || typeof input !== "object") return { error: "Appearance settings are required" };
   const appearance = {};
   if (input.theme_mode !== undefined) {
-    if (!THEME_MODES.includes(input.theme_mode))
-      return { error: "Theme must be light, dark or system" };
+    if (!THEME_MODES.includes(input.theme_mode)) return { error: "Theme must be light, dark or system" };
     appearance.theme_mode = input.theme_mode;
   }
   if (input.accent !== undefined) {
-    if (!ACCENTS.includes(input.accent))
-      return { error: `Accent must be one of ${ACCENTS.join(", ")}` };
+    if (!ACCENTS.includes(input.accent)) return { error: `Accent must be one of ${ACCENTS.join(", ")}` };
     appearance.accent = input.accent;
   }
-  if (Object.keys(appearance).length === 0)
-    return { error: "Nothing to change" };
+  if (Object.keys(appearance).length === 0) return { error: "Nothing to change" };
   return { appearance };
 }
 
@@ -340,14 +251,10 @@ export function validateAppearance(input) {
 export const MAX_AVATAR_LENGTH = 90_000;
 export function validateAvatar(value) {
   if (value === null) return { avatar: null };
-  if (
-    typeof value !== "string" ||
-    !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value)
-  ) {
+  if (typeof value !== "string" || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) {
     return { error: "The picture must be a JPEG, PNG or WebP image" };
   }
-  if (value.length > MAX_AVATAR_LENGTH)
-    return { error: "That picture is too large. Try a smaller one." };
+  if (value.length > MAX_AVATAR_LENGTH) return { error: "That picture is too large. Try a smaller one." };
   return { avatar: value };
 }
 
@@ -379,13 +286,11 @@ export function validateSleepTimes(input) {
 
 // Returns { ratings } with exactly the four known keys, or { error } for the first one that isn't rated 1-5.
 export function validateRatings(input) {
-  if (!input || typeof input !== "object")
-    return { error: "Ratings are required" };
+  if (!input || typeof input !== "object") return { error: "Ratings are required" };
   const ratings = {};
   for (const key of REFLECTION_KEYS) {
     const value = input[key];
-    if (!Number.isInteger(value) || value < 1 || value > 5)
-      return { error: `Rate ${key} from 1 to 5` };
+    if (!Number.isInteger(value) || value < 1 || value > 5) return { error: `Rate ${key} from 1 to 5` };
     ratings[key] = value;
   }
   return { ratings };

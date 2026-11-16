@@ -17,12 +17,7 @@ import {
 } from "./validation.js";
 import { expandSeries } from "./series.js";
 import { planCommutes } from "./commute.js";
-import {
-  buildSolverInput,
-  preferencesOutOfDate,
-  savedPreferences,
-  startsBefore,
-} from "./solverInput.js";
+import { buildSolverInput, preferencesOutOfDate, savedPreferences, startsBefore } from "./solverInput.js";
 import { askModel } from "./model.js";
 import { withEncryption } from "./crypto.js";
 import { isValidPreferenceJson, summarizeLearningEvents } from "./learning.js";
@@ -76,9 +71,7 @@ async function requireAuth(req, res, next) {
 // and send the user a plain message.
 function serverError(res, error) {
   console.error(error);
-  res
-    .status(500)
-    .json({ error: "Something went wrong on our end. Try again in a moment." });
+  res.status(500).json({ error: "Something went wrong on our end. Try again in a moment." });
 }
 
 const PROFILE_COLUMNS =
@@ -100,10 +93,7 @@ app.put("/api/profile/survey", requireAuth, async (req, res) => {
   // Upsert so a student whose profile row was never created at sign-up can still save.
   const { data, error } = await req.supabase
     .from("profiles")
-    .upsert(
-      { id: req.userId, survey, survey_updated_at: new Date().toISOString() },
-      { onConflict: "id" },
-    )
+    .upsert({ id: req.userId, survey, survey_updated_at: new Date().toISOString() }, { onConflict: "id" })
     .select(PROFILE_COLUMNS);
   if (error) return serverError(res, error);
   // New answers, new preferences. Needs the browser's clock; without it the next plan refreshes them.
@@ -190,14 +180,11 @@ app.put("/api/profile/travel", requireAuth, async (req, res) => {
     .eq("id", req.userId)
     .select(PROFILE_COLUMNS);
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Profile not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Profile not found" });
 
   // From yesterday (UTC), so the user's own "today" is covered in any time zone.
   const today = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-  const until = new Date(Date.now() + 56 * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
+  const until = new Date(Date.now() + 56 * 86_400_000).toISOString().slice(0, 10);
   const { data: upcoming } = await req.supabase
     .from("time_blocks")
     .select("date")
@@ -212,17 +199,13 @@ app.put("/api/profile/travel", requireAuth, async (req, res) => {
 });
 
 app.get("/api/tasks", requireAuth, async (req, res) => {
-  const { data, error } = await req.supabase
-    .from("tasks")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const { data, error } = await req.supabase.from("tasks").select("*").order("created_at", { ascending: false });
   if (error) return serverError(res, error);
   res.json(data);
 });
 
 app.post("/api/tasks", requireAuth, async (req, res) => {
-  const { title, description, type, priority, due_date, estimated_time } =
-    req.body;
+  const { title, description, type, priority, due_date, estimated_time } = req.body;
   if (typeof title !== "string" || !title.trim()) {
     return res.status(400).json({ error: "Title is required" });
   }
@@ -271,9 +254,7 @@ app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
     updates.title = updates.title.trim();
   }
   if ("time_spent" in updates && !isValidTimeSpent(updates.time_spent)) {
-    return res
-      .status(400)
-      .json({ error: "Time spent must be a whole number of minutes" });
+    return res.status(400).json({ error: "Time spent must be a whole number of minutes" });
   }
   if ("completed" in updates) {
     updates.completed_at = updates.completed ? new Date().toISOString() : null;
@@ -294,20 +275,13 @@ app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
     if (!before) return res.status(404).json({ error: "Task not found" });
     wasIncomplete = !before.completed;
   }
-  const { data, error } = await req.supabase
-    .from("tasks")
-    .update(updates)
-    .eq("id", req.params.id)
-    .select();
+  const { data, error } = await req.supabase.from("tasks").update(updates).eq("id", req.params.id).select();
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Task not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Task not found" });
   const task = data[0];
   const changed = {};
   for (const field of ["estimated_time", "due_date", "priority", "type"]) {
-    if (field in updates)
-      changed[field === "estimated_time" ? "estimated_minutes" : field] =
-        updates[field];
+    if (field in updates) changed[field === "estimated_time" ? "estimated_minutes" : field] = updates[field];
   }
   if (Object.keys(changed).length)
     await logLearningEvent(req, "task_edited", {
@@ -326,14 +300,9 @@ app.patch("/api/tasks/:id", requireAuth, async (req, res) => {
 });
 
 app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
-  const { data, error } = await req.supabase
-    .from("tasks")
-    .delete()
-    .eq("id", req.params.id)
-    .select();
+  const { data, error } = await req.supabase.from("tasks").delete().eq("id", req.params.id).select();
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Task not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Task not found" });
   res.status(204).end();
 });
 
@@ -350,11 +319,7 @@ const FEED_BLOCK_MESSAGE =
 // A task block has to point at one of the user's own tasks. Row-level security hides everyone else's,
 // so "not found" covers both a deleted task and someone else's.
 async function checkTask(req, res, taskId) {
-  const { data, error } = await req.supabase
-    .from("tasks")
-    .select("id")
-    .eq("id", taskId)
-    .maybeSingle();
+  const { data, error } = await req.supabase.from("tasks").select("id").eq("id", taskId).maybeSingle();
   if (error) {
     serverError(res, error);
     return false;
@@ -370,21 +335,15 @@ app.get("/api/time-blocks", requireAuth, async (req, res) => {
   let query = req.supabase.from("time_blocks").select(BLOCK_COLUMNS);
 
   if (req.query.task_id !== undefined) {
-    if (!isUuid(req.query.task_id))
-      return res.status(400).json({ error: "task_id must be a task id" });
+    if (!isUuid(req.query.task_id)) return res.status(400).json({ error: "task_id must be a task id" });
     query = query.eq("task_id", req.query.task_id);
   }
   if (req.query.date !== undefined) {
-    if (!isValidDate(req.query.date))
-      return res
-        .status(400)
-        .json({ error: "Date must be a valid YYYY-MM-DD date" });
+    if (!isValidDate(req.query.date)) return res.status(400).json({ error: "Date must be a valid YYYY-MM-DD date" });
     query = query.eq("date", req.query.date);
   } else if (req.query.start !== undefined || req.query.end !== undefined) {
     if (!isValidDate(req.query.start) || !isValidDate(req.query.end)) {
-      return res
-        .status(400)
-        .json({ error: "start and end must both be valid YYYY-MM-DD dates" });
+      return res.status(400).json({ error: "start and end must both be valid YYYY-MM-DD dates" });
     }
     if (req.query.end < req.query.start) {
       return res.status(400).json({ error: "end must be on or after start" });
@@ -392,9 +351,7 @@ app.get("/api/time-blocks", requireAuth, async (req, res) => {
     query = query.gte("date", req.query.start).lte("date", req.query.end);
   }
 
-  const { data, error } = await query
-    .order("date", { ascending: true })
-    .order("start_time", { ascending: true });
+  const { data, error } = await query.order("date", { ascending: true }).order("start_time", { ascending: true });
   if (error) return serverError(res, error);
   res.json(data);
 });
@@ -411,10 +368,7 @@ async function recalcCommutes(req, dates) {
       .eq("id", req.userId)
       .maybeSingle();
     if (profileError) throw profileError;
-    const { data: blocks, error } = await req.supabase
-      .from("time_blocks")
-      .select("*")
-      .in("date", days);
+    const { data: blocks, error } = await req.supabase.from("time_blocks").select("*").in("date", days);
     if (error) throw error;
 
     const add = [];
@@ -429,10 +383,7 @@ async function recalcCommutes(req, dates) {
     }
     const stale = blocks.filter((b) => b.auto).map((b) => b.id);
     if (stale.length) {
-      const { error: deleteError } = await req.supabase
-        .from("time_blocks")
-        .delete()
-        .in("id", stale);
+      const { error: deleteError } = await req.supabase.from("time_blocks").delete().in("id", stale);
       if (deleteError) throw deleteError;
     }
     if (add.length) {
@@ -461,25 +412,17 @@ async function recalcCommutes(req, dates) {
 // Records what the user did with a plan, for the preference model (schedule_events; ml/prefs/history.py reads
 // it). Best effort: the user's change already succeeded, so a failure is logged, not returned.
 async function logEvent(req, kind, fields) {
-  const { error } = await req.supabase
-    .from("schedule_events")
-    .insert({ user_id: req.userId, kind, ...fields });
+  const { error } = await req.supabase.from("schedule_events").insert({ user_id: req.userId, kind, ...fields });
   if (error) console.error(`Could not record ${kind}`, error);
 }
 
 // This log is separate from the legacy schedule_events history so new features can be aggregated without
 // task titles or descriptions. It is best-effort: logging must never make a completed user action fail.
-async function logLearningEvent(
-  req,
-  event_type,
-  data,
-  occurred_at = new Date().toISOString(),
-) {
+async function logLearningEvent(req, event_type, data, occurred_at = new Date().toISOString()) {
   const { error } = await req.supabase
     .from("user_learning_events")
     .insert({ user_id: req.userId, event_type, occurred_at, data });
-  if (error)
-    console.error(`Could not record learning event ${event_type}`, error);
+  if (error) console.error(`Could not record learning event ${event_type}`, error);
 }
 
 const blockTime = (b) => ({
@@ -512,36 +455,25 @@ app.patch("/api/time-blocks/:id", requireAuth, async (req, res) => {
     .maybeSingle();
   if (fetchError) return serverError(res, fetchError);
   if (!existing) return res.status(404).json({ error: "Time block not found" });
-  if (existing.feed_id)
-    return res.status(409).json({ error: FEED_BLOCK_MESSAGE });
+  if (existing.feed_id) return res.status(409).json({ error: FEED_BLOCK_MESSAGE });
 
   const { block, error: validationError } = validateTimeBlock({
     ...existing,
     ...req.body,
   });
   if (validationError) return res.status(400).json({ error: validationError });
-  if (
-    block.task_id &&
-    block.task_id !== existing.task_id &&
-    !(await checkTask(req, res, block.task_id))
-  )
-    return;
+  if (block.task_id && block.task_id !== existing.task_id && !(await checkTask(req, res, block.task_id))) return;
   const { data, error } = await req.supabase
     .from("time_blocks")
     .update({ ...block, series_id: null, auto: false })
     .eq("id", req.params.id)
     .select(BLOCK_COLUMNS);
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Time block not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Time block not found" });
   const commutes = await recalcCommutes(req, [existing.date, block.date]);
   const from = blockTime(existing);
   const to = blockTime(data[0]);
-  if (
-    existing.type === "task" &&
-    data[0].type === "task" &&
-    JSON.stringify(from) !== JSON.stringify(to)
-  ) {
+  if (existing.type === "task" && data[0].type === "task" && JSON.stringify(from) !== JSON.stringify(to)) {
     await logEvent(req, "block_moved", {
       block_id: existing.id,
       task_id: existing.task_id,
@@ -569,8 +501,7 @@ app.patch("/api/time-blocks/:id/completion", requireAuth, async (req, res) => {
     .maybeSingle();
   if (fetchError) return serverError(res, fetchError);
   if (!existing) return res.status(404).json({ error: "Time block not found" });
-  if (existing.type !== "task")
-    return res.status(400).json({ error: "Only task blocks can be completed" });
+  if (existing.type !== "task") return res.status(400).json({ error: "Only task blocks can be completed" });
 
   const completedAt = req.body.completed
     ? existing.completed
@@ -582,20 +513,23 @@ app.patch("/api/time-blocks/:id/completion", requireAuth, async (req, res) => {
     .update({ completed: req.body.completed, completed_at: completedAt })
     .eq("id", req.params.id);
   // The condition makes the false -> true transition atomic, so two quick taps cannot log two events.
-  if (req.body.completed && !existing.completed)
-    update = update.eq("completed", false);
+  if (req.body.completed && !existing.completed) update = update.eq("completed", false);
   const { data, error } = await update.select(BLOCK_COLUMNS);
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Time block not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Time block not found" });
 
   // Repeating a completed request and reopening a session are state changes, not new observations.
   if (req.body.completed && !existing.completed) {
-    await logLearningEvent(req, "study_block_completed", {
-      task_type: existing.task?.type ?? null,
-      planned: blockTime(existing),
-      completed_at: completedAt,
-    }, completedAt);
+    await logLearningEvent(
+      req,
+      "study_block_completed",
+      {
+        task_type: existing.task?.type ?? null,
+        planned: blockTime(existing),
+        completed_at: completedAt,
+      },
+      completedAt,
+    );
   }
   res.json({ block: data[0] });
 });
@@ -607,16 +541,10 @@ app.delete("/api/time-blocks/:id", requireAuth, async (req, res) => {
     .eq("id", req.params.id)
     .maybeSingle();
   if (fetchError) return serverError(res, fetchError);
-  if (existing?.feed_id)
-    return res.status(409).json({ error: FEED_BLOCK_MESSAGE });
-  const { data, error } = await req.supabase
-    .from("time_blocks")
-    .delete()
-    .eq("id", req.params.id)
-    .select();
+  if (existing?.feed_id) return res.status(409).json({ error: FEED_BLOCK_MESSAGE });
+  const { data, error } = await req.supabase.from("time_blocks").delete().eq("id", req.params.id).select();
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Time block not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Time block not found" });
   await recalcCommutes(req, [data[0].date]);
   const deleted = data[0];
   if (deleted.type === "task") {
@@ -628,10 +556,7 @@ app.delete("/api/time-blocks/:id", requireAuth, async (req, res) => {
     await logLearningEvent(req, "study_block_deleted", {
       task_id: deleted.task_id,
       planned: blockTime(deleted),
-      reason:
-        typeof req.body?.reason === "string"
-          ? req.body.reason.slice(0, 80)
-          : null,
+      reason: typeof req.body?.reason === "string" ? req.body.reason.slice(0, 80) : null,
     });
   }
   res.status(204).end();
@@ -676,10 +601,7 @@ app.post("/api/block-series", requireAuth, async (req, res) => {
     .insert({ user_id: req.userId, ...series })
     .select();
   if (error) return serverError(res, error);
-  const { data: blocks, error: blocksError } = await insertOccurrences(
-    req,
-    data[0],
-  );
+  const { data: blocks, error: blocksError } = await insertOccurrences(req, data[0]);
   if (blocksError) return serverError(res, blocksError);
   const commutes = await recalcCommutes(
     req,
@@ -698,14 +620,9 @@ app.put("/api/block-series/:id", requireAuth, async (req, res) => {
       error: "None of those days fall between the start and end dates",
     });
   }
-  const { data, error } = await req.supabase
-    .from("time_block_series")
-    .update(series)
-    .eq("id", req.params.id)
-    .select();
+  const { data, error } = await req.supabase.from("time_block_series").update(series).eq("id", req.params.id).select();
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Repeat not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Repeat not found" });
 
   const { data: old, error: deleteError } = await req.supabase
     .from("time_blocks")
@@ -713,15 +630,9 @@ app.put("/api/block-series/:id", requireAuth, async (req, res) => {
     .eq("series_id", req.params.id)
     .select("date");
   if (deleteError) return serverError(res, deleteError);
-  const { data: blocks, error: blocksError } = await insertOccurrences(
-    req,
-    data[0],
-  );
+  const { data: blocks, error: blocksError } = await insertOccurrences(req, data[0]);
   if (blocksError) return serverError(res, blocksError);
-  const commutes = await recalcCommutes(req, [
-    ...old.map((b) => b.date),
-    ...blocks.map((b) => b.date),
-  ]);
+  const commutes = await recalcCommutes(req, [...old.map((b) => b.date), ...blocks.map((b) => b.date)]);
   res.json({ series: data[0], blocks, commutes });
 });
 
@@ -731,14 +642,9 @@ app.delete("/api/block-series/:id", requireAuth, async (req, res) => {
     .select("date")
     .eq("series_id", req.params.id);
   if (fetchError) return serverError(res, fetchError);
-  const { data, error } = await req.supabase
-    .from("time_block_series")
-    .delete()
-    .eq("id", req.params.id)
-    .select();
+  const { data, error } = await req.supabase.from("time_block_series").delete().eq("id", req.params.id).select();
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Repeat not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Repeat not found" });
   await recalcCommutes(
     req,
     old.map((b) => b.date),
@@ -750,9 +656,7 @@ app.delete("/api/block-series/:id", requireAuth, async (req, res) => {
 app.get("/api/reflections", requireAuth, async (req, res) => {
   const { start, end } = req.query;
   if (!isValidDate(start) || !isValidDate(end) || start > end) {
-    return res
-      .status(400)
-      .json({ error: "start and end must be YYYY-MM-DD dates, start first" });
+    return res.status(400).json({ error: "start and end must be YYYY-MM-DD dates, start first" });
   }
   const { data, error } = await req.supabase
     .from("reflections")
@@ -765,35 +669,22 @@ app.get("/api/reflections", requireAuth, async (req, res) => {
 });
 
 app.get("/api/reflections/:date", requireAuth, async (req, res) => {
-  if (!isValidDate(req.params.date))
-    return res
-      .status(400)
-      .json({ error: "Date must be a valid YYYY-MM-DD date" });
-  const { data, error } = await req.supabase
-    .from("reflections")
-    .select("*")
-    .eq("date", req.params.date)
-    .maybeSingle();
+  if (!isValidDate(req.params.date)) return res.status(400).json({ error: "Date must be a valid YYYY-MM-DD date" });
+  const { data, error } = await req.supabase.from("reflections").select("*").eq("date", req.params.date).maybeSingle();
   if (error) return serverError(res, error);
   res.json(data);
 });
 
 app.post("/api/reflections", requireAuth, async (req, res) => {
   const { date } = req.body;
-  if (!isValidDate(date))
-    return res
-      .status(400)
-      .json({ error: "Date must be a valid YYYY-MM-DD date" });
+  if (!isValidDate(date)) return res.status(400).json({ error: "Date must be a valid YYYY-MM-DD date" });
   const { ratings, error: validationError } = validateRatings(req.body.ratings);
   if (validationError) return res.status(400).json({ error: validationError });
   const { times, error: timesError } = validateSleepTimes(req.body);
   if (timesError) return res.status(400).json({ error: timesError });
   const { data, error } = await req.supabase
     .from("reflections")
-    .upsert(
-      { user_id: req.userId, date, ratings, ...times },
-      { onConflict: "user_id,date" },
-    )
+    .upsert({ user_id: req.userId, date, ratings, ...times }, { onConflict: "user_id,date" })
     .select();
   if (error) return serverError(res, error);
   res.status(201).json(data[0]);
@@ -832,9 +723,7 @@ async function askScheduler(path, body) {
     }
     if (r.ok) return r.json();
     if (!last && WAKING_STATUSES.includes(r.status)) {
-      console.warn(
-        `Scheduler ${path} said ${r.status} while waking up, trying again`,
-      );
+      console.warn(`Scheduler ${path} said ${r.status} while waking up, trying again`);
       await wait(retryDelay());
       continue;
     }
@@ -864,18 +753,13 @@ app.get("/api/wake", async (req, res) => {
 const PLAN_STYLES = ["front_loaded", "even", "spaced", "clustered"];
 
 // The browser's local time. The server doesn't know the user's time zone, so "now" comes from them.
-const isLocalNow = (now) =>
-  typeof now === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(now);
+const isLocalNow = (now) => typeof now === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(now);
 
 app.post("/api/schedule/suggest", requireAuth, async (req, res) => {
   const { now, weekStart } = req.body;
   const tzOffset = Number.isInteger(req.body.tzOffset) ? req.body.tzOffset : 0;
-  if (!isLocalNow(now))
-    return res.status(400).json({ error: "now must be YYYY-MM-DDTHH:MM" });
-  if (!isValidDate(weekStart))
-    return res
-      .status(400)
-      .json({ error: "weekStart must be a valid YYYY-MM-DD date" });
+  if (!isLocalNow(now)) return res.status(400).json({ error: "now must be YYYY-MM-DDTHH:MM" });
+  if (!isValidDate(weekStart)) return res.status(400).json({ error: "weekStart must be a valid YYYY-MM-DD date" });
 
   const endDate = new Date(`${weekStart}T00:00:00Z`);
   endDate.setUTCDate(endDate.getUTCDate() + 6);
@@ -889,35 +773,21 @@ app.post("/api/schedule/suggest", requireAuth, async (req, res) => {
 
   const [tasks, blocks, profile, reflections] = await Promise.all([
     req.supabase.from("tasks").select("*").eq("completed", false),
-    req.supabase
-      .from("time_blocks")
-      .select("*")
-      .gte("date", weekStart)
-      .lte("date", weekEnd),
+    req.supabase.from("time_blocks").select("*").gte("date", weekStart).lte("date", weekEnd),
     req.supabase
       .from("profiles")
-      .select(
-        "survey, survey_updated_at, scheduler_preferences, preferences_updated_at",
-      )
+      .select("survey, survey_updated_at, scheduler_preferences, preferences_updated_at")
       .eq("id", req.userId)
       .maybeSingle(),
-    req.supabase
-      .from("reflections")
-      .select("date, ratings")
-      .gte("date", since)
-      .lte("date", weekEnd),
+    req.supabase.from("reflections").select("date, ratings").gte("date", since).lte("date", weekEnd),
   ]);
   const failed = [tasks, blocks, profile, reflections].find((r) => r.error);
   if (failed) return serverError(res, failed.error);
 
   const survey = profile.data?.survey;
-  if (!survey)
-    return res
-      .status(409)
-      .json({ error: "Finish the onboarding survey first" });
+  if (!survey) return res.status(409).json({ error: "Finish the onboarding survey first" });
   let saved = profile.data;
-  if (await preferencesNeedRefresh(req, saved))
-    saved = (await refreshPreferences(req, { now, tzOffset })) ?? saved;
+  if (await preferencesNeedRefresh(req, saved)) saved = (await refreshPreferences(req, { now, tzOffset })) ?? saved;
 
   const input = buildSolverInput({
     now,
@@ -939,14 +809,9 @@ app.post("/api/schedule/suggest", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("Scheduler unreachable", err);
-    return res
-      .status(503)
-      .json({ error: "The planner is starting up. Try again in a minute." });
+    return res.status(503).json({ error: "The planner is starting up. Try again in a minute." });
   }
-  if (!result)
-    return res
-      .status(502)
-      .json({ error: "The scheduler could not build a plan" });
+  if (!result) return res.status(502).json({ error: "The scheduler could not build a plan" });
 
   // Suggest only: nothing is saved until the user picks one. The scheduler sends its three picks, best first.
   const suggestions = result.calendars.map((c) => ({
@@ -968,16 +833,10 @@ app.post("/api/schedule/suggest", requireAuth, async (req, res) => {
 
 app.post("/api/schedule/accept", requireAuth, async (req, res) => {
   const { now, weekStart, blocks } = req.body;
-  if (!isLocalNow(now))
-    return res.status(400).json({ error: "now must be YYYY-MM-DDTHH:MM" });
-  if (!isValidDate(weekStart))
-    return res
-      .status(400)
-      .json({ error: "weekStart must be a valid YYYY-MM-DD date" });
+  if (!isLocalNow(now)) return res.status(400).json({ error: "now must be YYYY-MM-DDTHH:MM" });
+  if (!isValidDate(weekStart)) return res.status(400).json({ error: "weekStart must be a valid YYYY-MM-DD date" });
   if (!Array.isArray(blocks) || blocks.length === 0 || blocks.length > 100) {
-    return res
-      .status(400)
-      .json({ error: "Pick a plan with at least one block" });
+    return res.status(400).json({ error: "Pick a plan with at least one block" });
   }
 
   const endDate = new Date(`${weekStart}T00:00:00Z`);
@@ -991,12 +850,9 @@ app.post("/api/schedule/accept", requireAuth, async (req, res) => {
       ...input,
       type: "task",
     });
-    if (validationError)
-      return res.status(400).json({ error: validationError });
+    if (validationError) return res.status(400).json({ error: validationError });
     if (block.date < weekStart || block.date > weekEnd) {
-      return res
-        .status(400)
-        .json({ error: "Every block has to fall inside the week" });
+      return res.status(400).json({ error: "Every block has to fall inside the week" });
     }
     // Options can sit on screen for a while; don't save a session that has already started.
     if (startsBefore(block, now)) {
@@ -1009,15 +865,10 @@ app.post("/api/schedule/accept", requireAuth, async (req, res) => {
 
   // Every task referenced must belong to this user (row-level security hides the rest).
   const taskIds = [...new Set(rows.map((b) => b.task_id))];
-  const { data: ownTasks, error: tasksError } = await req.supabase
-    .from("tasks")
-    .select("id")
-    .in("id", taskIds);
+  const { data: ownTasks, error: tasksError } = await req.supabase.from("tasks").select("id").in("id", taskIds);
   if (tasksError) return serverError(res, tasksError);
   if (ownTasks.length !== taskIds.length)
-    return res
-      .status(400)
-      .json({ error: "A task in this plan no longer exists" });
+    return res.status(400).json({ error: "A task in this plan no longer exists" });
 
   // Replace the week's unfinished task blocks from now on with the chosen plan. Blocks on completed tasks,
   // individually completed blocks, and blocks that already started stay as history.
@@ -1028,15 +879,10 @@ app.post("/api/schedule/accept", requireAuth, async (req, res) => {
     .gte("date", weekStart)
     .lte("date", weekEnd);
   if (oldError) return serverError(res, oldError);
-  const stale = old.filter(
-    (b) => !b.task?.completed && !b.completed && !startsBefore(b, now),
-  );
+  const stale = old.filter((b) => !b.task?.completed && !b.completed && !startsBefore(b, now));
   const staleIds = stale.map((b) => b.id);
   if (staleIds.length) {
-    const { error: deleteError } = await req.supabase
-      .from("time_blocks")
-      .delete()
-      .in("id", staleIds);
+    const { error: deleteError } = await req.supabase.from("time_blocks").delete().in("id", staleIds);
     if (deleteError) return serverError(res, deleteError);
   }
 
@@ -1046,17 +892,11 @@ app.post("/api/schedule/accept", requireAuth, async (req, res) => {
     .select(BLOCK_COLUMNS);
   if (error) return serverError(res, error);
 
-  const commutes = await recalcCommutes(req, [
-    ...stale.map((b) => b.date),
-    ...rows.map((b) => b.date),
-  ]);
+  const commutes = await recalcCommutes(req, [...stale.map((b) => b.date), ...rows.map((b) => b.date)]);
   // Which option was chosen out of which, by style, for the model's PAST PICKS.
   // Also how many of the option's sessions they removed before choosing it.
   const { options, chosen } = req.body;
-  const removed =
-    Number.isInteger(req.body.removed) && req.body.removed >= 0
-      ? req.body.removed
-      : 0;
+  const removed = Number.isInteger(req.body.removed) && req.body.removed >= 0 ? req.body.removed : 0;
   if (
     Array.isArray(options) &&
     options.length <= 3 &&
@@ -1071,16 +911,12 @@ app.post("/api/schedule/accept", requireAuth, async (req, res) => {
   await logLearningEvent(req, "schedule_accepted", {
     week_start: weekStart,
     selected_option: Number.isInteger(chosen) ? chosen : null,
-    option_styles: Array.isArray(options)
-      ? options.filter((style) => PLAN_STYLES.includes(style))
-      : [],
+    option_styles: Array.isArray(options) ? options.filter((style) => PLAN_STYLES.includes(style)) : [],
     planned_blocks: rows.map((block) => ({
       date: block.date,
       start: block.start_time.slice(0, 5),
       end: block.end_time.slice(0, 5),
-      task_type:
-        data.find((saved) => saved.task_id === block.task_id)?.task?.type ??
-        null,
+      task_type: data.find((saved) => saved.task_id === block.task_id)?.task?.type ?? null,
     })),
   });
   res.status(201).json({ blocks: data, commutes });
@@ -1126,9 +962,7 @@ async function readLearningSummary(req) {
 // The browser's local time and getTimezoneOffset() from a body or query, or null.
 function localClock(source) {
   const tzOffset = Number.parseInt(source?.tzOffset, 10);
-  return isLocalNow(source?.now) && Number.isInteger(tzOffset)
-    ? { now: source.now, tzOffset }
-    : null;
+  return isLocalNow(source?.now) && Number.isInteger(tzOffset) ? { now: source.now, tzOffset } : null;
 }
 
 // The user's last HISTORY_DAYS days as the scheduler service reads them: { bundle, rules }, or null when the
@@ -1141,32 +975,19 @@ async function readHistory(req, { now, tzOffset }) {
   sinceDate.setUTCDate(sinceDate.getUTCDate() - 7);
 
   const [profile, tasks, blocks, reflections, events] = await Promise.all([
-    req.supabase
-      .from("profiles")
-      .select("survey")
-      .eq("id", req.userId)
-      .maybeSingle(),
-    req.supabase
-      .from("tasks")
-      .select(
-        "id, title, type, estimated_time, time_spent, due_date, completed, completed_at",
-      ),
+    req.supabase.from("profiles").select("survey").eq("id", req.userId).maybeSingle(),
+    req.supabase.from("tasks").select("id, title, type, estimated_time, time_spent, due_date, completed, completed_at"),
     req.supabase
       .from("time_blocks")
       .select("id, date, start_time, end_time, type, activity, task_id, auto")
       .gte("date", since),
-    req.supabase
-      .from("reflections")
-      .select("date, ratings, bed_time, wake_time")
-      .gte("date", since),
+    req.supabase.from("reflections").select("date, ratings, bed_time, wake_time").gte("date", since),
     req.supabase
       .from("schedule_events")
       .select("created_at, kind, block_id, task_id, details")
       .gte("created_at", sinceDate.toISOString()),
   ]);
-  const failed = [profile, tasks, blocks, reflections, events].find(
-    (r) => r.error,
-  );
+  const failed = [profile, tasks, blocks, reflections, events].find((r) => r.error);
   if (failed) throw failed.error;
 
   return askScheduler("/history", {
@@ -1196,9 +1017,7 @@ async function refreshPreferences(req, clock) {
         preference_model_version: PREFERENCES_VERSION,
       })
       .eq("id", req.userId)
-      .select(
-        "survey, survey_updated_at, scheduler_preferences, preferences_updated_at",
-      );
+      .select("survey, survey_updated_at, scheduler_preferences, preferences_updated_at");
     if (error) throw error;
     if (process.env.MODEL_URL && data[0]) {
       preferencesFromModel(req, result.bundle, data[0].survey).catch((err) =>
@@ -1245,10 +1064,7 @@ async function preferencesFromModel(req, bundle, survey) {
     })
     .eq("id", req.userId);
   if (error) console.error("Could not save the model preferences", error);
-  else
-    console.log(
-      `Model preferences saved (${reply.version}, ${reply.seconds}s)`,
-    );
+  else console.log(`Model preferences saved (${reply.version}, ${reply.seconds}s)`);
 }
 
 // What the preferences are read from, for checking the data.
@@ -1264,10 +1080,7 @@ app.get("/api/preferences/history", requireAuth, async (req, res) => {
   } catch (err) {
     return serverError(res, err);
   }
-  if (!result)
-    return res
-      .status(502)
-      .json({ error: "The scheduler could not read the history" });
+  if (!result) return res.status(502).json({ error: "The scheduler could not read the history" });
   res.json(result);
 });
 
@@ -1279,10 +1092,7 @@ app.post("/api/preferences/refresh", requireAuth, async (req, res) => {
       error: "now (YYYY-MM-DDTHH:MM) and tzOffset (minutes) are required",
     });
   const saved = await refreshPreferences(req, clock);
-  if (!saved)
-    return res
-      .status(502)
-      .json({ error: "Couldn't update your preferences. Try again." });
+  if (!saved) return res.status(502).json({ error: "Couldn't update your preferences. Try again." });
   res.json({
     preferences: saved.scheduler_preferences,
     updatedAt: saved.preferences_updated_at,
@@ -1298,8 +1108,7 @@ app.post("/api/preferences/refresh", requireAuth, async (req, res) => {
 const FEED_FRESH_MS = 15 * 60_000;
 const FEED_DAYS_BACK = 7;
 const FEED_DAYS_AHEAD = 56;
-const FEED_COLUMNS =
-  "id, provider, url, time_zone, last_synced_at, last_error, created_at";
+const FEED_COLUMNS = "id, provider, url, time_zone, last_synced_at, last_error, created_at";
 const MAX_FEEDS = 5;
 
 const feedForBrowser = (feed) => ({
@@ -1324,15 +1133,9 @@ async function syncFeed(req, feed, icsText) {
   try {
     rows = feedBlocks(icsText ?? (await fetchFeed(feed.url)), window);
   } catch (err) {
-    const message = Object.values(FEED_ERRORS).includes(err.message)
-      ? err.message
-      : FEED_ERRORS.parse;
-    if (!Object.values(FEED_ERRORS).includes(err.message))
-      console.error("Calendar sync failed", err);
-    await req.supabase
-      .from("calendar_feeds")
-      .update({ last_error: message })
-      .eq("id", feed.id);
+    const message = Object.values(FEED_ERRORS).includes(err.message) ? err.message : FEED_ERRORS.parse;
+    if (!Object.values(FEED_ERRORS).includes(err.message)) console.error("Calendar sync failed", err);
+    await req.supabase.from("calendar_feeds").update({ last_error: message }).eq("id", feed.id);
     return [];
   }
 
@@ -1345,11 +1148,7 @@ async function syncFeed(req, feed, icsText) {
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await req.supabase
       .from("time_blocks")
-      .insert(
-        rows
-          .slice(i, i + 500)
-          .map((row) => ({ user_id: req.userId, feed_id: feed.id, ...row })),
-      );
+      .insert(rows.slice(i, i + 500).map((row) => ({ user_id: req.userId, feed_id: feed.id, ...row })));
     if (error) throw error;
   }
   const { error: updateError } = await req.supabase
@@ -1364,19 +1163,12 @@ async function syncFeed(req, feed, icsText) {
 // days that changed. Never throws: a failed sync shouldn't stop the request that asked for it.
 async function syncFeeds(req, { onlyStale }) {
   try {
-    const { data: feeds, error } = await req.supabase
-      .from("calendar_feeds")
-      .select(FEED_COLUMNS);
+    const { data: feeds, error } = await req.supabase.from("calendar_feeds").select(FEED_COLUMNS);
     if (error) throw error;
     const due = feeds.filter(
-      (f) =>
-        !onlyStale ||
-        !f.last_synced_at ||
-        Date.now() - Date.parse(f.last_synced_at) > FEED_FRESH_MS,
+      (f) => !onlyStale || !f.last_synced_at || Date.now() - Date.parse(f.last_synced_at) > FEED_FRESH_MS,
     );
-    const dates = (
-      await Promise.all(due.map((feed) => syncFeed(req, feed)))
-    ).flat();
+    const dates = (await Promise.all(due.map((feed) => syncFeed(req, feed)))).flat();
     if (dates.length) await recalcCommutes(req, dates);
     return { synced: due.length };
   } catch (err) {
@@ -1386,10 +1178,7 @@ async function syncFeeds(req, { onlyStale }) {
 }
 
 app.get("/api/calendar-feeds", requireAuth, async (req, res) => {
-  const { data, error } = await req.supabase
-    .from("calendar_feeds")
-    .select(FEED_COLUMNS)
-    .order("created_at");
+  const { data, error } = await req.supabase.from("calendar_feeds").select(FEED_COLUMNS).order("created_at");
   if (error) return serverError(res, error);
   res.json(data.map(feedForBrowser));
 });
@@ -1398,19 +1187,13 @@ app.get("/api/calendar-feeds", requireAuth, async (req, res) => {
 app.post("/api/calendar-feeds", requireAuth, async (req, res) => {
   const { url, provider, error: linkError } = checkFeedUrl(req.body.url);
   if (linkError) return res.status(400).json({ error: linkError });
-  if (!isTimeZone(req.body.timeZone))
-    return res.status(400).json({ error: "Time zone is required" });
+  if (!isTimeZone(req.body.timeZone)) return res.status(400).json({ error: "Time zone is required" });
 
-  const { data: existing, error: listError } = await req.supabase
-    .from("calendar_feeds")
-    .select("id, url");
+  const { data: existing, error: listError } = await req.supabase.from("calendar_feeds").select("id, url");
   if (listError) return serverError(res, listError);
-  if (existing.some((f) => f.url === url))
-    return res.status(409).json({ error: "That calendar is already linked." });
+  if (existing.some((f) => f.url === url)) return res.status(409).json({ error: "That calendar is already linked." });
   if (existing.length >= MAX_FEEDS)
-    return res
-      .status(400)
-      .json({ error: `You can link up to ${MAX_FEEDS} calendars.` });
+    return res.status(400).json({ error: `You can link up to ${MAX_FEEDS} calendars.` });
 
   let icsText;
   try {
@@ -1422,9 +1205,7 @@ app.post("/api/calendar-feeds", requireAuth, async (req, res) => {
     }); // is it a calendar?
   } catch (err) {
     return res.status(400).json({
-      error: Object.values(FEED_ERRORS).includes(err.message)
-        ? err.message
-        : FEED_ERRORS.parse,
+      error: Object.values(FEED_ERRORS).includes(err.message) ? err.message : FEED_ERRORS.parse,
     });
   }
 
@@ -1456,35 +1237,23 @@ app.post("/api/calendar-feeds", requireAuth, async (req, res) => {
 // Syncs now. { force: true } syncs every calendar; otherwise only ones not synced in the last few minutes.
 app.post("/api/calendar-feeds/sync", requireAuth, async (req, res) => {
   const result = await syncFeeds(req, { onlyStale: req.body?.force !== true });
-  if (result.failed)
-    return res
-      .status(502)
-      .json({ error: "Couldn't sync your calendars. Try again in a moment." });
-  const { data, error } = await req.supabase
-    .from("calendar_feeds")
-    .select(FEED_COLUMNS)
-    .order("created_at");
+  if (result.failed) return res.status(502).json({ error: "Couldn't sync your calendars. Try again in a moment." });
+  const { data, error } = await req.supabase.from("calendar_feeds").select(FEED_COLUMNS).order("created_at");
   if (error) return serverError(res, error);
   res.json({ synced: result.synced, feeds: data.map(feedForBrowser) });
 });
 
 // Unlinks a calendar. Its blocks go with it (on delete cascade).
 app.delete("/api/calendar-feeds/:id", requireAuth, async (req, res) => {
-  if (!isUuid(req.params.id))
-    return res.status(404).json({ error: "Calendar not found" });
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: "Calendar not found" });
   const { data: old, error: fetchError } = await req.supabase
     .from("time_blocks")
     .select("date")
     .eq("feed_id", req.params.id);
   if (fetchError) return serverError(res, fetchError);
-  const { data, error } = await req.supabase
-    .from("calendar_feeds")
-    .delete()
-    .eq("id", req.params.id)
-    .select("id");
+  const { data, error } = await req.supabase.from("calendar_feeds").delete().eq("id", req.params.id).select("id");
   if (error) return serverError(res, error);
-  if (data.length === 0)
-    return res.status(404).json({ error: "Calendar not found" });
+  if (data.length === 0) return res.status(404).json({ error: "Calendar not found" });
   await recalcCommutes(
     req,
     old.map((b) => b.date),
@@ -1499,11 +1268,8 @@ app.use("/api", (req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  if (err.type === "entity.parse.failed")
-    return res.status(400).json({ error: "The request was not valid JSON" });
+  if (err.type === "entity.parse.failed") return res.status(400).json({ error: "The request was not valid JSON" });
   if (err.type === "entity.too.large")
-    return res
-      .status(413)
-      .json({ error: "That is too large to save. Try something smaller." });
+    return res.status(413).json({ error: "That is too large to save. Try something smaller." });
   serverError(res, err);
 });

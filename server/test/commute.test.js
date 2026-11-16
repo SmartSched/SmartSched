@@ -36,10 +36,7 @@ const BETWEEN = { "campus|work": 20 };
 describe("planCommutes between blocks", () => {
   it("adds a commute that ends when the next block starts", () => {
     const { add, tight } = planCommutes(
-      [
-        block("09:00:00", "12:00:00", "campus"),
-        block("13:00:00", "17:00:00", "work"),
-      ],
+      [block("09:00:00", "12:00:00", "campus"), block("13:00:00", "17:00:00", "work")],
       BETWEEN,
     );
     expect(tight).toEqual([]);
@@ -53,30 +50,15 @@ describe("planCommutes between blocks", () => {
       block("13:00:00", "17:00:00", "campus"),
     ];
     const add = planCommutes(blocks, { ...BETWEEN, "campus|gym": 15 }).add;
-    expect(add.map((c) => c.activity)).toEqual([
-      "Commute: Work → Campus",
-      "Commute: Campus → Gym",
-    ]);
+    expect(add.map((c) => c.activity)).toEqual(["Commute: Work → Campus", "Commute: Campus → Gym"]);
   });
 
   it("adds nothing between blocks in the same place, or for a trip with no travel time set", () => {
     expect(
-      planCommutes(
-        [
-          block("09:00:00", "10:00:00", "campus"),
-          block("11:00:00", "12:00:00", "campus"),
-        ],
-        BETWEEN,
-      ).add,
+      planCommutes([block("09:00:00", "10:00:00", "campus"), block("11:00:00", "12:00:00", "campus")], BETWEEN).add,
     ).toEqual([]);
     expect(
-      planCommutes(
-        [
-          block("09:00:00", "10:00:00", "gym"),
-          block("11:00:00", "12:00:00", "campus"),
-        ],
-        BETWEEN,
-      ).add,
+      planCommutes([block("09:00:00", "10:00:00", "gym"), block("11:00:00", "12:00:00", "campus")], BETWEEN).add,
     ).toEqual([]);
   });
 
@@ -86,9 +68,7 @@ describe("planCommutes between blocks", () => {
       block("12:00:00", "12:30:00", null),
       block("14:00:00", "15:00:00", "work"),
     ];
-    expect(planCommutes(blocks, BETWEEN).add.map((c) => c.start_time)).toEqual([
-      "13:40:00",
-    ]);
+    expect(planCommutes(blocks, BETWEEN).add.map((c) => c.start_time)).toEqual(["13:40:00"]);
   });
 
   it("reports a gap shorter than the trip instead of adding a commute", () => {
@@ -112,10 +92,7 @@ describe("planCommutes between blocks", () => {
   });
 
   it("reports overlapping blocks in different places, with a gap of 0 or less", () => {
-    const blocks = [
-      block("09:00:00", "11:00:00", "campus"),
-      block("10:00:00", "11:00:00", "work"),
-    ];
+    const blocks = [block("09:00:00", "11:00:00", "campus"), block("10:00:00", "11:00:00", "work")];
     const { add, tight } = planCommutes(blocks, BETWEEN);
     expect(add).toEqual([]);
     expect(tight).toHaveLength(1);
@@ -148,9 +125,7 @@ describe("planCommutes between blocks", () => {
       block("12:00:00", "12:20:00", null, { type: "commute", auto: true }),
       block("13:00:00", "17:00:00", "work"),
     ];
-    expect(planCommutes(blocks, BETWEEN).add.map((c) => c.start_time)).toEqual([
-      "12:40:00",
-    ]);
+    expect(planCommutes(blocks, BETWEEN).add.map((c) => c.start_time)).toEqual(["12:40:00"]);
   });
 });
 
@@ -158,10 +133,7 @@ describe("planCommutes from and to home", () => {
   const HOME_TRIPS = { "campus|home": 30, "home|work": 15, "campus|work": 20 };
 
   it("goes from home to a single block and back again", () => {
-    const { add, tight } = planCommutes(
-      [block("10:00:00", "11:15:00", "campus")],
-      HOME_TRIPS,
-    );
+    const { add, tight } = planCommutes([block("10:00:00", "11:15:00", "campus")], HOME_TRIPS);
     expect(tight).toEqual([]);
     expect(add).toEqual([
       commute("09:30:00", "10:00:00", "Home", "Campus"),
@@ -171,10 +143,7 @@ describe("planCommutes from and to home", () => {
 
   it("only goes home at the start and end of the day, with the trips between blocks in the middle", () => {
     const add = planCommutes(
-      [
-        block("09:00:00", "12:00:00", "campus"),
-        block("13:00:00", "17:00:00", "work"),
-      ],
+      [block("09:00:00", "12:00:00", "campus"), block("13:00:00", "17:00:00", "work")],
       HOME_TRIPS,
     ).add;
     expect(add.map((c) => [c.activity, c.start_time])).toEqual([
@@ -185,30 +154,18 @@ describe("planCommutes from and to home", () => {
   });
 
   it("adds nothing for blocks at home, or when there's no travel time from home", () => {
-    expect(
-      planCommutes([block("10:00:00", "11:00:00", "home")], HOME_TRIPS).add,
-    ).toEqual([]);
-    expect(
-      planCommutes([block("10:00:00", "11:00:00", "gym")], HOME_TRIPS).add,
-    ).toEqual([]);
+    expect(planCommutes([block("10:00:00", "11:00:00", "home")], HOME_TRIPS).add).toEqual([]);
+    expect(planCommutes([block("10:00:00", "11:00:00", "gym")], HOME_TRIPS).add).toEqual([]);
   });
 
   it("leaves home trips out quietly when they don't fit", () => {
     // Too early to have come from home, and something already right after the class.
-    const blocks = [
-      block("00:10:00", "01:00:00", "campus"),
-      block("01:00:00", "02:00:00", null),
-    ];
+    const blocks = [block("00:10:00", "01:00:00", "campus"), block("01:00:00", "02:00:00", null)];
     expect(planCommutes(blocks, HOME_TRIPS)).toEqual({ add: [], tight: [] });
   });
 
   it("heads home after whichever block ends last", () => {
-    const blocks = [
-      block("09:00:00", "12:00:00", "campus"),
-      block("10:00:00", "11:00:00", "campus"),
-    ];
-    expect(
-      planCommutes(blocks, HOME_TRIPS).add.map((c) => c.start_time),
-    ).toEqual(["08:30:00", "12:00:00"]);
+    const blocks = [block("09:00:00", "12:00:00", "campus"), block("10:00:00", "11:00:00", "campus")];
+    expect(planCommutes(blocks, HOME_TRIPS).add.map((c) => c.start_time)).toEqual(["08:30:00", "12:00:00"]);
   });
 });

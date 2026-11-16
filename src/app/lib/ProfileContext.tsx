@@ -59,7 +59,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const saveSurvey = async (survey: SurveyAnswers) => {
     // The clock lets the server work out the scheduling preferences again from the new answers.
-    const profile = await apiPut('/api/profile/survey', { survey, now: localNow(), tzOffset: new Date().getTimezoneOffset() });
+    const profile = await apiPut('/api/profile/survey', {
+      survey,
+      now: localNow(),
+      tzOffset: new Date().getTimezoneOffset(),
+    });
     setState({ userId: profile.id, profile, error: null });
   };
 

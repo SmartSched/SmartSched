@@ -16,7 +16,14 @@ import {
   type Theme,
 } from '@mui/material';
 import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, Navigate, useLocation } from 'react-router';
-import { CalendarMonthOutlined, ChecklistOutlined, Logout, NightsStayOutlined, PersonOutline, WbSunnyOutlined } from '@mui/icons-material';
+import {
+  CalendarMonthOutlined,
+  ChecklistOutlined,
+  Logout,
+  NightsStayOutlined,
+  PersonOutline,
+  WbSunnyOutlined,
+} from '@mui/icons-material';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ProfileProvider, useProfile } from './lib/ProfileContext';
 import { needsConsent } from './lib/consent';
@@ -236,7 +243,11 @@ function RootPage() {
 
   if (loading) return <PageLoader />;
   if (!user) return <LandingPage />;
-  return <RequireAuth><HomePage /></RequireAuth>;
+  return (
+    <RequireAuth>
+      <HomePage />
+    </RequireAuth>
+  );
 }
 
 function AppShell() {
@@ -253,17 +264,33 @@ function AppShell() {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: colors.surface, pb: showNav && isMobile ? `${TAB_BAR_HEIGHT + 16}px` : 0 }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        backgroundColor: colors.surface,
+        pb: showNav && isMobile ? `${TAB_BAR_HEIGHT + 16}px` : 0,
+      }}
+    >
       <AppBar
         position="sticky"
         elevation={0}
-        sx={{ backgroundColor: colors.surface, borderBottom: `2px solid ${colors.accent200}`, color: colors.textPrimary }}
+        sx={{
+          backgroundColor: colors.surface,
+          borderBottom: `2px solid ${colors.accent200}`,
+          color: colors.textPrimary,
+        }}
       >
         <Toolbar sx={{ gap: { xs: 1, sm: 3 }, maxWidth: 1376, width: '100%', mx: 'auto', px: { xs: 2, sm: 3 } }}>
           <Typography
             component={Link}
             to="/"
-            sx={{ fontSize: 24, fontWeight: 700, color: colors.accent500, textDecoration: 'none', mr: { xs: 'auto', sm: 0 } }}
+            sx={{
+              fontSize: 24,
+              fontWeight: 700,
+              color: colors.accent500,
+              textDecoration: 'none',
+              mr: { xs: 'auto', sm: 0 },
+            }}
           >
             SmartSched
           </Typography>
@@ -280,12 +307,54 @@ function AppShell() {
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/" element={<RootPage />} />
-            <Route path="/schedule" element={<RequireAuth><TaskList /></RequireAuth>} />
-            <Route path="/planner" element={<RequireAuth><DailyPlanner /></RequireAuth>} />
-            <Route path="/reflection" element={<RequireAuth><DayReflection /></RequireAuth>} />
-            <Route path="/consent" element={<RequireAuth><ConsentPage /></RequireAuth>} />
-            <Route path="/survey" element={<RequireAuth><SurveyPage /></RequireAuth>} />
-            <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+            <Route
+              path="/schedule"
+              element={
+                <RequireAuth>
+                  <TaskList />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/planner"
+              element={
+                <RequireAuth>
+                  <DailyPlanner />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/reflection"
+              element={
+                <RequireAuth>
+                  <DayReflection />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/consent"
+              element={
+                <RequireAuth>
+                  <ConsentPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/survey"
+              element={
+                <RequireAuth>
+                  <SurveyPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <RequireAuth>
+                  <ProfilePage />
+                </RequireAuth>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Box>

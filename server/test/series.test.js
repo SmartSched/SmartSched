@@ -11,14 +11,7 @@ describe("expandSeries", () => {
         start_date: "2026-09-28",
         end_date: "2026-10-09",
       }),
-    ).toEqual([
-      "2026-09-28",
-      "2026-09-30",
-      "2026-10-02",
-      "2026-10-05",
-      "2026-10-07",
-      "2026-10-09",
-    ]);
+    ).toEqual(["2026-09-28", "2026-09-30", "2026-10-02", "2026-10-05", "2026-10-07", "2026-10-09"]);
   });
 
   it("includes the start and end dates themselves when they match", () => {
@@ -40,13 +33,7 @@ describe("expandSeries", () => {
         start_date: "2026-09-30",
         end_date: "2026-10-31",
       }),
-    ).toEqual([
-      "2026-10-01",
-      "2026-10-13",
-      "2026-10-15",
-      "2026-10-27",
-      "2026-10-29",
-    ]);
+    ).toEqual(["2026-10-01", "2026-10-13", "2026-10-15", "2026-10-27", "2026-10-29"]);
   });
 
   it("keeps the same weekdays across a daylight saving change", () => {

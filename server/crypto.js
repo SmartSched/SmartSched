@@ -32,42 +32,27 @@ export function encryptionKey() {
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) return null;
   const key = Buffer.from(raw, "base64");
-  if (key.length !== 32)
-    throw new Error("ENCRYPTION_KEY must be 32 bytes, base64-encoded");
+  if (key.length !== 32) throw new Error("ENCRYPTION_KEY must be 32 bytes, base64-encoded");
   return key;
 }
 
-export const isEncrypted = (value) =>
-  typeof value === "string" && value.startsWith(PREFIX);
+export const isEncrypted = (value) => typeof value === "string" && value.startsWith(PREFIX);
 
 export function encryptValue(value, key = encryptionKey()) {
   if (value === null || value === undefined || isEncrypted(value)) return value;
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const body = Buffer.concat([
-    cipher.update(JSON.stringify(value), "utf8"),
-    cipher.final(),
-  ]);
-  return (
-    PREFIX + Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64")
-  );
+  const body = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
+  return PREFIX + Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64");
 }
 
 export function decryptValue(value, key = encryptionKey()) {
   if (!isEncrypted(value)) return value;
-  if (!key)
-    throw new Error("Found encrypted data but ENCRYPTION_KEY is not set");
+  if (!key) throw new Error("Found encrypted data but ENCRYPTION_KEY is not set");
   const raw = Buffer.from(value.slice(PREFIX.length), "base64");
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    key,
-    raw.subarray(0, IV_BYTES),
-  );
+  const decipher = createDecipheriv("aes-256-gcm", key, raw.subarray(0, IV_BYTES));
   decipher.setAuthTag(raw.subarray(IV_BYTES, IV_BYTES + TAG_BYTES));
-  const text = Buffer.concat([
-    decipher.update(raw.subarray(IV_BYTES + TAG_BYTES)),
-    decipher.final(),
-  ]).toString("utf8");
+  const text = Buffer.concat([decipher.update(raw.subarray(IV_BYTES + TAG_BYTES)), decipher.final()]).toString("utf8");
   return JSON.parse(text);
 }
 
@@ -108,9 +93,7 @@ function wrapBuilder(builder, table, key) {
         return (resolve, reject) =>
           target
             .then((result) =>
-              result && result.data != null
-                ? { ...result, data: decryptDeep(result.data, key) }
-                : result,
+              result && result.data != null ? { ...result, data: decryptDeep(result.data, key) } : result,
             )
             .then(resolve, reject);
       }
@@ -119,9 +102,7 @@ function wrapBuilder(builder, table, key) {
       return (...args) => {
         if (WRITES.has(prop)) args[0] = encryptRows(table, args[0], key);
         const out = value.apply(target, args);
-        return out && typeof out === "object"
-          ? wrapBuilder(out, table, key)
-          : out;
+        return out && typeof out === "object" ? wrapBuilder(out, table, key) : out;
       };
     },
   });

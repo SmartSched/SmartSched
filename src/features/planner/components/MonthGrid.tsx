@@ -26,9 +26,18 @@ export function MonthGrid({ dates, month, today, blocksByDate, onOpenDay, onOpen
   return (
     <Card sx={{ overflowX: 'auto' }}>
       <Box sx={{ minWidth: 700 }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', borderBottom: `1px solid ${colors.grey200}` }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+            borderBottom: `1px solid ${colors.grey200}`,
+          }}
+        >
           {dates.slice(0, 7).map((date) => (
-            <Typography key={date} sx={{ py: 1, textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'text.secondary' }}>
+            <Typography
+              key={date}
+              sx={{ py: 1, textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'text.secondary' }}
+            >
               {format(parseISO(date), 'EEE')}
             </Typography>
           ))}
@@ -91,11 +100,23 @@ export function MonthGrid({ dates, month, today, blocksByDate, onOpenDay, onOpen
                       '&:hover': { backgroundColor: categoryColor(block.type) + '33' },
                     }}
                   >
-                    <Box aria-hidden sx={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, backgroundColor: categoryColor(block.type) }} />
+                    <Box
+                      aria-hidden
+                      sx={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        backgroundColor: categoryColor(block.type),
+                      }}
+                    />
                     <Box component="span" sx={{ color: 'text.secondary', flexShrink: 0 }}>
                       {shortTime(block.start_time)}
                     </Box>
-                    <Box component="span" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Box
+                      component="span"
+                      sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
                       {block.task?.title ?? block.activity}
                     </Box>
                   </ButtonBase>
@@ -103,7 +124,13 @@ export function MonthGrid({ dates, month, today, blocksByDate, onOpenDay, onOpen
                 {more > 0 && (
                   <ButtonBase
                     onClick={() => onOpenDay(date)}
-                    sx={{ justifyContent: 'flex-start', px: 0.5, fontSize: 12, fontWeight: 600, color: colors.accent600 }}
+                    sx={{
+                      justifyContent: 'flex-start',
+                      px: 0.5,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: colors.accent600,
+                    }}
                   >
                     {more} more
                   </ButtonBase>

@@ -78,9 +78,7 @@ describe("decryptDeep", () => {
     const data = [
       { id: 1, activity: encryptValue("Gym", KEY), task: { title: encryptValue("Read", KEY) }, date: "2026-11-11" },
     ];
-    expect(decryptDeep(data, KEY)).toEqual([
-      { id: 1, activity: "Gym", task: { title: "Read" }, date: "2026-11-11" },
-    ]);
+    expect(decryptDeep(data, KEY)).toEqual([{ id: 1, activity: "Gym", task: { title: "Read" }, date: "2026-11-11" }]);
   });
 });
 

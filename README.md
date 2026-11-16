@@ -1,4 +1,5 @@
 # SmartSched: Student Life Scheduler Built for Balance
+
 Link: https://smart-sched-pi.vercel.app/
 
 ## Overview
@@ -17,17 +18,16 @@ College students juggle more than coursework. Between commuting, working jobs, s
 - Focus narrowly on academics (class schedulers, syllabus trackers, eg: Canvas)
 - Optimize for output rather than wellbeing
 
-None of them mold the schedule to your needs, and you end up doing that on your own. 
+None of them mold the schedule to your needs, and you end up doing that on your own.
 
 Students who try to fit everything in without a thoughtful system often end up skipping meals, ghosting friends, or cramming at 2am — not because they're lazy, but because seeing the full picture without any support is really hard.
 
 ## Our Approach
 
 - Consistent, moderate effort over time beats sprint-and-crash cycles.
-- Your shift at work, your gym session, and your coffee with a friend are not obstacles to your schedule; they *are* your schedule.
+- Your shift at work, your gym session, and your coffee with a friend are not obstacles to your schedule; they _are_ your schedule.
 - If your plan leaves no room for rest, your plan is broken.
 - Success isn't finishing your to-do list. It's showing up for yourself and others over the long run.
-
 
 ## Core Features (Planned)
 
@@ -40,13 +40,16 @@ Students who try to fit everything in without a thoughtful system often end up s
 What we don't want to become: A rigid productivity optimizer, class registration tool. habit tracker with streaks and gamification pressure, Google Calendar clone
 
 ## Target Users
+
 College students — especially those who:
+
 - Commute to campus
 - Hold part-time or full-time jobs alongside their studies
 - Are trying to maintain a social life and physical health
 - Have struggled with burnout, overwhelm, or inconsistent routines
 
 ## Development
+
 ```
 npx supabase db push
 npm install && npm run dev

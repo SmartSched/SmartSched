@@ -26,7 +26,15 @@ import {
   LinearProgress,
   Link as MuiLink,
 } from '@mui/material';
-import { Add, AutoAwesomeOutlined, Close, EditOutlined, DeleteOutline, ExpandLess, ExpandMore } from '@mui/icons-material';
+import {
+  Add,
+  AutoAwesomeOutlined,
+  Close,
+  EditOutlined,
+  DeleteOutline,
+  ExpandLess,
+  ExpandMore,
+} from '@mui/icons-material';
 import { Link as RouterLink, useNavigate } from 'react-router';
 import { startWaking, untilAwake, useWakeState } from '../../../app/lib/wake';
 import { WakeProgress } from '../../../shared/components/WakeProgress';
@@ -46,7 +54,6 @@ import { colors } from '../../../app/theme';
 import { EmptyState, ListSkeleton } from '../../../shared/components/States';
 import { InkText, JuicyCheckbox, celebrate, useLinger } from '../../../shared/juice/Juicy';
 
-
 interface TaskFormValues {
   title: string;
   description: string;
@@ -56,8 +63,14 @@ interface TaskFormValues {
   estimatedTime: string;
 }
 
-const EMPTY_FORM: TaskFormValues = { title: '', description: '', type: 'study', priority: 'medium', due: '', estimatedTime: '' };
-
+const EMPTY_FORM: TaskFormValues = {
+  title: '',
+  description: '',
+  type: 'study',
+  priority: 'medium',
+  due: '',
+  estimatedTime: '',
+};
 
 function toFormValues(task: Task): TaskFormValues {
   return {
@@ -175,7 +188,11 @@ function TaskForm({ initial, submitLabel, submittingLabel, ratios, onSubmit, onC
         </FormControl>
         <FormControl size="small" required sx={{ flex: 1 }}>
           <InputLabel>Priority</InputLabel>
-          <Select value={values.priority} label="Priority" onChange={(e) => setValues({ ...values, priority: e.target.value })}>
+          <Select
+            value={values.priority}
+            label="Priority"
+            onChange={(e) => setValues({ ...values, priority: e.target.value })}
+          >
             <MenuItem value="low">Low</MenuItem>
             <MenuItem value="medium">Medium</MenuItem>
             <MenuItem value="high">High</MenuItem>
@@ -269,12 +286,19 @@ export function TaskList() {
     const due = (t: Task) => (t.due_date ? new Date(t.due_date).getTime() : null);
     return [
       { key: 'overdue', title: 'Overdue', tasks: open.filter((t) => due(t) !== null && due(t)! < now) },
-      { key: 'week', title: 'Due in the next 7 days', tasks: open.filter((t) => due(t) !== null && due(t)! >= now && due(t)! <= weekAhead) },
+      {
+        key: 'week',
+        title: 'Due in the next 7 days',
+        tasks: open.filter((t) => due(t) !== null && due(t)! >= now && due(t)! <= weekAhead),
+      },
       { key: 'later', title: 'Due later', tasks: open.filter((t) => due(t) !== null && due(t)! > weekAhead) },
       { key: 'undated', title: 'No due date', tasks: open.filter((t) => due(t) === null) },
     ].filter((group) => group.tasks.length > 0);
   }, [sortedTasks, now, lingering]);
-  const doneTasks = useMemo(() => sortedTasks.filter((t) => t.completed && !lingering.has(t.id)), [sortedTasks, lingering]);
+  const doneTasks = useMemo(
+    () => sortedTasks.filter((t) => t.completed && !lingering.has(t.id)),
+    [sortedTasks, lingering],
+  );
   const ratios = useMemo(() => estimateRatios(tasks), [tasks]);
   const ratioEntries = Object.entries(ratios) as [Task['type'], EstimateRatio][];
 
@@ -341,90 +365,98 @@ export function TaskList() {
     await updateCompleted(task, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
   };
 
-
   // The app wakes the server and scheduler when it opens (main.tsx). Asking for a plan before they're up waits
   // for them behind a loading bar instead of sending a request that would hang or fail.
   const wakeState = useWakeState();
   const [waitingForPlanner, setWaitingForPlanner] = useState(false);
 
   const handleSuggestPlan = async () => {
-  setLoadingSuggestion(true);
-  setSuggestionNote(null);
+    setLoadingSuggestion(true);
+    setSuggestionNote(null);
 
-  try {
-    if (wakeState !== 'awake') {
-      if (wakeState === 'gave-up') startWaking(); // it gave up earlier: try again for this click
-      setWaitingForPlanner(true);
-      const result = await untilAwake();
-      setWaitingForPlanner(false);
-      if (result === 'gave-up') {
-        setActionError("The planner isn't answering right now. Try again in a few minutes.");
-        return;
+    try {
+      if (wakeState !== 'awake') {
+        if (wakeState === 'gave-up') startWaking(); // it gave up earlier: try again for this click
+        setWaitingForPlanner(true);
+        const result = await untilAwake();
+        setWaitingForPlanner(false);
+        if (result === 'gave-up') {
+          setActionError("The planner isn't answering right now. Try again in a few minutes.");
+          return;
+        }
       }
+      const data = await apiPost('/api/schedule/suggest', {
+        now: localNow(),
+        weekStart: currentWeekStart(),
+        tzOffset: new Date().getTimezoneOffset(),
+      });
+
+      setSuggestions(data.suggestions);
+      // What's already in that week, so each option can be drawn on top of it.
+      const dates = planWeekDates();
+      apiGet(`/api/time-blocks?start=${dates[0]}&end=${dates[6]}`)
+        .then(setPlanWeekBlocks)
+        .catch(() => setPlanWeekBlocks([])); // the options still show, just without the week behind them
+      if (data.suggestions.length === 0) {
+        setSuggestionNote(
+          'Nothing to plan this week. Plans include unfinished tasks with an estimate and a due date that is still ahead.',
+        );
+      }
+    } catch (err: any) {
+      setActionError(err.message ?? "Couldn't build a plan. Try again.");
+    } finally {
+      setWaitingForPlanner(false);
+      setLoadingSuggestion(false);
     }
-    const data = await apiPost('/api/schedule/suggest', {
-      now: localNow(),
-      weekStart: currentWeekStart(),
-      tzOffset: new Date().getTimezoneOffset(),
-    });
+  };
 
-    setSuggestions(data.suggestions);
-    // What's already in that week, so each option can be drawn on top of it.
-    const dates = planWeekDates();
-    apiGet(`/api/time-blocks?start=${dates[0]}&end=${dates[6]}`)
-      .then(setPlanWeekBlocks)
-      .catch(() => setPlanWeekBlocks([])); // the options still show, just without the week behind them
-    if (data.suggestions.length === 0) {
-      setSuggestionNote('Nothing to plan this week. Plans include unfinished tasks with an estimate and a due date that is still ahead.');
+  // Takes one block out of an option before it's chosen.
+  const removeSuggestedBlock = (planId: string, blockIndex: number) => {
+    setSuggestions((current) =>
+      current.map((plan) =>
+        plan.id === planId
+          ? {
+              ...plan,
+              blocks: plan.blocks.filter((_: any, i: number) => i !== blockIndex),
+              removed: (plan.removed ?? 0) + 1,
+            }
+          : plan,
+      ),
+    );
+  };
+
+  const handleAcceptPlan = async (plan: any) => {
+    setAcceptingPlanId(plan.id);
+
+    try {
+      await apiPost('/api/schedule/accept', {
+        now: localNow(),
+        weekStart: currentWeekStart(),
+        blocks: plan.blocks,
+        // Which option was chosen out of which, recorded for the preference model.
+        options: suggestions.map((s) => s.style),
+        chosen: suggestions.indexOf(plan),
+        removed: plan.removed ?? 0,
+      });
+
+      setSuggestions([]);
+      navigate('/planner');
+    } catch (err: any) {
+      setActionError(err.message ?? "Couldn't save this plan. Try again.");
+    } finally {
+      setAcceptingPlanId(null);
     }
-  } catch (err: any) {
-    setActionError(err.message ?? "Couldn't build a plan. Try again.");
-  } finally {
-    setWaitingForPlanner(false);
-    setLoadingSuggestion(false);
-  }
-};
-
-// Takes one block out of an option before it's chosen.
-const removeSuggestedBlock = (planId: string, blockIndex: number) => {
-  setSuggestions((current) =>
-    current.map((plan) =>
-      plan.id === planId
-        ? { ...plan, blocks: plan.blocks.filter((_: any, i: number) => i !== blockIndex), removed: (plan.removed ?? 0) + 1 }
-        : plan,
-    ),
-  );
-};
-
-const handleAcceptPlan = async (plan: any) => {
-  setAcceptingPlanId(plan.id);
-
-  try {
-    await apiPost('/api/schedule/accept', {
-      now: localNow(),
-      weekStart: currentWeekStart(),
-      blocks: plan.blocks,
-      // Which option was chosen out of which, recorded for the preference model.
-      options: suggestions.map((s) => s.style),
-      chosen: suggestions.indexOf(plan),
-      removed: plan.removed ?? 0,
-    });
-
-    setSuggestions([]);
-    navigate('/planner');
-  } catch (err: any) {
-    setActionError(err.message ?? "Couldn't save this plan. Try again.");
-  } finally {
-    setAcceptingPlanId(null);
-  }
-};
+  };
 
   if (!user) {
     return (
       <Card>
         <CardContent>
           <Typography variant="body2" color="text.secondary">
-            <MuiLink component={RouterLink} to="/auth">Log in</MuiLink> to see and add your tasks.
+            <MuiLink component={RouterLink} to="/auth">
+              Log in
+            </MuiLink>{' '}
+            to see and add your tasks.
           </Typography>
         </CardContent>
       </Card>
@@ -479,15 +511,36 @@ const handleAcceptPlan = async (plan: any) => {
                 }
               />
             )}
-            <Chip size="small" label={capitalize(task.type)} sx={{ backgroundColor: colors.surfaceMuted, color: 'text.secondary' }} />
+            <Chip
+              size="small"
+              label={capitalize(task.type)}
+              sx={{ backgroundColor: colors.surfaceMuted, color: 'text.secondary' }}
+            />
             {task.priority === 'high' ? (
               <Chip size="small" variant="outlined" color="error" label="High priority" />
             ) : (
-              <Chip size="small" variant="outlined" label={`${capitalize(task.priority)} priority`} sx={{ color: 'text.secondary' }} />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`${capitalize(task.priority)} priority`}
+                sx={{ color: 'text.secondary' }}
+              />
             )}
-            {task.estimated_time && <Chip size="small" variant="outlined" label={`About ${task.estimated_time} min`} sx={{ color: 'text.secondary' }} />}
+            {task.estimated_time && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`About ${task.estimated_time} min`}
+                sx={{ color: 'text.secondary' }}
+              />
+            )}
             {task.completed && task.time_spent > 0 && (
-              <Chip size="small" variant="outlined" label={`Took ${task.time_spent} min`} sx={{ color: 'text.secondary' }} />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Took ${task.time_spent} min`}
+                sx={{ color: 'text.secondary' }}
+              />
             )}
           </Box>
         </Box>
@@ -519,7 +572,12 @@ const handleAcceptPlan = async (plan: any) => {
           )}
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button variant="outlined" startIcon={<AutoAwesomeOutlined />} onClick={handleSuggestPlan} disabled={loadingSuggestion}>
+          <Button
+            variant="outlined"
+            startIcon={<AutoAwesomeOutlined />}
+            onClick={handleSuggestPlan}
+            disabled={loadingSuggestion}
+          >
             {loadingSuggestion ? 'Building plan…' : 'Suggest a plan'}
           </Button>
           <Button variant="contained" startIcon={<Add />} onClick={() => setShowForm(!showForm)}>
@@ -547,13 +605,24 @@ const handleAcceptPlan = async (plan: any) => {
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2, fontSize: 12, color: 'text.secondary' }}>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.accent600 }} /> New sessions
+              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.accent600 }} /> New
+              sessions
             </Box>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.info + '55' }} /> Already planned
+              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.info + '55' }} /> Already
+              planned
             </Box>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: '3px', backgroundColor: colors.surfaceMuted, border: `1px solid ${colors.grey200}` }} /> Downtime
+              <Box
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '3px',
+                  backgroundColor: colors.surfaceMuted,
+                  border: `1px solid ${colors.grey200}`,
+                }}
+              />{' '}
+              Downtime
             </Box>
           </Box>
 
@@ -561,7 +630,13 @@ const handleAcceptPlan = async (plan: any) => {
             {suggestions.map((plan, index) => (
               <Box
                 key={plan.id}
-                sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${colors.grey200}`, borderRadius: '12px', p: 2 }}
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  border: `1px solid ${colors.grey200}`,
+                  borderRadius: '12px',
+                  p: 2,
+                }}
               >
                 <Typography sx={{ fontWeight: 700, color: colors.accent800 }}>Option {index + 1}</Typography>
                 {plan.why && (
@@ -586,8 +661,8 @@ const handleAcceptPlan = async (plan: any) => {
                       sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
                     >
                       <Typography variant="body2" color="text.secondary">
-                        {block.activity} · {format(parseISO(block.date), 'EEE MMM d')} ·{' '}
-                        {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
+                        {block.activity} · {format(parseISO(block.date), 'EEE MMM d')} · {block.start_time.slice(0, 5)}–
+                        {block.end_time.slice(0, 5)}
                       </Typography>
                       <IconButton
                         size="small"
@@ -674,7 +749,11 @@ const handleAcceptPlan = async (plan: any) => {
                 <Chip
                   size="small"
                   label={group.tasks.length}
-                  sx={group.key === 'overdue' ? { backgroundColor: colors.warningBg, color: colors.warningInk } : { backgroundColor: colors.surfaceMuted, color: 'text.secondary' }}
+                  sx={
+                    group.key === 'overdue'
+                      ? { backgroundColor: colors.warningBg, color: colors.warningInk }
+                      : { backgroundColor: colors.surfaceMuted, color: 'text.secondary' }
+                  }
                 />
               </Box>
               <List sx={{ p: 0 }}>{group.tasks.map(renderTask)}</List>
@@ -695,7 +774,10 @@ const handleAcceptPlan = async (plan: any) => {
                 {ratioEntries.length > 0 && (
                   <Typography variant="body2" color="text.secondary" sx={{ px: { xs: 2, sm: 3 }, pb: 1.5 }}>
                     How long finished tasks took:{' '}
-                    {ratioEntries.map(([type, ratio]) => `${type} tasks ${ratioText(ratio)} (${ratio.count} tasks)`).join(', ')}.
+                    {ratioEntries
+                      .map(([type, ratio]) => `${type} tasks ${ratioText(ratio)} (${ratio.count} tasks)`)
+                      .join(', ')}
+                    .
                   </Typography>
                 )}
                 <List sx={{ p: 0 }}>{doneTasks.map(renderTask)}</List>

@@ -23,13 +23,70 @@ export const ACCENT_LABELS: Record<Accent, string> = {
 
 // Per accent: soft tint, tint border, fill (progress), title (3:1 on white), strong (4.5:1 on white, and under
 // white text), ink (text on the soft tint), and the light shades dark mode uses for text.
-const SCALES: Record<Accent, { s100: string; s200: string; s400: string; title: string; strong: string; ink: string; l300: string; l200: string }> = {
-  violet: { s100: '#f3e8ff', s200: '#e9d5ff', s400: '#a78bfa', title: '#8b5cf6', strong: '#7c3aed', ink: '#5b21b6', l300: '#c4b5fd', l200: '#ddd6fe' },
-  blue: { s100: '#dbeafe', s200: '#bfdbfe', s400: '#60a5fa', title: '#3b82f6', strong: '#2563eb', ink: '#1e40af', l300: '#93c5fd', l200: '#bfdbfe' },
-  teal: { s100: '#ccfbf1', s200: '#99f6e4', s400: '#2dd4bf', title: '#0d9488', strong: '#0f766e', ink: '#134e4a', l300: '#5eead4', l200: '#99f6e4' },
-  green: { s100: '#dcfce7', s200: '#bbf7d0', s400: '#4ade80', title: '#16a34a', strong: '#15803d', ink: '#14532d', l300: '#86efac', l200: '#bbf7d0' },
-  rose: { s100: '#ffe4e6', s200: '#fecdd3', s400: '#fb7185', title: '#f43f5e', strong: '#e11d48', ink: '#9f1239', l300: '#fda4af', l200: '#fecdd3' },
-  orange: { s100: '#ffedd5', s200: '#fed7aa', s400: '#fb923c', title: '#ea580c', strong: '#c2410c', ink: '#9a3412', l300: '#fdba74', l200: '#fed7aa' },
+const SCALES: Record<
+  Accent,
+  { s100: string; s200: string; s400: string; title: string; strong: string; ink: string; l300: string; l200: string }
+> = {
+  violet: {
+    s100: '#f3e8ff',
+    s200: '#e9d5ff',
+    s400: '#a78bfa',
+    title: '#8b5cf6',
+    strong: '#7c3aed',
+    ink: '#5b21b6',
+    l300: '#c4b5fd',
+    l200: '#ddd6fe',
+  },
+  blue: {
+    s100: '#dbeafe',
+    s200: '#bfdbfe',
+    s400: '#60a5fa',
+    title: '#3b82f6',
+    strong: '#2563eb',
+    ink: '#1e40af',
+    l300: '#93c5fd',
+    l200: '#bfdbfe',
+  },
+  teal: {
+    s100: '#ccfbf1',
+    s200: '#99f6e4',
+    s400: '#2dd4bf',
+    title: '#0d9488',
+    strong: '#0f766e',
+    ink: '#134e4a',
+    l300: '#5eead4',
+    l200: '#99f6e4',
+  },
+  green: {
+    s100: '#dcfce7',
+    s200: '#bbf7d0',
+    s400: '#4ade80',
+    title: '#16a34a',
+    strong: '#15803d',
+    ink: '#14532d',
+    l300: '#86efac',
+    l200: '#bbf7d0',
+  },
+  rose: {
+    s100: '#ffe4e6',
+    s200: '#fecdd3',
+    s400: '#fb7185',
+    title: '#f43f5e',
+    strong: '#e11d48',
+    ink: '#9f1239',
+    l300: '#fda4af',
+    l200: '#fecdd3',
+  },
+  orange: {
+    s100: '#ffedd5',
+    s200: '#fed7aa',
+    s400: '#fb923c',
+    title: '#ea580c',
+    strong: '#c2410c',
+    ink: '#9a3412',
+    l300: '#fdba74',
+    l200: '#fed7aa',
+  },
 };
 
 const LIGHT_NEUTRALS = {
@@ -75,7 +132,13 @@ const NEUTRALS: Record<ColorMode, typeof LIGHT_NEUTRALS> = {
 function mix(a: string, b: string, t: number) {
   const channels = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const [ca, cb] = [channels(a), channels(b)];
-  return `#${ca.map((v, i) => Math.round(v + (cb[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
+  return `#${ca
+    .map((v, i) =>
+      Math.round(v + (cb[i] - v) * t)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
 }
 
 // Every token's real value for one mode and accent.
@@ -84,7 +147,14 @@ export function resolveColors(mode: ColorMode, accent: Accent) {
   const a = SCALES[accent] ?? SCALES.violet;
   const accentTokens =
     mode === 'light'
-      ? { accent100: a.s100, accent200: a.s200, accent400: a.s400, accent500: a.title, accent600: a.strong, accent800: a.ink }
+      ? {
+          accent100: a.s100,
+          accent200: a.s200,
+          accent400: a.s400,
+          accent500: a.title,
+          accent600: a.strong,
+          accent800: a.ink,
+        }
       : {
           accent100: mix(n.surface, a.title, 0.2),
           accent200: mix(n.surface, a.title, 0.4),
@@ -233,7 +303,10 @@ export function createAppTheme(mode: ColorMode, accent: Accent) {
           ':root': { ...cssVariables(mode, accent), colorScheme: mode },
           body: { transition: 'background-color 0.2s ease, color 0.2s ease' },
           '@media (prefers-reduced-motion: reduce)': {
-            '*, *::before, *::after': { animationDuration: '0.01ms !important', transitionDuration: '0.01ms !important' },
+            '*, *::before, *::after': {
+              animationDuration: '0.01ms !important',
+              transitionDuration: '0.01ms !important',
+            },
           },
           '@keyframes pageIn': {
             from: { opacity: 0, transform: 'translateY(6px)' },

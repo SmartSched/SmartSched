@@ -28,7 +28,12 @@ export function WakeProgress() {
         will appear here once it's ready.
       </Typography>
       <Box>
-        <LinearProgress variant="determinate" value={value} aria-label="Starting the planner" sx={{ height: 8, borderRadius: 4 }} />
+        <LinearProgress
+          variant="determinate"
+          value={value}
+          aria-label="Starting the planner"
+          sx={{ height: 8, borderRadius: 4 }}
+        />
       </Box>
     </Card>
   );

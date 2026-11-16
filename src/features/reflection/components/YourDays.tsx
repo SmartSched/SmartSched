@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, ButtonBase, Card, CardContent, Chip, Dialog, DialogContent, DialogTitle, IconButton, Tooltip, Typography } from '@mui/material';
+import {
+  Box,
+  ButtonBase,
+  Card,
+  CardContent,
+  Chip,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { ChevronLeft, ChevronRight, Close } from '@mui/icons-material';
 import { motion, useReducedMotion } from 'motion/react';
 import { addMonths, format, parseISO } from 'date-fns';
@@ -66,19 +78,66 @@ interface BlanketSection {
 }
 
 const SECTIONS: BlanketSection[] = [
-  { key: 'mood', label: 'Mood', note: 'From your reflection', color: '#f59e0b', pattern: 'plain', max: 5,
-    value: (d) => d.ratings?.mood ?? null, describe: (v) => `mood ${v} of 5` },
-  { key: 'energy', label: 'Energy', note: 'From your reflection', color: '#10b981', pattern: 'stripes', max: 5,
-    value: (d) => d.ratings?.energy ?? null, describe: (v) => `energy ${v} of 5` },
-  { key: 'sleep', label: 'Sleep', note: 'How rested you felt', color: '#6366f1', pattern: 'waves', max: 5,
-    value: (d) => d.ratings?.sleep ?? null, describe: (v) => `rested ${v} of 5` },
-  { key: 'classes', label: 'Classes', note: 'Hours in class', color: '#3b82f6', pattern: 'checks', max: 6,
-    value: (d) => Math.round((d.classMinutes / 60) * 10) / 10, describe: (v) => (v ? `${v} h of class` : 'no classes') },
-  { key: 'tasks', label: 'Tasks', note: 'Finished that day', color: '#ec4899', pattern: 'dots', max: 5,
-    value: (d) => d.finished.length, describe: (v) => (v === 1 ? '1 task finished' : `${v} tasks finished`) },
+  {
+    key: 'mood',
+    label: 'Mood',
+    note: 'From your reflection',
+    color: '#f59e0b',
+    pattern: 'plain',
+    max: 5,
+    value: (d) => d.ratings?.mood ?? null,
+    describe: (v) => `mood ${v} of 5`,
+  },
+  {
+    key: 'energy',
+    label: 'Energy',
+    note: 'From your reflection',
+    color: '#10b981',
+    pattern: 'stripes',
+    max: 5,
+    value: (d) => d.ratings?.energy ?? null,
+    describe: (v) => `energy ${v} of 5`,
+  },
+  {
+    key: 'sleep',
+    label: 'Sleep',
+    note: 'How rested you felt',
+    color: '#6366f1',
+    pattern: 'waves',
+    max: 5,
+    value: (d) => d.ratings?.sleep ?? null,
+    describe: (v) => `rested ${v} of 5`,
+  },
+  {
+    key: 'classes',
+    label: 'Classes',
+    note: 'Hours in class',
+    color: '#3b82f6',
+    pattern: 'checks',
+    max: 6,
+    value: (d) => Math.round((d.classMinutes / 60) * 10) / 10,
+    describe: (v) => (v ? `${v} h of class` : 'no classes'),
+  },
+  {
+    key: 'tasks',
+    label: 'Tasks',
+    note: 'Finished that day',
+    color: '#ec4899',
+    pattern: 'dots',
+    max: 5,
+    value: (d) => d.finished.length,
+    describe: (v) => (v === 1 ? '1 task finished' : `${v} tasks finished`),
+  },
 ];
 
-function BlanketPatch({ section, day, future, isToday, delay, onPick }: {
+function BlanketPatch({
+  section,
+  day,
+  future,
+  isToday,
+  delay,
+  onPick,
+}: {
   section: BlanketSection;
   day: DaySummary;
   future: boolean;
@@ -93,7 +152,9 @@ function BlanketPatch({ section, day, future, isToday, delay, onPick }: {
   }
   const value = section.value(day);
   const t = value === null ? 0 : Math.min(1, value / section.max);
-  const fill = value ? `color-mix(in srgb, ${section.color} ${Math.round(18 + t * 72)}%, var(--ss-surface))` : colors.surfaceMuted;
+  const fill = value
+    ? `color-mix(in srgb, ${section.color} ${Math.round(18 + t * 72)}%, var(--ss-surface))`
+    : colors.surfaceMuted;
   const ink = patternCss(section.pattern, withAlpha('#ffffff', 55));
   const label = `${format(parseISO(day.date), 'EEE, MMM d')}: ${value === null ? 'no reflection' : section.describe(value)}`;
   return (
@@ -146,11 +207,19 @@ function strength(section: BlanketSection, day: DaySummary) {
 }
 
 function fillFor(section: BlanketSection, t: number | null) {
-  return t ? `color-mix(in srgb, ${section.color} ${Math.round(18 + t * 72)}%, var(--ss-surface))` : colors.surfaceMuted;
+  return t
+    ? `color-mix(in srgb, ${section.color} ${Math.round(18 + t * 72)}%, var(--ss-surface))`
+    : colors.surfaceMuted;
 }
 
 // One section as a small panel: the month at a glance, no numbers. Clicking it opens the larger view.
-function MiniPanel({ section, days, today, index, onOpen }: {
+function MiniPanel({
+  section,
+  days,
+  today,
+  index,
+  onOpen,
+}: {
   section: BlanketSection;
   days: DaySummary[];
   today: string;
@@ -191,7 +260,12 @@ function MiniPanel({ section, days, today, index, onOpen }: {
                   borderRadius: '2px',
                   backgroundColor: future ? 'transparent' : fillFor(section, t),
                   opacity: future ? 1 : t === null ? 0.6 : 1,
-                  boxShadow: day.date === today ? `inset 0 0 0 1.5px ${colors.accent600}` : future ? `inset 0 0 0 1px ${colors.grey200}` : 'none',
+                  boxShadow:
+                    day.date === today
+                      ? `inset 0 0 0 1.5px ${colors.accent600}`
+                      : future
+                        ? `inset 0 0 0 1px ${colors.grey200}`
+                        : 'none',
                 }}
               />
             );
@@ -208,7 +282,15 @@ function MiniPanel({ section, days, today, index, onOpen }: {
   );
 }
 
-export function MonthBlanket({ today, version, onPick }: { today: string; version: number; onPick: (date: string) => void }) {
+export function MonthBlanket({
+  today,
+  version,
+  onPick,
+}: {
+  today: string;
+  version: number;
+  onPick: (date: string) => void;
+}) {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [open, setOpen] = useState<number | null>(null);
   const dates = useMemo(() => monthDates(month), [month]);
@@ -231,7 +313,11 @@ export function MonthBlanket({ today, version, onPick }: { today: string; versio
               Your month as a blanket. Stronger colour means more of it that day.
             </Typography>
           </Box>
-          <IconButton aria-label="Previous month" onClick={() => step(-1)} sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}>
+          <IconButton
+            aria-label="Previous month"
+            onClick={() => step(-1)}
+            sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px' }}
+          >
             <ChevronLeft />
           </IconButton>
           <IconButton
@@ -294,7 +380,10 @@ export function MonthBlanket({ today, version, onPick }: { today: string; versio
                   />
                 ))}
               </Box>
-              <Box key={section.key} sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 0.75 }}>
+              <Box
+                key={section.key}
+                sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 0.75 }}
+              >
                 {days.map((day, i) => (
                   <BlanketPatch
                     key={day.date}

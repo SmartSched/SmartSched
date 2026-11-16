@@ -18,7 +18,12 @@ import {
   type ReflectionRow,
 } from '../lib/insights';
 
-const RATING_LABELS: Record<string, string> = { productivity: 'Productivity', mood: 'Mood', energy: 'Energy', sleep: 'Sleep' };
+const RATING_LABELS: Record<string, string> = {
+  productivity: 'Productivity',
+  mood: 'Mood',
+  energy: 'Energy',
+  sleep: 'Sleep',
+};
 const TASK_TYPE_LABELS: Record<Task['type'], string> = {
   homework: 'Homework',
   exam: 'Exam prep',
@@ -108,13 +113,27 @@ export function ReflectionInsights({ today, version }: { today: string; version:
               }
             >
               {week && week.weeks > 0 ? (
-                <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: 'minmax(120px, auto) 1fr auto', columnGap: 1.5, rowGap: 1, alignItems: 'center' }}>
+                <Box
+                  component="dl"
+                  sx={{
+                    m: 0,
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(120px, auto) 1fr auto',
+                    columnGap: 1.5,
+                    rowGap: 1,
+                    alignItems: 'center',
+                  }}
+                >
                   {weekRows.map((row) => (
                     <Box key={row.key} sx={{ display: 'contents' }}>
                       <Typography component="dt" variant="body2" sx={{ fontWeight: 600 }}>
                         {row.label}
                       </Typography>
-                      <Tooltip title={`${row.label}: about ${row.hours} hours a week`} placement="top" disableInteractive>
+                      <Tooltip
+                        title={`${row.label}: about ${row.hours} hours a week`}
+                        placement="top"
+                        disableInteractive
+                      >
                         <Box aria-hidden sx={{ height: 12, py: 0.5, boxSizing: 'content-box', cursor: 'default' }}>
                           <Box
                             sx={{
@@ -128,7 +147,11 @@ export function ReflectionInsights({ today, version }: { today: string; version:
                           />
                         </Box>
                       </Tooltip>
-                      <Typography component="dd" variant="body2" sx={{ m: 0, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }}>
+                      <Typography
+                        component="dd"
+                        variant="body2"
+                        sx={{ m: 0, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }}
+                      >
                         {row.hours} h
                       </Typography>
                     </Box>
@@ -167,9 +190,16 @@ export function ReflectionInsights({ today, version }: { today: string; version:
 
             <Section title="How long tasks take you" note="From the time you entered when checking tasks off.">
               {times.length > 0 ? (
-                <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Box
+                  component="ul"
+                  sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1 }}
+                >
                   {times.map((row) => (
-                    <Box component="li" key={row.type} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+                    <Box
+                      component="li"
+                      key={row.type}
+                      sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}
+                    >
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
                         {TASK_TYPE_LABELS[row.type]}
                       </Typography>

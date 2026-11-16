@@ -39,7 +39,9 @@ export function findOpenSlot(block: TimeBlock, blocks: TimeBlock[], now: Date, d
   const length = toMinutes(block.end_time) - toMinutes(block.start_time);
   const dayStart = toMinutes(DAY_START);
   const dayEnd = toMinutes(DAY_END);
-  const nowMinutes = Math.ceil((now.getHours() * 60 + now.getMinutes() + (now.getSeconds() ? 1 : 0)) / SLOT_STEP_MINUTES) * SLOT_STEP_MINUTES;
+  const nowMinutes =
+    Math.ceil((now.getHours() * 60 + now.getMinutes() + (now.getSeconds() ? 1 : 0)) / SLOT_STEP_MINUTES) *
+    SLOT_STEP_MINUTES;
 
   for (let i = 0; i < SEARCH_DAYS; i++) {
     const date = format(addDays(startOfDay(now), i), 'yyyy-MM-dd');

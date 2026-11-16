@@ -7,7 +7,18 @@ import { celestial, skyColors, skyTime, sunTimes } from './sky';
 
 // A few fixed stars, as % positions, shown at night.
 const STARS = [
-  [12, 22], [28, 12], [41, 30], [57, 16], [66, 38], [74, 10], [83, 26], [91, 42], [35, 48], [8, 52], [50, 6], [95, 14],
+  [12, 22],
+  [28, 12],
+  [41, 30],
+  [57, 16],
+  [66, 38],
+  [74, 10],
+  [83, 26],
+  [91, 42],
+  [35, 48],
+  [8, 52],
+  [50, 6],
+  [95, 14],
 ];
 
 // For trying out the sky at other times: /?sky=19:30 shows half past seven in the evening.
@@ -18,7 +29,8 @@ function previewMinutes() {
 
 // Roughly where the user is, without asking: longitude from the time zone's standard offset (15° an hour), and a
 // mid latitude in the right hemisphere. Close enough for sunrise and sunset to land within about half an hour.
-const SOUTHERN = /^(Australia|Antarctica)\/|^Pacific\/(Auckland|Chatham|Fiji)|^America\/(Argentina|Sao_Paulo|Santiago|Montevideo|Asuncion|Lima|La_Paz)|^Africa\/(Johannesburg|Maputo|Harare|Windhoek|Gaborone)|^Indian\/(Mauritius|Reunion)/;
+const SOUTHERN =
+  /^(Australia|Antarctica)\/|^Pacific\/(Auckland|Chatham|Fiji)|^America\/(Argentina|Sao_Paulo|Santiago|Montevideo|Asuncion|Lima|La_Paz)|^Africa\/(Johannesburg|Maputo|Harare|Windhoek|Gaborone)|^Indian\/(Mauritius|Reunion)/;
 
 function guessLocation() {
   const year = new Date().getFullYear();

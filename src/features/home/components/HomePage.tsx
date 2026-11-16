@@ -65,10 +65,27 @@ function greeting(hour: number) {
   return 'Good evening';
 }
 
-function SectionCard({ title, link, children }: { title: string; link?: { to: string; label: string }; children: ReactNode }) {
+function SectionCard({
+  title,
+  link,
+  children,
+}: {
+  title: string;
+  link?: { to: string; label: string };
+  children: ReactNode;
+}) {
   return (
     <Card component="section" sx={{ py: 1 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: { xs: 2, sm: 3 }, pt: 1.5, pb: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          px: { xs: 2, sm: 3 },
+          pt: 1.5,
+          pb: 1,
+        }}
+      >
         <Typography variant="h6" component="h2">
           {title}
         </Typography>
@@ -87,10 +104,8 @@ export function HomePage() {
   const { user } = useAuth();
   const { profile } = useProfile();
   const today = useToday();
-  const { tasks, weekBlocks, nearbyBlocks, weekDates, warnings, loading, loadError, reload, applyTask, applyBlock } = useHomeDashboard(
-    user?.id,
-    today,
-  );
+  const { tasks, weekBlocks, nearbyBlocks, weekDates, warnings, loading, loadError, reload, applyTask, applyBlock } =
+    useHomeDashboard(user?.id, today);
   // The "now" card and the missed-block notice follow the clock while the page is open.
   const nowMs = useCurrentTime();
   const now = useMemo(() => new Date(nowMs), [nowMs]);
@@ -103,10 +118,7 @@ export function HomePage() {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   const todayBlocks = useMemo(
-    () =>
-      weekBlocks
-        .filter((b) => b.date === today)
-        .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
+    () => weekBlocks.filter((b) => b.date === today).sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
     [weekBlocks, today],
   );
   const current = todayBlocks.find((b) => toMinutes(b.start_time) <= nowMinutes && nowMinutes < toMinutes(b.end_time));
@@ -124,7 +136,10 @@ export function HomePage() {
 
   // Just-finished tasks stay a moment so the ink line can play before they leave the list.
   const dueSoon = useMemo(
-    () => sortTasks(tasks).filter((t) => !t.completed || lingering.has(t.id)).slice(0, 5),
+    () =>
+      sortTasks(tasks)
+        .filter((t) => !t.completed || lingering.has(t.id))
+        .slice(0, 5),
     [tasks, lingering],
   );
 
@@ -155,10 +170,9 @@ export function HomePage() {
 
   const toggleBlock = async (block: TimeBlock) => {
     try {
-      const { block: updated }: { block: TimeBlock } = await apiPatch(
-        `/api/time-blocks/${block.id}/completion`,
-        { completed: !block.completed },
-      );
+      const { block: updated }: { block: TimeBlock } = await apiPatch(`/api/time-blocks/${block.id}/completion`, {
+        completed: !block.completed,
+      });
       applyBlock(updated);
     } catch {
       setNotice({ severity: 'error', text: "Couldn't update the study block. Try again." });
@@ -175,7 +189,10 @@ export function HomePage() {
     const openTasks = tasks.filter((t) => !t.completed);
     const lastOpen = openTasks.length > 0 && openTasks.every((t) => t.id === taskId);
     linger(taskId);
-    const ok = await updateTask(taskId, minutes === null ? { completed: true } : { completed: true, time_spent: minutes });
+    const ok = await updateTask(
+      taskId,
+      minutes === null ? { completed: true } : { completed: true, time_spent: minutes },
+    );
     if (ok && (lastToday || lastOpen)) celebrate();
   };
 
@@ -206,40 +223,46 @@ export function HomePage() {
   return (
     <Box sx={{ maxWidth: 1240, mx: 'auto', display: 'flex', flexDirection: 'column', gap: { xs: 2.5, sm: 3.5 } }}>
       <TodaySky minutes={nowMinutes}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}>
-        <Box>
-          <Typography
-            variant="h3"
-            component="h1"
-            sx={{ color: colors.accent500, fontSize: { xs: '1.75rem', sm: '3rem' }, mb: 0.5 }}
-          >
-            {greeting(now.getHours())}
-            {displayName ? `, ${displayName}` : ''}
-          </Typography>
-          <Typography variant="h6" component="p" sx={{ color: 'text.secondary', fontWeight: 400, fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-            {format(parseISO(today), 'EEEE, MMMM d')}
-          </Typography>
-        </Box>
-        {todayBlocks.length > 0 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, mb: { sm: 1 } }}>
-            <LinearProgress
-              variant="determinate"
-              value={(doneCount / todayBlocks.length) * 100}
-              aria-label="Today's blocks done"
-              sx={{
-                width: 180,
-                height: 10,
-                borderRadius: '10px',
-                backgroundColor: colors.accent100,
-                '& .MuiLinearProgress-bar': { backgroundColor: colors.accent400, borderRadius: '10px' },
-              }}
-            />
-            <Typography variant="body2" sx={{ fontWeight: 600, color: colors.accent800, whiteSpace: 'nowrap' }}>
-              {doneCount} of {todayBlocks.length} blocks done today
+        <Box
+          sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 3, flexWrap: 'wrap' }}
+        >
+          <Box>
+            <Typography
+              variant="h3"
+              component="h1"
+              sx={{ color: colors.accent500, fontSize: { xs: '1.75rem', sm: '3rem' }, mb: 0.5 }}
+            >
+              {greeting(now.getHours())}
+              {displayName ? `, ${displayName}` : ''}
+            </Typography>
+            <Typography
+              variant="h6"
+              component="p"
+              sx={{ color: 'text.secondary', fontWeight: 400, fontSize: { xs: '1rem', sm: '1.25rem' } }}
+            >
+              {format(parseISO(today), 'EEEE, MMMM d')}
             </Typography>
           </Box>
-        )}
-      </Box>
+          {todayBlocks.length > 0 && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, mb: { sm: 1 } }}>
+              <LinearProgress
+                variant="determinate"
+                value={(doneCount / todayBlocks.length) * 100}
+                aria-label="Today's blocks done"
+                sx={{
+                  width: 180,
+                  height: 10,
+                  borderRadius: '10px',
+                  backgroundColor: colors.accent100,
+                  '& .MuiLinearProgress-bar': { backgroundColor: colors.accent400, borderRadius: '10px' },
+                }}
+              />
+              <Typography variant="body2" sx={{ fontWeight: 600, color: colors.accent800, whiteSpace: 'nowrap' }}>
+                {doneCount} of {todayBlocks.length} blocks done today
+              </Typography>
+            </Box>
+          )}
+        </Box>
       </TodaySky>
 
       {missed && (
@@ -277,20 +300,49 @@ export function HomePage() {
       )}
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 2.5, sm: 3.5 }, alignItems: 'flex-start' }}>
-        <Box sx={{ flex: '999 1 560px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: { xs: 2.5, sm: 3.5 } }}>
+        <Box
+          sx={{ flex: '999 1 560px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: { xs: 2.5, sm: 3.5 } }}
+        >
           {featured && (
-            <Box component="section" sx={{ p: { xs: 2.25, sm: 3 }, backgroundColor: colors.accent100, borderRadius: '24px' }}>
+            <Box
+              component="section"
+              sx={{ p: { xs: 2.25, sm: 3 }, backgroundColor: colors.accent100, borderRadius: '24px' }}
+            >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: current ? colors.success : colors.accent400 }} />
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: current ? colors.success : colors.accent400,
+                  }}
+                />
                 <Typography
-                  sx={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: colors.accent800 }}
+                  sx={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: colors.accent800,
+                  }}
                 >
                   {current ? 'Happening now' : 'Up next'}
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-end',
+                  gap: 2,
+                  flexWrap: 'wrap',
+                }}
+              >
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography component="h2" sx={{ fontSize: { xs: 20, sm: 26 }, fontWeight: 700, color: colors.accent800, mb: 0.5 }}>
+                  <Typography
+                    component="h2"
+                    sx={{ fontSize: { xs: 20, sm: 26 }, fontWeight: 700, color: colors.accent800, mb: 0.5 }}
+                  >
                     {blockTitle(featured)}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 2.25, flexWrap: 'wrap', color: 'text.secondary', fontSize: 14 }}>
@@ -353,13 +405,21 @@ export function HomePage() {
               <EmptyState
                 title="Couldn't load today's schedule"
                 body="Check your connection and try again."
-                action={<Button variant="outlined" onClick={() => reload()}>Try again</Button>}
+                action={
+                  <Button variant="outlined" onClick={() => reload()}>
+                    Try again
+                  </Button>
+                }
               />
             ) : todayBlocks.length === 0 ? (
               <EmptyState
                 title="Nothing planned today"
                 body="Add classes, work and study time in the planner."
-                action={<Button variant="contained" component={Link} to="/planner">Open planner</Button>}
+                action={
+                  <Button variant="contained" component={Link} to="/planner">
+                    Open planner
+                  </Button>
+                }
               />
             ) : (
               <Box component="ol" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -367,8 +427,15 @@ export function HomePage() {
                   const color = categoryColor(block.type);
                   const done = isDone(block);
                   const isNow = block === current;
-                  const notChecked = block.type === 'task' && !block.completed && !block.task?.completed && toMinutes(block.end_time) <= nowMinutes;
-                  const meta = [CATEGORY_LABELS[block.type] ?? block.type, block.location ? placeLabel(block.location) : null]
+                  const notChecked =
+                    block.type === 'task' &&
+                    !block.completed &&
+                    !block.task?.completed &&
+                    toMinutes(block.end_time) <= nowMinutes;
+                  const meta = [
+                    CATEGORY_LABELS[block.type] ?? block.type,
+                    block.location ? placeLabel(block.location) : null,
+                  ]
                     .filter(Boolean)
                     .join(' · ');
                   return (
@@ -386,7 +453,13 @@ export function HomePage() {
                     >
                       <Typography
                         variant="body2"
-                        sx={{ width: { xs: 72, sm: 140 }, flexShrink: 0, fontWeight: 600, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}
+                        sx={{
+                          width: { xs: 72, sm: 140 },
+                          flexShrink: 0,
+                          fontWeight: 600,
+                          color: 'text.secondary',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
                       >
                         {clock(block.start_time)}
                         <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
@@ -408,7 +481,11 @@ export function HomePage() {
                       />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography noWrap sx={{ fontWeight: 600, color: done ? colors.grey500 : 'text.primary' }}>
-                          {block.type === 'task' ? <InkText done={done}>{blockTitle(block)}</InkText> : blockTitle(block)}
+                          {block.type === 'task' ? (
+                            <InkText done={done}>{blockTitle(block)}</InkText>
+                          ) : (
+                            blockTitle(block)
+                          )}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" noWrap>
                           {meta}
@@ -417,13 +494,21 @@ export function HomePage() {
                       </Box>
                       {isNow && <Chip size="small" label="Now" color="primary" />}
                       {notChecked && (
-                        <Chip size="small" label="Not checked off" sx={{ backgroundColor: colors.infoBg, color: colors.infoInk }} />
+                        <Chip
+                          size="small"
+                          label="Not checked off"
+                          sx={{ backgroundColor: colors.infoBg, color: colors.infoInk }}
+                        />
                       )}
                       {block.task && (
                         <JuicyCheckbox
                           checked={block.completed}
                           onChange={() => toggleBlock(block)}
-                          slotProps={{ input: { 'aria-label': `${block.completed ? 'Reopen' : 'Check off'} study block for ${block.task.title}` } }}
+                          slotProps={{
+                            input: {
+                              'aria-label': `${block.completed ? 'Reopen' : 'Check off'} study block for ${block.task.title}`,
+                            },
+                          }}
                           sx={{ m: -1 }}
                         />
                       )}
@@ -435,14 +520,24 @@ export function HomePage() {
           </SectionCard>
         </Box>
 
-        <Box component="aside" sx={{ flex: '1 1 340px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: { xs: 2.5, sm: 3.5 } }}>
+        <Box
+          component="aside"
+          sx={{ flex: '1 1 340px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: { xs: 2.5, sm: 3.5 } }}
+        >
           <SectionCard title="Due soon" link={{ to: '/schedule', label: 'All tasks' }}>
             {loading ? (
               <Box sx={{ px: 2.5, pb: 2 }}>
                 <ListSkeleton rows={3} height={64} />
               </Box>
             ) : dueSoon.length === 0 ? (
-              <EmptyState title="No open tasks" action={<Button component={Link} to="/schedule">Add a task</Button>} />
+              <EmptyState
+                title="No open tasks"
+                action={
+                  <Button component={Link} to="/schedule">
+                    Add a task
+                  </Button>
+                }
+              />
             ) : (
               <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
                 {dueSoon.map((task) => {
@@ -451,7 +546,14 @@ export function HomePage() {
                     <Box
                       component="li"
                       key={task.id}
-                      sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', px: 1.5, py: 1, borderTop: `1px solid ${colors.grey200}` }}
+                      sx={{
+                        display: 'flex',
+                        gap: 1,
+                        alignItems: 'flex-start',
+                        px: 1.5,
+                        py: 1,
+                        borderTop: `1px solid ${colors.grey200}`,
+                      }}
                     >
                       <JuicyCheckbox
                         checked={task.completed}
@@ -479,7 +581,9 @@ export function HomePage() {
                             label={task.type[0].toUpperCase() + task.type.slice(1)}
                             sx={{ backgroundColor: colors.surfaceMuted, color: 'text.secondary' }}
                           />
-                          {task.priority === 'high' && <Chip size="small" variant="outlined" color="error" label="High" />}
+                          {task.priority === 'high' && (
+                            <Chip size="small" variant="outlined" color="error" label="High" />
+                          )}
                         </Box>
                       </Box>
                     </Box>
@@ -497,12 +601,28 @@ export function HomePage() {
               Hours planned each day
             </Typography>
             <Box
-              sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1, alignItems: 'end', height: 120 }}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                gap: 1,
+                alignItems: 'end',
+                height: 120,
+              }}
               role="img"
               aria-label={weekHours.map((d) => `${format(parseISO(d.date), 'EEEE')} ${d.hours} hours`).join(', ')}
             >
               {weekHours.map((d) => (
-                <Box key={d.date} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75, height: '100%' }}>
+                <Box
+                  key={d.date}
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: 0.75,
+                    height: '100%',
+                  }}
+                >
                   <Typography sx={{ fontSize: 11, fontWeight: 600, color: 'text.secondary' }}>{d.hours}h</Typography>
                   <Box
                     sx={{
@@ -537,11 +657,28 @@ export function HomePage() {
               ))}
             </Box>
             {warnings.length > 0 && (
-              <Box sx={{ mt: 2.25, p: 1.5, borderRadius: '12px', backgroundColor: colors.warningBg, display: 'flex', gap: 1.25 }}>
+              <Box
+                sx={{
+                  mt: 2.25,
+                  p: 1.5,
+                  borderRadius: '12px',
+                  backgroundColor: colors.warningBg,
+                  display: 'flex',
+                  gap: 1.25,
+                }}
+              >
                 <WarningAmberRounded sx={{ fontSize: 18, color: colors.warningInk, mt: '2px' }} aria-hidden />
-                <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <Box
+                  component="ul"
+                  sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 0.5 }}
+                >
                   {warnings.map((w) => (
-                    <Typography component="li" variant="body2" key={`${w.kind}-${w.date}-${w.message}`} sx={{ color: colors.warningInk }}>
+                    <Typography
+                      component="li"
+                      variant="body2"
+                      key={`${w.kind}-${w.date}-${w.message}`}
+                      sx={{ color: colors.warningInk }}
+                    >
                       {w.message}
                     </Typography>
                   ))}

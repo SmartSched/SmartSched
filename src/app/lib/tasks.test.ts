@@ -22,7 +22,10 @@ const ids = (tasks: Task[]) => sortTasks(tasks).map((t) => t.id);
 
 describe('sortTasks', () => {
   it('puts unfinished tasks above finished ones', () => {
-    expect(ids([task('done', { completed: true, completed_at: '2026-09-28T10:00:00Z' }), task('open')])).toEqual(['open', 'done']);
+    expect(ids([task('done', { completed: true, completed_at: '2026-09-28T10:00:00Z' }), task('open')])).toEqual([
+      'open',
+      'done',
+    ]);
   });
 
   it('orders unfinished tasks by soonest due, with undated ones last', () => {
@@ -68,7 +71,12 @@ describe('estimateRatios', () => {
     task(id, { type, estimated_time, time_spent, completed: true, completed_at: '2026-09-28T10:00:00Z' });
 
   it('compares total time spent with total estimated, per type', () => {
-    const tasks = [done('a', 'homework', 60, 90), done('b', 'homework', 120, 150), done('c', 'study', 30, 30), done('d', 'study', 60, 45)];
+    const tasks = [
+      done('a', 'homework', 60, 90),
+      done('b', 'homework', 120, 150),
+      done('c', 'study', 30, 30),
+      done('d', 'study', 60, 45),
+    ];
     expect(estimateRatios(tasks)).toEqual({ homework: { ratio: 1.3, count: 2 }, study: { ratio: 0.8, count: 2 } });
   });
 

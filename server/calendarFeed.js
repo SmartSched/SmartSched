@@ -23,8 +23,7 @@ export const FEED_ERRORS = {
   link: "That doesn't look like a calendar link. Paste the secret iCal address from Google Calendar, or the ICS link from Outlook's Publish calendar.",
   fetch:
     "Couldn't load that calendar. Check the link is still valid (resetting it in Google or Outlook makes a new one).",
-  parse:
-    "That link didn't return a calendar. Check it's the iCal / ICS link, not the HTML one.",
+  parse: "That link didn't return a calendar. Check it's the iCal / ICS link, not the HTML one.",
   large: "That calendar is too large to import.",
 };
 
@@ -32,8 +31,7 @@ export const FEED_ERRORS = {
 export function checkFeedUrl(input) {
   if (typeof input !== "string") return { error: FEED_ERRORS.link };
   let text = input.trim();
-  if (text.toLowerCase().startsWith("webcal://"))
-    text = `https://${text.slice("webcal://".length)}`;
+  if (text.toLowerCase().startsWith("webcal://")) text = `https://${text.slice("webcal://".length)}`;
   if (text.length > 2000) return { error: FEED_ERRORS.link };
   let url;
   try {
@@ -42,16 +40,9 @@ export function checkFeedUrl(input) {
     return { error: FEED_ERRORS.link };
   }
   const provider = PROVIDER_HOSTS[url.hostname.toLowerCase()];
-  if (
-    url.protocol !== "https:" ||
-    !provider ||
-    url.username ||
-    url.password ||
-    url.port
-  )
+  if (url.protocol !== "https:" || !provider || url.username || url.password || url.port)
     return { error: FEED_ERRORS.link };
-  if (!url.pathname.toLowerCase().endsWith(".ics"))
-    return { error: FEED_ERRORS.link };
+  if (!url.pathname.toLowerCase().endsWith(".ics")) return { error: FEED_ERRORS.link };
   return { url: url.toString(), provider };
 }
 
@@ -92,8 +83,7 @@ export async function fetchFeed(link) {
       continue;
     }
     if (!res.ok) throw new Error(FEED_ERRORS.fetch);
-    if (Number(res.headers.get("content-length")) > MAX_FEED_BYTES)
-      throw new Error(FEED_ERRORS.large);
+    if (Number(res.headers.get("content-length")) > MAX_FEED_BYTES) throw new Error(FEED_ERRORS.large);
     const text = await res.text();
     if (text.length > MAX_FEED_BYTES) throw new Error(FEED_ERRORS.large);
     return text;
@@ -102,9 +92,7 @@ export async function fetchFeed(link) {
 }
 
 function checkFeedHost(url) {
-  return url.protocol === "https:" && PROVIDER_HOSTS[url.hostname.toLowerCase()]
-    ? url.toString()
-    : null;
+  return url.protocol === "https:" && PROVIDER_HOSTS[url.hostname.toLowerCase()] ? url.toString() : null;
 }
 
 // ---- Turning events into blocks ----
@@ -137,9 +125,7 @@ function localParts(jsDate, timeZone) {
     });
     formatters.set(timeZone, fmt);
   }
-  const p = Object.fromEntries(
-    fmt.formatToParts(jsDate).map((part) => [part.type, part.value]),
-  );
+  const p = Object.fromEntries(fmt.formatToParts(jsDate).map((part) => [part.type, part.value]));
   return {
     date: `${p.year}-${p.month}-${p.day}`,
     minutes: Number(p.hour) * 60 + Number(p.minute),
@@ -158,18 +144,13 @@ function toLocal(time, timeZone) {
   return localParts(time.toJSDate(), timeZone);
 }
 
-const clock = (minutes) =>
-  `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}:00`;
+const clock = (minutes) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}:00`;
 
 // One event as blocks, split at midnight when it runs into the next day.
 function eventBlocks(activity, start, end) {
   const blocks = [];
   let date = start.date;
-  for (
-    let day = 0;
-    day <= MAX_EVENT_DAYS && date <= end.date;
-    day++, date = addDays(date, 1)
-  ) {
+  for (let day = 0; day <= MAX_EVENT_DAYS && date <= end.date; day++, date = addDays(date, 1)) {
     const from = date === start.date ? start.minutes : 0;
     const to = date === end.date ? end.minutes : 24 * 60 - 1; // ends 23:59, the last time a block can
     if (to > from)
@@ -188,21 +169,12 @@ function eventBlocks(activity, start, end) {
 // holidays, "on leave"), which would otherwise fill the whole day.
 function skipped(component, startDate) {
   if (startDate.isDate) return true;
-  if (
-    String(component.getFirstPropertyValue("status") ?? "").toUpperCase() ===
-    "CANCELLED"
-  )
-    return true;
-  return (
-    String(component.getFirstPropertyValue("transp") ?? "").toUpperCase() ===
-    "TRANSPARENT"
-  );
+  if (String(component.getFirstPropertyValue("status") ?? "").toUpperCase() === "CANCELLED") return true;
+  return String(component.getFirstPropertyValue("transp") ?? "").toUpperCase() === "TRANSPARENT";
 }
 
 function title(component) {
-  const summary = String(
-    component.getFirstPropertyValue("summary") ?? "",
-  ).trim();
+  const summary = String(component.getFirstPropertyValue("summary") ?? "").trim();
   return (summary || "Busy").slice(0, 200);
 }
 
@@ -217,16 +189,14 @@ export function feedBlocks(icsText, { from, to, timeZone }) {
     throw new Error(FEED_ERRORS.parse);
   }
   if (calendar.name !== "vcalendar") throw new Error(FEED_ERRORS.parse);
-  for (const zone of calendar.getAllSubcomponents("vtimezone"))
-    ICAL.TimezoneService.register(zone);
+  for (const zone of calendar.getAllSubcomponents("vtimezone")) ICAL.TimezoneService.register(zone);
 
   // A repeating event comes as its rule plus one VEVENT per changed occurrence (same UID, with RECURRENCE-ID).
   const masters = new Map();
   const exceptions = [];
   for (const component of calendar.getAllSubcomponents("vevent")) {
     const uid = component.getFirstPropertyValue("uid") ?? Symbol("no uid");
-    if (component.hasProperty("recurrence-id"))
-      exceptions.push([uid, component]);
+    if (component.hasProperty("recurrence-id")) exceptions.push([uid, component]);
     else masters.set(uid, new ICAL.Event(component));
   }
   const standalone = [];
@@ -257,11 +227,7 @@ export function feedBlocks(icsText, { from, to, timeZone }) {
       continue;
     }
     const iterator = event.iterator();
-    for (
-      let i = 0, next;
-      i < MAX_OCCURRENCES && (next = iterator.next());
-      i++
-    ) {
+    for (let i = 0, next; i < MAX_OCCURRENCES && (next = iterator.next()); i++) {
       if (next.toJSDate().getTime() > stopMs) break;
       const details = event.getOccurrenceDetails(next);
       add(details.item.component, details.startDate, details.endDate);
@@ -269,9 +235,7 @@ export function feedBlocks(icsText, { from, to, timeZone }) {
     if (blocks.length > MAX_BLOCKS) throw new Error(FEED_ERRORS.large);
   }
   if (blocks.length > MAX_BLOCKS) throw new Error(FEED_ERRORS.large);
-  return blocks.sort((a, b) =>
-    (a.date + a.start_time).localeCompare(b.date + b.start_time),
-  );
+  return blocks.sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
 }
 
 export { addDays };

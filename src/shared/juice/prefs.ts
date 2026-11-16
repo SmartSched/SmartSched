@@ -51,11 +51,8 @@ export function setJuicePref<K extends keyof JuicePrefs>(key: K, value: JuicePre
 }
 
 export function useJuicePrefs() {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    getJuicePrefs,
-  );
+  return useSyncExternalStore((listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }, getJuicePrefs);
 }

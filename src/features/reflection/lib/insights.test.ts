@@ -4,11 +4,31 @@ import type { TimeBlock } from '../../../app/lib/planner';
 import type { Task } from '../../../app/lib/tasks';
 
 const block = (date: string, type: TimeBlock['type'], start: string, end: string) =>
-  ({ id: `${date}-${start}`, date, type, start_time: start, end_time: end, activity: type, task_id: null }) as TimeBlock;
+  ({
+    id: `${date}-${start}`,
+    date,
+    type,
+    start_time: start,
+    end_time: end,
+    activity: type,
+    task_id: null,
+  }) as TimeBlock;
 
 const task = (fields: Partial<Task>) =>
-  ({ id: 't', title: 't', description: null, completed: true, priority: 'medium', type: 'homework', due_date: null,
-    estimated_time: null, completed_at: null, created_at: '2026-11-01', time_spent: 0, ...fields }) as Task;
+  ({
+    id: 't',
+    title: 't',
+    description: null,
+    completed: true,
+    priority: 'medium',
+    type: 'homework',
+    due_date: null,
+    estimated_time: null,
+    completed_at: null,
+    created_at: '2026-11-01',
+    time_spent: 0,
+    ...fields,
+  }) as Task;
 
 describe('typicalWeek', () => {
   it('averages hours a week over the weeks that had anything planned', () => {
@@ -26,7 +46,10 @@ describe('typicalWeek', () => {
   });
 
   it('ignores blocks in the future or more than four weeks back', () => {
-    const { weeks } = typicalWeek([block('2026-11-10', 'class', '09:00', '10:00'), block('2026-10-01', 'class', '09:00', '10:00')], '2026-11-09');
+    const { weeks } = typicalWeek(
+      [block('2026-11-10', 'class', '09:00', '10:00'), block('2026-10-01', 'class', '09:00', '10:00')],
+      '2026-11-09',
+    );
     expect(weeks).toBe(0);
   });
 });
@@ -40,7 +63,11 @@ describe('sleepPerNight', () => {
   });
 
   it('falls back to the survey, then to nothing', () => {
-    expect(sleepPerNight([night('23:00', '07:00')], { sleep_hours: 8, wake_time: '07:00' })).toEqual({ hours: 8, source: 'survey', nights: 0 });
+    expect(sleepPerNight([night('23:00', '07:00')], { sleep_hours: 8, wake_time: '07:00' })).toEqual({
+      hours: 8,
+      source: 'survey',
+      nights: 0,
+    });
     expect(sleepPerNight([], null)).toBeNull();
   });
 });

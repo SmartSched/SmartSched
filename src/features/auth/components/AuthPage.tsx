@@ -69,13 +69,7 @@ export function AuthPage() {
 
           <Box component="form" onSubmit={form.submit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {mode === 'signup' && (
-              <TextField
-                label="Name"
-                value={name}
-                onChange={(e) => form.setName(e.target.value)}
-                required
-                fullWidth
-              />
+              <TextField label="Name" value={name} onChange={(e) => form.setName(e.target.value)} required fullWidth />
             )}
             <TextField
               label="Email"
@@ -133,19 +127,14 @@ export function AuthPage() {
               </MuiLink>
             )}
 
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={submitting || passwordTooShort}
-            >
+            <Button type="submit" variant="contained" size="large" disabled={submitting || passwordTooShort}>
               {submitting
                 ? 'Please wait...'
                 : mode === 'signup'
-                ? 'Sign Up'
-                : mode === 'forgot'
-                ? 'Send Reset Link'
-                : 'Log In'}
+                  ? 'Sign Up'
+                  : mode === 'forgot'
+                    ? 'Send Reset Link'
+                    : 'Log In'}
             </Button>
 
             {mode === 'forgot' && (

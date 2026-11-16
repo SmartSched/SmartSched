@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildSolverInput,
-  preferencesOutOfDate,
-  savedPreferences,
-} from "../solverInput.js";
+import { buildSolverInput, preferencesOutOfDate, savedPreferences } from "../solverInput.js";
 
 describe("buildSolverInput", () => {
   it("leaves study hours and session length to the scheduler", () => {
@@ -97,12 +93,7 @@ describe("buildSolverInput fixed blocks", () => {
       blocks,
       reflections: [],
     });
-    expect(input.fixed.map((f) => f.label)).toEqual([
-      "class",
-      "started",
-      "done",
-      "completed-session",
-    ]);
+    expect(input.fixed.map((f) => f.label)).toEqual(["class", "started", "done", "completed-session"]);
   });
 });
 
@@ -121,18 +112,12 @@ describe("savedPreferences", () => {
   });
 
   it("skips preferences older than the survey, so new answers count right away", () => {
-    expect(
-      savedPreferences(profile({ survey_updated_at: "2026-10-22T10:00:00Z" })),
-    ).toBeNull();
+    expect(savedPreferences(profile({ survey_updated_at: "2026-10-22T10:00:00Z" }))).toBeNull();
   });
 
   it("is null with nothing saved, no timestamp, or not an object", () => {
-    expect(
-      savedPreferences(profile({ scheduler_preferences: null })),
-    ).toBeNull();
-    expect(
-      savedPreferences(profile({ preferences_updated_at: null })),
-    ).toBeNull();
+    expect(savedPreferences(profile({ scheduler_preferences: null }))).toBeNull();
+    expect(savedPreferences(profile({ preferences_updated_at: null }))).toBeNull();
     expect(savedPreferences(profile({ scheduler_preferences: [] }))).toBeNull();
     expect(savedPreferences(null)).toBeNull();
   });
@@ -153,15 +138,8 @@ describe("preferencesOutOfDate", () => {
   });
 
   it("is true with none saved, older than the survey, or a week old", () => {
-    expect(
-      preferencesOutOfDate(profile({ scheduler_preferences: null }), NOW),
-    ).toBe(true);
-    expect(
-      preferencesOutOfDate(
-        profile({ survey_updated_at: "2026-10-22T10:00:00Z" }),
-        NOW,
-      ),
-    ).toBe(true);
+    expect(preferencesOutOfDate(profile({ scheduler_preferences: null }), NOW)).toBe(true);
+    expect(preferencesOutOfDate(profile({ survey_updated_at: "2026-10-22T10:00:00Z" }), NOW)).toBe(true);
     expect(
       preferencesOutOfDate(
         profile({
@@ -174,11 +152,6 @@ describe("preferencesOutOfDate", () => {
   });
 
   it("is false without a survey, since there is nothing to work from", () => {
-    expect(
-      preferencesOutOfDate(
-        profile({ survey: null, scheduler_preferences: null }),
-        NOW,
-      ),
-    ).toBe(false);
+    expect(preferencesOutOfDate(profile({ survey: null, scheduler_preferences: null }), NOW)).toBe(false);
   });
 });

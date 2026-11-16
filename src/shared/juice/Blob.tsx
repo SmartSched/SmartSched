@@ -51,7 +51,11 @@ export function Blob() {
   const hop = async (height: number, times = 1) => {
     if (reduceMotion || !body.current) return;
     for (let i = 0; i < times; i++) {
-      await animate(body.current, { y: [0, -height, 0], scaleY: [1, 1.12, 0.88, 1], scaleX: [1, 0.92, 1.1, 1] }, { duration: 0.45, ease: 'easeOut' });
+      await animate(
+        body.current,
+        { y: [0, -height, 0], scaleY: [1, 1.12, 0.88, 1], scaleX: [1, 0.92, 1.1, 1] },
+        { duration: 0.45, ease: 'easeOut' },
+      );
     }
   };
 
@@ -91,11 +95,14 @@ export function Blob() {
     if (mood === 'sleep') return;
     let timer: number;
     const schedule = () => {
-      timer = window.setTimeout(() => {
-        setBlinking(true);
-        window.setTimeout(() => setBlinking(false), 140);
-        schedule();
-      }, 2500 + Math.random() * 3500);
+      timer = window.setTimeout(
+        () => {
+          setBlinking(true);
+          window.setTimeout(() => setBlinking(false), 140);
+          schedule();
+        },
+        2500 + Math.random() * 3500,
+      );
     };
     schedule();
     return () => window.clearTimeout(timer);
@@ -147,14 +154,16 @@ export function Blob() {
       // Too many bops in a row: it gets a bit dizzy and spins.
       bops.current = [];
       show('dizzy', 2600);
-      if (!reduceMotion && body.current) animate(body.current, { rotate: [0, 360, 720] }, { duration: 0.9, ease: 'easeInOut' });
+      if (!reduceMotion && body.current)
+        animate(body.current, { rotate: [0, 360, 720] }, { duration: 0.9, ease: 'easeInOut' });
       return;
     }
     // Asleep, it opens its eyes for a moment and then dozes off again.
     show(resting === 'sleep' ? 'idle' : 'boop', resting === 'sleep' ? 2500 : 650);
   };
 
-  const eyesClosed = mood === 'sleep' || (blinking && (mood === 'idle' || mood === 'yawn')) || (mood === 'yawn' && yawning);
+  const eyesClosed =
+    mood === 'sleep' || (blinking && (mood === 'idle' || mood === 'yawn')) || (mood === 'yawn' && yawning);
 
   return (
     <Box
@@ -189,7 +198,16 @@ export function Blob() {
       {/* Shadow on the "floor"; shrinks when it hops. */}
       <Box
         aria-hidden
-        sx={{ position: 'absolute', left: '50%', bottom: 2, width: 44, height: 6, ml: '-22px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.14)' }}
+        sx={{
+          position: 'absolute',
+          left: '50%',
+          bottom: 2,
+          width: 44,
+          height: 6,
+          ml: '-22px',
+          borderRadius: '50%',
+          backgroundColor: 'rgba(0,0,0,0.14)',
+        }}
       />
       <motion.div
         ref={body}
@@ -201,13 +219,29 @@ export function Blob() {
             width: '100%',
             height: '100%',
             transformOrigin: '50% 100%',
-            animation: reduceMotion ? 'none' : `blobBreathe ${mood === 'sleep' ? 2.6 : 1.7}s ease-in-out infinite alternate`,
+            animation: reduceMotion
+              ? 'none'
+              : `blobBreathe ${mood === 'sleep' ? 2.6 : 1.7}s ease-in-out infinite alternate`,
           }}
         >
           <svg viewBox="0 0 80 72" width={SIZE.w} height={SIZE.h} aria-hidden style={{ overflow: 'visible' }}>
             <BuddyBody buddy={buddy} spin={!reduceMotion} />
-            <ellipse cx="22" cy="49" rx="4.5" ry="2.6" fill="#f472b6" opacity={mood === 'happy' || mood === 'cheer' ? 0.7 : 0.4} />
-            <ellipse cx="58" cy="49" rx="4.5" ry="2.6" fill="#f472b6" opacity={mood === 'happy' || mood === 'cheer' ? 0.7 : 0.4} />
+            <ellipse
+              cx="22"
+              cy="49"
+              rx="4.5"
+              ry="2.6"
+              fill="#f472b6"
+              opacity={mood === 'happy' || mood === 'cheer' ? 0.7 : 0.4}
+            />
+            <ellipse
+              cx="58"
+              cy="49"
+              rx="4.5"
+              ry="2.6"
+              fill="#f472b6"
+              opacity={mood === 'happy' || mood === 'cheer' ? 0.7 : 0.4}
+            />
             <motion.g style={{ x: mood === 'sleep' ? 0 : lookX, y: mood === 'sleep' ? 0 : lookY }}>
               <Eye cx={30} cy={40} mood={mood} closed={eyesClosed} side="left" />
               <Eye cx={50} cy={40} mood={mood} closed={eyesClosed} side="right" />
@@ -221,7 +255,11 @@ export function Blob() {
                     x={62 + i * 3}
                     y={18 - i * 2}
                     fontSize={8 + i * 2}
-                    style={{ opacity: 0, animation: reduceMotion ? 'none' : `blobZ 3s ease-out ${i * 1}s infinite`, fill: buddy === 'blob' ? colors.accent600 : '#64748b' }}
+                    style={{
+                      opacity: 0,
+                      animation: reduceMotion ? 'none' : `blobZ 3s ease-out ${i * 1}s infinite`,
+                      fill: buddy === 'blob' ? colors.accent600 : '#64748b',
+                    }}
                   >
                     z
                   </text>
@@ -256,7 +294,17 @@ function BuddyBody({ buddy, spin }: { buddy: Buddy; spin?: boolean }) {
           <path d="M40 66 L40 76" stroke="#16a34a" strokeWidth="4" strokeLinecap="round" />
           <g style={{ transformOrigin: '40px 42px', animation: spin ? 'buddySpin 40s linear infinite' : 'none' }}>
             {petals.map((angle) => (
-              <ellipse key={angle} cx="40" cy="15" rx="6.5" ry="11" transform={`rotate(${angle} 40 42)`} fill="#facc15" stroke="#eab308" strokeWidth="1.2" />
+              <ellipse
+                key={angle}
+                cx="40"
+                cy="15"
+                rx="6.5"
+                ry="11"
+                transform={`rotate(${angle} 40 42)`}
+                fill="#facc15"
+                stroke="#eab308"
+                strokeWidth="1.2"
+              />
             ))}
           </g>
           <circle cx="40" cy="44" r="22" fill="#c98a3c" />
@@ -270,7 +318,14 @@ function BuddyBody({ buddy, spin }: { buddy: Buddy; spin?: boolean }) {
         <g>
           <g style={{ transformOrigin: '40px 42px', animation: spin ? 'buddySpin 24s linear infinite' : 'none' }}>
             {rays.map((angle) => (
-              <path key={angle} d="M40 6 L40 13" transform={`rotate(${angle} 40 42)`} stroke="#f59e0b" strokeWidth="4.5" strokeLinecap="round" />
+              <path
+                key={angle}
+                d="M40 6 L40 13"
+                transform={`rotate(${angle} 40 42)`}
+                stroke="#f59e0b"
+                strokeWidth="4.5"
+                strokeLinecap="round"
+              />
             ))}
           </g>
           <circle cx="40" cy="42" r="25" fill="#fbbf24" />
@@ -292,7 +347,10 @@ function BuddyBody({ buddy, spin }: { buddy: Buddy; spin?: boolean }) {
     default:
       return (
         <g>
-          <path d="M40 8 C61 8 75 25 75 45 C75 61 62 69 40 69 C18 69 5 61 5 45 C5 25 19 8 40 8 Z" style={{ fill: colors.accent400 }} />
+          <path
+            d="M40 8 C61 8 75 25 75 45 C75 61 62 69 40 69 C18 69 5 61 5 45 C5 25 19 8 40 8 Z"
+            style={{ fill: colors.accent400 }}
+          />
           <ellipse cx="27" cy="22" rx="8" ry="4.5" transform="rotate(-25 27 22)" fill="#fff" opacity="0.35" />
         </g>
       );
@@ -313,8 +371,26 @@ export function BuddyPreview({ buddy, size = 44 }: { buddy: Buddy; size?: number
   );
 }
 
-function Eye({ cx, cy, mood, closed, side }: { cx: number; cy: number; mood: BlobMood; closed: boolean; side: 'left' | 'right' }) {
-  const stroke = { stroke: INK, strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' };
+function Eye({
+  cx,
+  cy,
+  mood,
+  closed,
+  side,
+}: {
+  cx: number;
+  cy: number;
+  mood: BlobMood;
+  closed: boolean;
+  side: 'left' | 'right';
+}) {
+  const stroke = {
+    stroke: INK,
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    fill: 'none',
+  };
   return (
     <g transform={`translate(${cx} ${cy})`}>
       {mood === 'happy' || mood === 'cheer' ? (

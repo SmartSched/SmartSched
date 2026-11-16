@@ -14,7 +14,13 @@ export function burst(point = lastPoint) {
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
   const layer = document.createElement('div');
   layer.setAttribute('aria-hidden', 'true');
-  Object.assign(layer.style, { position: 'fixed', left: `${point.x}px`, top: `${point.y}px`, pointerEvents: 'none', zIndex: '1500' });
+  Object.assign(layer.style, {
+    position: 'fixed',
+    left: `${point.x}px`,
+    top: `${point.y}px`,
+    pointerEvents: 'none',
+    zIndex: '1500',
+  });
   const count = 10;
   for (let i = 0; i < count; i++) {
     const dot = document.createElement('span');
@@ -33,8 +39,15 @@ export function burst(point = lastPoint) {
     dot.animate(
       [
         { transform: 'translate(0, 0) scale(0.4)', opacity: 1 },
-        { transform: `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance}px) scale(1)`, opacity: 1, offset: 0.6 },
-        { transform: `translate(${Math.cos(angle) * distance * 1.2}px, ${Math.sin(angle) * distance * 1.2 + 6}px) scale(0.6)`, opacity: 0 },
+        {
+          transform: `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance}px) scale(1)`,
+          opacity: 1,
+          offset: 0.6,
+        },
+        {
+          transform: `translate(${Math.cos(angle) * distance * 1.2}px, ${Math.sin(angle) * distance * 1.2 + 6}px) scale(0.6)`,
+          opacity: 0,
+        },
       ],
       { duration: 650, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'forwards' },
     );

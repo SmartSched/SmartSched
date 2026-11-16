@@ -47,7 +47,10 @@ export function FeedbackButton({ aboveBuddy }: { aboveBuddy: boolean }) {
         borderRadius: '50%',
         WebkitTapHighlightColor: 'transparent',
         '&:focus-visible': { outline: `2px solid ${colors.accent600}`, outlineOffset: 3 },
-        '@keyframes feedbackBreathe': { from: { transform: 'scaleY(1)' }, to: { transform: 'scaleY(1.04) scaleX(0.985)' } },
+        '@keyframes feedbackBreathe': {
+          from: { transform: 'scaleY(1)' },
+          to: { transform: 'scaleY(1.04) scaleX(0.985)' },
+        },
       }}
     >
       <Box

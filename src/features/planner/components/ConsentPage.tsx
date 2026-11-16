@@ -71,11 +71,7 @@ export function ConsentPage() {
                 label="I've read this and agree to take part."
               />
               <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                <Button
-                  variant="contained"
-                  disabled={!agreed || saving}
-                  onClick={handleAgree}
-                >
+                <Button variant="contained" disabled={!agreed || saving} onClick={handleAgree}>
                   Continue
                 </Button>
                 <Button

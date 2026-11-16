@@ -83,7 +83,10 @@ export function DayReflection() {
         if (!cancelled && existing) {
           setHadReflection(true);
           setRatings({ ...EMPTY_RATINGS, ...existing.ratings });
-          setSleepTimes({ bed_time: existing.bed_time?.slice(0, 5) ?? '', wake_time: existing.wake_time?.slice(0, 5) ?? '' });
+          setSleepTimes({
+            bed_time: existing.bed_time?.slice(0, 5) ?? '',
+            wake_time: existing.wake_time?.slice(0, 5) ?? '',
+          });
         }
       })
       .catch((err) => !cancelled && setError(err.message))
@@ -136,7 +139,10 @@ export function DayReflection() {
   if (!user) {
     return (
       <Typography variant="body2" color="text.secondary">
-        <MuiLink component={RouterLink} to="/auth">Log in</MuiLink> to rate your day.
+        <MuiLink component={RouterLink} to="/auth">
+          Log in
+        </MuiLink>{' '}
+        to rate your day.
       </Typography>
     );
   }
@@ -196,7 +202,15 @@ export function DayReflection() {
               {hadReflection && !saved && (
                 <Chip
                   label="Already saved for this day. Change anything and save again."
-                  sx={{ alignSelf: 'flex-start', mb: 1, backgroundColor: colors.accent100, color: colors.accent800, height: 'auto', py: 0.5, '& .MuiChip-label': { whiteSpace: 'normal' } }}
+                  sx={{
+                    alignSelf: 'flex-start',
+                    mb: 1,
+                    backgroundColor: colors.accent100,
+                    color: colors.accent800,
+                    height: 'auto',
+                    py: 0.5,
+                    '& .MuiChip-label': { whiteSpace: 'normal' },
+                  }}
                 />
               )}
               {CRITERIA.map(({ key, label, hint }) => (
@@ -225,7 +239,10 @@ export function DayReflection() {
                     value={ratings[key]}
                     onChange={(_, newValue) => rate(key, newValue)}
                     aria-labelledby={`rate-${key}`}
-                    sx={{ '& .MuiRating-iconFilled': { color: colors.accent500 }, '& .MuiRating-iconHover': { color: colors.accent600 } }}
+                    sx={{
+                      '& .MuiRating-iconFilled': { color: colors.accent500 },
+                      '& .MuiRating-iconHover': { color: colors.accent600 },
+                    }}
                   />
                 </Box>
               ))}
@@ -257,10 +274,27 @@ export function DayReflection() {
                 </Box>
               </Box>
 
-              {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
-              {saved && <Alert severity="success" sx={{ mt: 2 }}>Saved.</Alert>}
+              {error && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {error}
+                </Alert>
+              )}
+              {saved && (
+                <Alert severity="success" sx={{ mt: 2 }}>
+                  Saved.
+                </Alert>
+              )}
 
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2, flexWrap: 'wrap', mt: 2 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: 2,
+                  flexWrap: 'wrap',
+                  mt: 2,
+                }}
+              >
                 {!saved && unrated.length > 0 && (
                   <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
                     Rate {unrated.map(({ label }) => label.toLowerCase()).join(', ')} to save.

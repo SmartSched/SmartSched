@@ -76,8 +76,8 @@ export function YourData() {
         <DialogTitle>Delete your account?</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2">
-            This removes your account and everything in it: tasks, planner blocks, reflections, survey answers,
-            plan history and scheduling preferences. It can't be undone.
+            This removes your account and everything in it: tasks, planner blocks, reflections, survey answers, plan
+            history and scheduling preferences. It can't be undone.
           </Typography>
           <TextField
             label={`Type "${CONFIRM_WORD}" to confirm`}

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  FormEvent,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import {
   Card,
   CardContent,
@@ -29,7 +36,15 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material';
-import { Add, CheckCircleOutline, ChevronLeft, ChevronRight, Close, DensitySmallOutlined, NightsStayOutlined } from '@mui/icons-material';
+import {
+  Add,
+  CheckCircleOutline,
+  ChevronLeft,
+  ChevronRight,
+  Close,
+  DensitySmallOutlined,
+  NightsStayOutlined,
+} from '@mui/icons-material';
 import {
   addDays,
   addMonths,
@@ -114,7 +129,6 @@ function formatWeekRange(weekStart: Date) {
   const year = sameYear ? `, ${weekStart.getFullYear()}` : '';
   return `${startLabel} – ${endLabel}${year}`;
 }
-
 
 const BLOCK_TYPES: TimeBlock['type'][] = ['class', 'study', 'task', 'work', 'meal', 'break', 'personal', 'commute'];
 
@@ -209,7 +223,12 @@ function toFormValues(block: TimeBlock): BlockFormValues {
           interval: block.series.interval_weeks,
           recurrence_type: block.series.recurrence_type ?? 'weekly',
           day_of_month: block.series.day_of_month ?? parseISO(block.date).getDate(),
-          week_of_month: (block.series.week_of_month ?? Math.ceil(parseISO(block.date).getDate() / 7)) as 1 | 2 | 3 | 4 | 5,
+          week_of_month: (block.series.week_of_month ?? Math.ceil(parseISO(block.date).getDate() / 7)) as
+            | 1
+            | 2
+            | 3
+            | 4
+            | 5,
           weekday: block.series.weekday ?? parseISO(block.date).getDay(),
           start_date: block.series.start_date,
           end_date: block.series.end_date,
@@ -257,7 +276,8 @@ function BlockForm({
   const canRepeat = !isTask && (mode === 'add' || inSeries);
   const repeating = canRepeat && values.repeat.enabled;
   const placeOptions = values.location && !places.includes(values.location) ? [...places, values.location] : places;
-  const setRepeat = (changes: Partial<RepeatValues>) => setValues({ ...values, repeat: { ...values.repeat, ...changes } });
+  const setRepeat = (changes: Partial<RepeatValues>) =>
+    setValues({ ...values, repeat: { ...values.repeat, ...changes } });
 
   const submit = async (scope: 'one' | 'all') => {
     if (isTask && !pickedTask) {
@@ -276,7 +296,12 @@ function BlockForm({
       setError('End time must be after the start time.');
       return;
     }
-    if (repeating && (values.repeat.recurrence_type === 'weekly' && values.repeat.days.length === 0 || !values.repeat.start_date || !values.repeat.end_date)) {
+    if (
+      repeating &&
+      ((values.repeat.recurrence_type === 'weekly' && values.repeat.days.length === 0) ||
+        !values.repeat.start_date ||
+        !values.repeat.end_date)
+    ) {
       setError('Pick the repeat pattern, and when it starts and ends.');
       return;
     }
@@ -437,7 +462,16 @@ function BlockForm({
       </Box>
 
       {canRepeat && (
-        <Box sx={{ border: `1px solid ${colors.grey200}`, borderRadius: '12px', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box
+          sx={{
+            border: `1px solid ${colors.grey200}`,
+            borderRadius: '12px',
+            p: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
           <FormControlLabel
             control={
               <Checkbox
@@ -502,21 +536,41 @@ function BlockForm({
                     label="Day of month"
                     onChange={(e) => setRepeat({ day_of_month: Number(e.target.value) })}
                   >
-                    {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <MenuItem key={day} value={day}>{ordinal(day)} of each month</MenuItem>)}
+                    {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+                      <MenuItem key={day} value={day}>
+                        {ordinal(day)} of each month
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
               ) : (
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Week</InputLabel>
-                    <Select value={values.repeat.week_of_month} label="Week" onChange={(e) => setRepeat({ week_of_month: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}>
-                      {[1, 2, 3, 4, 5].map((week) => <MenuItem key={week} value={week}>{ordinal(week)}</MenuItem>)}
+                    <Select
+                      value={values.repeat.week_of_month}
+                      label="Week"
+                      onChange={(e) => setRepeat({ week_of_month: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 })}
+                    >
+                      {[1, 2, 3, 4, 5].map((week) => (
+                        <MenuItem key={week} value={week}>
+                          {ordinal(week)}
+                        </MenuItem>
+                      ))}
                     </Select>
                   </FormControl>
                   <FormControl fullWidth size="small">
                     <InputLabel>Weekday</InputLabel>
-                    <Select value={values.repeat.weekday} label="Weekday" onChange={(e) => setRepeat({ weekday: Number(e.target.value) })}>
-                      {WEEKDAY_NAMES.map((day, index) => <MenuItem key={day} value={index}>{day}</MenuItem>)}
+                    <Select
+                      value={values.repeat.weekday}
+                      label="Weekday"
+                      onChange={(e) => setRepeat({ weekday: Number(e.target.value) })}
+                    >
+                      {WEEKDAY_NAMES.map((day, index) => (
+                        <MenuItem key={day} value={index}>
+                          {day}
+                        </MenuItem>
+                      ))}
                     </Select>
                   </FormControl>
                 </Box>
@@ -564,20 +618,12 @@ function BlockForm({
             <Button variant="outlined" disabled={submitting || endBeforeStart} onClick={() => submit('one')}>
               Save just this one
             </Button>
-            <Button
-              variant="contained"
-              disabled={submitting || endBeforeStart}
-              onClick={() => submit('all')}
-            >
+            <Button variant="contained" disabled={submitting || endBeforeStart} onClick={() => submit('all')}>
               {submitting ? submittingLabel : 'Save all in the series'}
             </Button>
           </>
         ) : (
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={submitting || endBeforeStart}
-          >
+          <Button type="submit" variant="contained" disabled={submitting || endBeforeStart}>
             {submitting ? submittingLabel : submitLabel}
           </Button>
         )}
@@ -672,7 +718,11 @@ function GridLines({ scale }: { scale: GridScale }) {
           {Array.from({ length: segment.to - segment.from }, (_, j) => (
             <Box
               key={j}
-              sx={{ height: scale.hourHeight, borderTop: i + j > 0 ? `1px dashed ${colors.grey200}` : 'none', boxSizing: 'border-box' }}
+              sx={{
+                height: scale.hourHeight,
+                borderTop: i + j > 0 ? `1px dashed ${colors.grey200}` : 'none',
+                boxSizing: 'border-box',
+              }}
             />
           ))}
         </Box>
@@ -699,7 +749,9 @@ function GapBand({ height, label }: { height: number; label?: string }) {
       }}
     >
       {label && (
-        <Typography sx={{ fontSize: 10, fontWeight: 600, color: 'text.secondary', backgroundColor: colors.surface, px: 0.5 }}>
+        <Typography
+          sx={{ fontSize: 10, fontWeight: 600, color: 'text.secondary', backgroundColor: colors.surface, px: 0.5 }}
+        >
           {label}
         </Typography>
       )}
@@ -713,10 +765,15 @@ function HourLabels({ scale, width, small }: { scale: GridScale; width: number; 
     <Box sx={{ width, flexShrink: 0 }}>
       {scale.segments.map((segment, i) => (
         <Box key={segment.from}>
-          {i > 0 && <GapBand height={scale.gap} label={`${formatHour(scale.segments[i - 1].to)}–${formatHour(segment.from)}`} />}
+          {i > 0 && (
+            <GapBand height={scale.gap} label={`${formatHour(scale.segments[i - 1].to)}–${formatHour(segment.from)}`} />
+          )}
           {Array.from({ length: segment.to - segment.from }, (_, j) => (
             <Box key={j} sx={{ height: scale.hourHeight, pr: small ? 1 : 2, pt: 0.25, boxSizing: 'border-box' }}>
-              <Typography variant={small ? 'caption' : 'body2'} sx={{ color: 'text.secondary', fontWeight: 600, lineHeight: 1.2 }}>
+              <Typography
+                variant={small ? 'caption' : 'body2'}
+                sx={{ color: 'text.secondary', fontWeight: 600, lineHeight: 1.2 }}
+              >
                 {formatHour(segment.from + j)}
               </Typography>
             </Box>
@@ -729,7 +786,17 @@ function HourLabels({ scale, width, small }: { scale: GridScale; width: number; 
 
 // The evening "reflect on your day" check-in: not a saved block, just a reminder drawn at the start of the
 // wind-down hour. Ticked once that day has a reflection; opens the Reflect page for that day.
-function CheckIn({ date, done, time, scale }: { date: string; done: boolean; time: { start: number; end: number }; scale: GridScale }) {
+function CheckIn({
+  date,
+  done,
+  time,
+  scale,
+}: {
+  date: string;
+  done: boolean;
+  time: { start: number; end: number };
+  scale: GridScale;
+}) {
   const navigate = useNavigate();
   if (!scale.shows(time.start, time.end)) return null;
   return (
@@ -762,7 +829,11 @@ function CheckIn({ date, done, time, scale }: { date: string; done: boolean; tim
         '&:focus-visible': { outline: `2px solid ${colors.accent600}`, outlineOffset: 1 },
       }}
     >
-      {done ? <CheckCircleOutline sx={{ fontSize: 14 }} aria-hidden /> : <NightsStayOutlined sx={{ fontSize: 14 }} aria-hidden />}
+      {done ? (
+        <CheckCircleOutline sx={{ fontSize: 14 }} aria-hidden />
+      ) : (
+        <NightsStayOutlined sx={{ fontSize: 14 }} aria-hidden />
+      )}
       <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {done ? 'Reflected' : 'Reflect on your day'}
       </Box>
@@ -800,7 +871,19 @@ interface TimeBlockItemProps {
   onDragStart?: (block: TimeBlock, e: ReactPointerEvent<HTMLElement>) => void;
 }
 
-function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClick, onToggleBlock, lifted, landed, onDragStart }: TimeBlockItemProps) {
+function TimeBlockItem({
+  block,
+  column,
+  columns,
+  scale,
+  minHeight,
+  dense,
+  onClick,
+  onToggleBlock,
+  lifted,
+  landed,
+  onDragStart,
+}: TimeBlockItemProps) {
   const start = toMinutes(block.start_time);
   const end = toMinutes(block.end_time);
   const top = scale.toY(start, 'start');
@@ -860,7 +943,9 @@ function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClic
           size="small"
           checked={block.completed}
           onChange={() => onToggleBlock(block)}
-          slotProps={{ input: { 'aria-label': `${block.completed ? 'Reopen' : 'Check off'} study block for ${title}` } }}
+          slotProps={{
+            input: { 'aria-label': `${block.completed ? 'Reopen' : 'Check off'} study block for ${title}` },
+          }}
           sx={{ p: dense ? 0.25 : 0.5, color, '&.Mui-checked': { color } }}
         />
       )}
@@ -941,11 +1026,11 @@ export function DailyPlanner() {
 
   const weekStart = useMemo(
     () => startOfWeek(parseISO(selectedDate), { weekStartsOn: WEEK_STARTS_ON }),
-    [selectedDate]
+    [selectedDate],
   );
   const weekDates = useMemo(
     () => Array.from({ length: 7 }, (_, i) => format(addDays(weekStart, i), 'yyyy-MM-dd')),
-    [weekStart]
+    [weekStart],
   );
   // Every day the month view shows: whole weeks from the one the 1st falls in to the one the last day falls in.
   const monthDates = useMemo(() => {
@@ -1088,7 +1173,11 @@ export function DailyPlanner() {
     [visibleBlocks, dragPreview],
   );
   const placedBlocks = useMemo(
-    () => layoutBlocks(displayBlocks.filter((b) => b.date === selectedDate), (minBlockHeight / hourHeight) * 60),
+    () =>
+      layoutBlocks(
+        displayBlocks.filter((b) => b.date === selectedDate),
+        (minBlockHeight / hourHeight) * 60,
+      ),
     [displayBlocks, selectedDate, minBlockHeight, hourHeight],
   );
   const blocksByDate = useMemo(() => {
@@ -1111,12 +1200,16 @@ export function DailyPlanner() {
     setSelectedDate((current) => format(addMonths(parseISO(current), months), 'yyyy-MM-dd'));
   };
 
-  const goToPrevious = () => (viewMode === 'day' ? changeDay(-1) : viewMode === 'week' ? changeWeek(-1) : changeMonth(-1));
+  const goToPrevious = () =>
+    viewMode === 'day' ? changeDay(-1) : viewMode === 'week' ? changeWeek(-1) : changeMonth(-1);
   const goToNext = () => (viewMode === 'day' ? changeDay(1) : viewMode === 'week' ? changeWeek(1) : changeMonth(1));
 
   // A block saved to another day takes the view to that day (in day mode), so it doesn't seem to vanish.
   const showSavedBlock = (saved: TimeBlock) => {
-    if ((viewMode === 'week' && weekDates.includes(saved.date)) || (viewMode === 'month' && monthDates.includes(saved.date))) {
+    if (
+      (viewMode === 'week' && weekDates.includes(saved.date)) ||
+      (viewMode === 'month' && monthDates.includes(saved.date))
+    ) {
       setTimeBlocks((current) => [...current.filter((b) => b.id !== saved.id), saved]);
     } else if (saved.date === selectedDate) {
       setTimeBlocks((current) => [...current.filter((b) => b.id !== saved.id), saved]);
@@ -1136,7 +1229,10 @@ export function DailyPlanner() {
     const [tight] = commutes?.tight ?? [];
     const added = commutes?.added ?? [];
     if (commutes?.failed) {
-      setNotice({ severity: 'warning', text: "Saved, but commutes for that day couldn't be worked out. Try saving again." });
+      setNotice({
+        severity: 'warning',
+        text: "Saved, but commutes for that day couldn't be worked out. Try saving again.",
+      });
     } else if (tight) {
       const more = commutes!.tight.length > 1 ? ` (and ${commutes!.tight.length - 1} more like it)` : '';
       const day = format(parseISO(tight.date), 'EEE, MMM d');
@@ -1205,10 +1301,9 @@ export function DailyPlanner() {
 
   const handleToggleBlock = async (block: TimeBlock) => {
     try {
-      const { block: updated }: { block: TimeBlock } = await apiPatch(
-        `/api/time-blocks/${block.id}/completion`,
-        { completed: !block.completed },
-      );
+      const { block: updated }: { block: TimeBlock } = await apiPatch(`/api/time-blocks/${block.id}/completion`, {
+        completed: !block.completed,
+      });
       showSavedBlock(updated);
       setNearbyBlocks((current) => current.map((b) => (b.id === updated.id ? updated : b)));
     } catch {
@@ -1224,7 +1319,11 @@ export function DailyPlanner() {
   };
 
   const isShown = (date: string) =>
-    viewMode === 'day' ? date === selectedDate : viewMode === 'week' ? weekDates.includes(date) : monthDates.includes(date);
+    viewMode === 'day'
+      ? date === selectedDate
+      : viewMode === 'week'
+        ? weekDates.includes(date)
+        : monthDates.includes(date);
 
   const moveBlock = async (block: TimeBlock, slot: Slot) => {
     try {
@@ -1233,7 +1332,10 @@ export function DailyPlanner() {
         slot,
       );
       setNearbyBlocks((current) => current.map((b) => (b.id === moved.id ? moved : b)));
-      setTimeBlocks((current) => [...current.filter((b) => b.id !== moved.id), ...(isShown(moved.date) ? [moved] : [])]);
+      setTimeBlocks((current) => [
+        ...current.filter((b) => b.id !== moved.id),
+        ...(isShown(moved.date) ? [moved] : []),
+      ]);
       reportCommutes(commutes, `Moved “${moved.task?.title ?? moved.activity}” to ${formatSlot(moved)}.`);
       reload();
     } catch {
@@ -1291,7 +1393,10 @@ export function DailyPlanner() {
   if (!user) {
     return (
       <Typography variant="body2" color="text.secondary">
-        <MuiLink component={RouterLink} to="/auth">Log in</MuiLink> to see and add your schedule.
+        <MuiLink component={RouterLink} to="/auth">
+          Log in
+        </MuiLink>{' '}
+        to see and add your schedule.
       </Typography>
     );
   }
@@ -1349,7 +1454,11 @@ export function DailyPlanner() {
             <ChevronRight />
           </IconButton>
         </Box>
-        <Button variant="outlined" onClick={() => setSelectedDate(today)} disabled={viewMode === 'day' ? isToday : viewMode === 'week' ? isCurrentWeek : isCurrentMonth}>
+        <Button
+          variant="outlined"
+          onClick={() => setSelectedDate(today)}
+          disabled={viewMode === 'day' ? isToday : viewMode === 'week' ? isCurrentWeek : isCurrentMonth}
+        >
           Today
         </Button>
         <Box sx={{ flex: 1 }} />
@@ -1360,9 +1469,15 @@ export function DailyPlanner() {
           aria-label="View"
           onChange={(_, newMode) => newMode && setViewMode(newMode)}
         >
-          <ToggleButton value="day" sx={{ px: 2 }}>Day</ToggleButton>
-          <ToggleButton value="week" sx={{ px: 2 }}>Week</ToggleButton>
-          <ToggleButton value="month" sx={{ px: 2 }}>Month</ToggleButton>
+          <ToggleButton value="day" sx={{ px: 2 }}>
+            Day
+          </ToggleButton>
+          <ToggleButton value="week" sx={{ px: 2 }}>
+            Week
+          </ToggleButton>
+          <ToggleButton value="month" sx={{ px: 2 }}>
+            Month
+          </ToggleButton>
         </ToggleButtonGroup>
         {viewMode !== 'month' && (
           <ToggleButton
@@ -1379,7 +1494,11 @@ export function DailyPlanner() {
             Compact
           </ToggleButton>
         )}
-        <Button variant="contained" startIcon={<Add />} onClick={() => setAdding(emptyForm(viewMode === 'day' ? selectedDate : today))}>
+        <Button
+          variant="contained"
+          startIcon={<Add />}
+          onClick={() => setAdding(emptyForm(viewMode === 'day' ? selectedDate : today))}
+        >
           Add block
         </Button>
       </Box>
@@ -1437,152 +1556,151 @@ export function DailyPlanner() {
       )}
 
       <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-      <Box sx={{ flex: '999 1 600px', minWidth: 0 }}>
-      {loading ? (
-        <ListSkeleton rows={6} height={64} />
-      ) : viewMode === 'month' ? (
-        <MonthGrid
-          dates={monthDates}
-          month={selectedDate.slice(0, 7)}
-          today={today}
-          blocksByDate={blocksByDate}
-          onOpenDay={(date) => {
-            setSelectedDate(date);
-            setViewMode('day');
+        <Box sx={{ flex: '999 1 600px', minWidth: 0 }}>
+          {loading ? (
+            <ListSkeleton rows={6} height={64} />
+          ) : viewMode === 'month' ? (
+            <MonthGrid
+              dates={monthDates}
+              month={selectedDate.slice(0, 7)}
+              today={today}
+              blocksByDate={blocksByDate}
+              onOpenDay={(date) => {
+                setSelectedDate(date);
+                setViewMode('day');
+              }}
+              onOpenBlock={openEdit}
+            />
+          ) : viewMode === 'day' ? (
+            <Card sx={{ borderRadius: '16px' }}>
+              <CardContent>
+                {timeBlocks.length === 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', pb: 2 }}>
+                    Nothing planned for this day. Click a time below to add a block.
+                  </Typography>
+                )}
+                <Box sx={{ display: 'flex' }}>
+                  <HourLabels scale={scale} width={compact ? 56 : 80} small={compact} />
+                  <Box
+                    data-day-column={selectedDate}
+                    onClick={(e) => openAddAt(selectedDate, e)}
+                    sx={{ flex: 1, position: 'relative', borderLeft: `2px solid ${colors.grey200}`, cursor: 'copy' }}
+                  >
+                    <GridLines scale={scale} />
+                    <DowntimeShade ranges={downtime} scale={scale} />
+                    <CheckIn date={selectedDate} done={reflectedDates.has(selectedDate)} time={checkIn} scale={scale} />
+                    {isToday && <NowLine scale={scale} now={new Date(now)} />}
+                    {placedBlocks.map(({ block, column, columns }) => (
+                      <TimeBlockItem
+                        key={block.id}
+                        block={block}
+                        column={column}
+                        columns={columns}
+                        scale={scale}
+                        minHeight={minBlockHeight}
+                        dense={compact}
+                        onClick={() => openEdit(block)}
+                        onToggleBlock={handleToggleBlock}
+                        lifted={dragPreview?.id === block.id}
+                        landed={landedId === block.id}
+                        onDragStart={startDrag}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card sx={{ borderRadius: '16px' }}>
+              <CardContent sx={{ overflowX: 'auto' }}>
+                <Box sx={{ minWidth: compact ? 640 : 780 }}>
+                  <Box sx={{ display: 'flex' }}>
+                    <Box sx={{ width: '56px', flexShrink: 0 }} />
+                    {weekDates.map((date) => {
+                      const day = parseISO(date);
+                      const isDayToday = date === today;
+                      return (
+                        <Box key={date} sx={{ flex: 1, textAlign: 'center', pb: 1 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 700, color: isDayToday ? colors.accent600 : 'text.secondary' }}
+                          >
+                            {format(day, 'EEE')}
+                          </Typography>
+                          <Box
+                            sx={{
+                              mx: 'auto',
+                              mt: 0.5,
+                              width: 32,
+                              height: 32,
+                              lineHeight: '32px',
+                              borderRadius: '50%',
+                              fontWeight: 700,
+                              backgroundColor: isDayToday ? colors.accent600 : 'transparent',
+                              color: isDayToday ? colors.surface : 'text.primary',
+                            }}
+                          >
+                            {format(day, 'd')}
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                  <Box sx={{ display: 'flex' }}>
+                    <HourLabels scale={scale} width={56} small />
+                    {weekDates.map((date) => {
+                      const dayBlocks = layoutBlocks(blocksByDate.get(date) ?? [], (minBlockHeight / hourHeight) * 60);
+                      return (
+                        <Box
+                          key={date}
+                          data-day-column={date}
+                          onClick={(e) => openAddAt(date, e)}
+                          sx={{
+                            flex: 1,
+                            position: 'relative',
+                            borderLeft: `1px solid ${colors.grey200}`,
+                            backgroundColor: date === today ? withAlpha(colors.accent100, 25) : 'transparent',
+                            cursor: 'copy',
+                          }}
+                        >
+                          <GridLines scale={scale} />
+                          <DowntimeShade ranges={downtime} scale={scale} />
+                          <CheckIn date={date} done={reflectedDates.has(date)} time={checkIn} scale={scale} />
+                          {date === today && <NowLine scale={scale} now={new Date(now)} />}
+                          {dayBlocks.map(({ block, column, columns }) => (
+                            <TimeBlockItem
+                              key={block.id}
+                              block={block}
+                              column={column}
+                              columns={columns}
+                              scale={scale}
+                              minHeight={minBlockHeight}
+                              dense
+                              onClick={() => openEdit(block)}
+                              onToggleBlock={handleToggleBlock}
+                              lifted={dragPreview?.id === block.id}
+                              landed={landedId === block.id}
+                              onDragStart={startDrag}
+                            />
+                          ))}
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          )}
+        </Box>
+        <PlannerKey
+          showCommutes={showCommutes}
+          onShowCommutesChange={(show) => {
+            setShowCommutes(show);
+            saveShowCommutes(show);
           }}
-          onOpenBlock={openEdit}
+          hasSurvey={Boolean(profile?.survey)}
+          compact={compact && viewMode !== 'month'}
         />
-      ) : viewMode === 'day' ? (
-        <Card sx={{ borderRadius: '16px' }}>
-          <CardContent>
-            {timeBlocks.length === 0 && (
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', pb: 2 }}>
-                Nothing planned for this day. Click a time below to add a block.
-              </Typography>
-            )}
-            <Box sx={{ display: 'flex' }}>
-              <HourLabels scale={scale} width={compact ? 56 : 80} small={compact} />
-              <Box
-                data-day-column={selectedDate}
-                onClick={(e) => openAddAt(selectedDate, e)}
-                sx={{ flex: 1, position: 'relative', borderLeft: `2px solid ${colors.grey200}`, cursor: 'copy' }}
-              >
-                <GridLines scale={scale} />
-                <DowntimeShade ranges={downtime} scale={scale} />
-                <CheckIn date={selectedDate} done={reflectedDates.has(selectedDate)} time={checkIn} scale={scale} />
-                {isToday && <NowLine scale={scale} now={new Date(now)} />}
-                {placedBlocks.map(({ block, column, columns }) => (
-                  <TimeBlockItem
-                    key={block.id}
-                    block={block}
-                    column={column}
-                    columns={columns}
-                    scale={scale}
-                    minHeight={minBlockHeight}
-                    dense={compact}
-                    onClick={() => openEdit(block)}
-                    onToggleBlock={handleToggleBlock}
-                    lifted={dragPreview?.id === block.id}
-                    landed={landedId === block.id}
-                    onDragStart={startDrag}
-                  />
-                ))}
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card sx={{ borderRadius: '16px' }}>
-          <CardContent sx={{ overflowX: 'auto' }}>
-            <Box sx={{ minWidth: compact ? 640 : 780 }}>
-              <Box sx={{ display: 'flex' }}>
-                <Box sx={{ width: '56px', flexShrink: 0 }} />
-                {weekDates.map((date) => {
-                  const day = parseISO(date);
-                  const isDayToday = date === today;
-                  return (
-                    <Box key={date} sx={{ flex: 1, textAlign: 'center', pb: 1 }}>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontWeight: 700, color: isDayToday ? colors.accent600 : 'text.secondary' }}
-                      >
-                        {format(day, 'EEE')}
-                      </Typography>
-                      <Box
-                        sx={{
-                          mx: 'auto',
-                          mt: 0.5,
-                          width: 32,
-                          height: 32,
-                          lineHeight: '32px',
-                          borderRadius: '50%',
-                          fontWeight: 700,
-                          backgroundColor: isDayToday ? colors.accent600 : 'transparent',
-                          color: isDayToday ? colors.surface : 'text.primary',
-                        }}
-                      >
-                        {format(day, 'd')}
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </Box>
-              <Box sx={{ display: 'flex' }}>
-                <HourLabels scale={scale} width={56} small />
-                {weekDates.map((date) => {
-                  const dayBlocks = layoutBlocks(blocksByDate.get(date) ?? [], (minBlockHeight / hourHeight) * 60);
-                  return (
-                    <Box
-                      key={date}
-                      data-day-column={date}
-                      onClick={(e) => openAddAt(date, e)}
-                      sx={{
-                        flex: 1,
-                        position: 'relative',
-                        borderLeft: `1px solid ${colors.grey200}`,
-                        backgroundColor: date === today ? withAlpha(colors.accent100, 25) : 'transparent',
-                        cursor: 'copy',
-                      }}
-                    >
-                      <GridLines scale={scale} />
-                      <DowntimeShade ranges={downtime} scale={scale} />
-                      <CheckIn date={date} done={reflectedDates.has(date)} time={checkIn} scale={scale} />
-                      {date === today && <NowLine scale={scale} now={new Date(now)} />}
-                      {dayBlocks.map(({ block, column, columns }) => (
-                        <TimeBlockItem
-                          key={block.id}
-                          block={block}
-                          column={column}
-                          columns={columns}
-                          scale={scale}
-                          minHeight={minBlockHeight}
-                          dense
-                          onClick={() => openEdit(block)}
-                          onToggleBlock={handleToggleBlock}
-                          lifted={dragPreview?.id === block.id}
-                          landed={landedId === block.id}
-                          onDragStart={startDrag}
-                        />
-                      ))}
-                    </Box>
-                  );
-                })}
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
-      )}
-
-      </Box>
-      <PlannerKey
-        showCommutes={showCommutes}
-        onShowCommutesChange={(show) => {
-          setShowCommutes(show);
-          saveShowCommutes(show);
-        }}
-        hasSurvey={Boolean(profile?.survey)}
-        compact={compact && viewMode !== 'month'}
-      />
       </Box>
 
       {calendarsLinked === false && (
@@ -1620,7 +1738,9 @@ export function DailyPlanner() {
           {editingBlock?.feed_id ? (
             <Box>
               <Typography variant="body2" color="text.secondary">
-                {editingBlock.feed ? `From your ${PROVIDER_LABELS[editingBlock.feed.provider]}. ` : 'From a linked calendar. '}
+                {editingBlock.feed
+                  ? `From your ${PROVIDER_LABELS[editingBlock.feed.provider]}. `
+                  : 'From a linked calendar. '}
                 To change or remove it, edit it there. SmartSched picks up the change the next time the planner opens.
               </Typography>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
@@ -1680,7 +1800,12 @@ export function DailyPlanner() {
               <Button color="error" onClick={() => handleDeleteBlock('one')} disabled={deleteInProgress}>
                 Just this one
               </Button>
-              <Button color="error" variant="contained" onClick={() => handleDeleteBlock('all')} disabled={deleteInProgress}>
+              <Button
+                color="error"
+                variant="contained"
+                onClick={() => handleDeleteBlock('all')}
+                disabled={deleteInProgress}
+              >
                 {deleteInProgress ? 'Deleting...' : 'All in the series'}
               </Button>
             </>

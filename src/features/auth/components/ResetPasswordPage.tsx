@@ -94,15 +94,10 @@ export function ResetPasswordPage() {
             </Alert>
 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Password reset links expire quickly and can only be used once.
-              Enter your email below to get a new one.
+              Password reset links expire quickly and can only be used once. Enter your email below to get a new one.
             </Typography>
 
-            <Box
-              component="form"
-              onSubmit={handleResend}
-              sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-            >
+            <Box component="form" onSubmit={handleResend} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <TextField
                 label="Email"
                 type="email"
@@ -118,12 +113,7 @@ export function ResetPasswordPage() {
                 </Alert>
               )}
 
-              <Button
-                type="submit"
-                variant="contained"
-                size="large"
-                disabled={resending}
-              >
+              <Button type="submit" variant="contained" size="large" disabled={resending}>
                 {resending ? 'Sending...' : 'Send New Reset Link'}
               </Button>
             </Box>
@@ -147,11 +137,7 @@ export function ResetPasswordPage() {
             </Alert>
           )}
 
-          <Box
-            component="form"
-            onSubmit={handleSubmit}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-          >
+          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
               label="Password"
               type={showPassword ? 'text' : 'password'}
@@ -163,18 +149,13 @@ export function ResetPasswordPage() {
                 password.length === 0
                   ? `Use at least ${MIN_PASSWORD_LENGTH} characters`
                   : passwordValid
-                  ? 'Password meets the requirement'
-                  : `At least ${MIN_PASSWORD_LENGTH} characters required`
+                    ? 'Password meets the requirement'
+                    : `At least ${MIN_PASSWORD_LENGTH} characters required`
               }
               slotProps={{
                 formHelperText: {
                   sx: {
-                    color:
-                      password.length === 0
-                        ? 'text.secondary'
-                        : passwordValid
-                        ? colors.successInk
-                        : colors.error,
+                    color: password.length === 0 ? 'text.secondary' : passwordValid ? colors.successInk : colors.error,
                     fontWeight: 500,
                   },
                 },
@@ -194,12 +175,7 @@ export function ResetPasswordPage() {
               }}
             />
 
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={submitting || !passwordValid}
-            >
+            <Button type="submit" variant="contained" size="large" disabled={submitting || !passwordValid}>
               {submitting ? 'Updating...' : 'Update Password'}
             </Button>
           </Box>

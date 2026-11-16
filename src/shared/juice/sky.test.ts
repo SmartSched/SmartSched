@@ -52,7 +52,7 @@ describe('sunTimes', () => {
 
 describe('skyTime', () => {
   const sun = { rise: 400, set: 1000 };
-  it('puts the real sunrise and sunset at the sky colours\' dawn and dusk', () => {
+  it("puts the real sunrise and sunset at the sky colours' dawn and dusk", () => {
     expect(skyTime(400, sun)).toBe(6 * 60 + 30);
     expect(skyTime(1000, sun)).toBe(19 * 60 + 30);
     expect(skyTime(0, sun)).toBe(0);

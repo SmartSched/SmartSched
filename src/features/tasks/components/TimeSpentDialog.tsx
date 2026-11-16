@@ -82,8 +82,7 @@ export function TimeSpentDialog({ task, onFinish, onCancel }: TimeSpentDialogPro
         <DialogTitle>How long did it take?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            “{task?.title}”
-            {task?.estimated_time ? ` — you estimated ${task.estimated_time} min.` : ''}
+            “{task?.title}”{task?.estimated_time ? ` — you estimated ${task.estimated_time} min.` : ''}
           </Typography>
           <TextField
             fullWidth

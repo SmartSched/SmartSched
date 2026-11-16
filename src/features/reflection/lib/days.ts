@@ -28,7 +28,12 @@ export interface DaySummary {
   classMinutes: number;
 }
 
-export function summarizeDay(date: string, blocks: TimeBlock[], reflections: ReflectionRow[], tasks: Task[]): DaySummary {
+export function summarizeDay(
+  date: string,
+  blocks: TimeBlock[],
+  reflections: ReflectionRow[],
+  tasks: Task[],
+): DaySummary {
   const dayBlocks = blocks
     .filter((b) => b.date === date)
     .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));

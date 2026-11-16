@@ -74,12 +74,24 @@ export function ProfilePage() {
           <Avatar
             src={profile?.avatar ?? undefined}
             alt=""
-            sx={{ width: 80, height: 80, backgroundColor: colors.accent100, color: colors.accent800, fontWeight: 700, fontSize: 28 }}
+            sx={{
+              width: 80,
+              height: 80,
+              backgroundColor: colors.accent100,
+              color: colors.accent800,
+              fontWeight: 700,
+              fontSize: 28,
+            }}
           >
             {(profile?.name || user?.email || '?').trim()[0]?.toUpperCase()}
           </Avatar>
           {pictureBusy && (
-            <CircularProgress size={80} thickness={2} sx={{ position: 'absolute', inset: 0 }} aria-label="Saving picture" />
+            <CircularProgress
+              size={80}
+              thickness={2}
+              sx={{ position: 'absolute', inset: 0 }}
+              aria-label="Saving picture"
+            />
           )}
         </Box>
         <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -90,7 +102,13 @@ export function ProfilePage() {
             {user?.email}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-            <Button component="label" size="small" variant="outlined" startIcon={<PhotoCameraOutlined />} disabled={pictureBusy}>
+            <Button
+              component="label"
+              size="small"
+              variant="outlined"
+              startIcon={<PhotoCameraOutlined />}
+              disabled={pictureBusy}
+            >
               {profile?.avatar ? 'Change picture' : 'Add a picture'}
               <input
                 hidden
@@ -104,7 +122,13 @@ export function ProfilePage() {
               />
             </Button>
             {profile?.avatar && (
-              <Button size="small" color="inherit" onClick={removePicture} disabled={pictureBusy} sx={{ color: 'text.secondary' }}>
+              <Button
+                size="small"
+                color="inherit"
+                onClick={removePicture}
+                disabled={pictureBusy}
+                sx={{ color: 'text.secondary' }}
+              >
                 Remove
               </Button>
             )}
@@ -117,7 +141,16 @@ export function ProfilePage() {
 
       <Card sx={{ borderRadius: '16px' }}>
         <CardContent sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 2,
+              mb: 2,
+              flexWrap: 'wrap',
+            }}
+          >
             <Box>
               <Typography variant="h6" component="h2">
                 How you like to plan
@@ -138,7 +171,15 @@ export function ProfilePage() {
               You haven't filled out the survey yet.
             </Typography>
           ) : (
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5, pt: 2, borderTop: `1px solid ${colors.grey200}` }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                gap: 2.5,
+                pt: 2,
+                borderTop: `1px solid ${colors.grey200}`,
+              }}
+            >
               <Answer question="What's already locked into your week?">
                 {COMMITMENTS.filter(({ key }) => key in survey.commitments).map(({ key, label }) => (
                   <Box key={key}>
@@ -165,7 +206,15 @@ export function ProfilePage() {
               </Answer>
               <Answer question="The calendar that describes you best" wide>
                 {calendar ? (
-                  <Box sx={{ maxWidth: '280px', mt: 0.5, borderRadius: '12px', overflow: 'hidden', border: `1px solid ${colors.grey200}` }}>
+                  <Box
+                    sx={{
+                      maxWidth: '280px',
+                      mt: 0.5,
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      border: `1px solid ${colors.grey200}`,
+                    }}
+                  >
                     <CalendarImage src={calendar.image} label={calendar.label} />
                     <Typography variant="body2" sx={{ p: 1 }}>
                       {calendar.label}

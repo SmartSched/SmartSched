@@ -1,5 +1,16 @@
 import { useState } from 'react';
-import { Alert, Box, ButtonBase, Card, CardContent, FormControlLabel, Switch, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  ButtonBase,
+  Card,
+  CardContent,
+  FormControlLabel,
+  Switch,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material';
 import { Check, DarkModeOutlined, LightModeOutlined, SettingsBrightnessOutlined } from '@mui/icons-material';
 import { useAppearance, type ThemeSetting } from '../../../app/lib/AppearanceContext';
 import { ACCENTS, ACCENT_LABELS, colors, resolveColors } from '../../../app/theme';
@@ -61,7 +72,10 @@ export function AppearanceSettings() {
               // Each swatch in the shade it would actually use in the current mode.
               const swatch = resolveColors(mode, option).accent600;
               return (
-                <Box key={option} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, width: 56 }}>
+                <Box
+                  key={option}
+                  sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, width: 56 }}
+                >
                   <ButtonBase
                     role="radio"
                     aria-checked={selected}
@@ -82,7 +96,11 @@ export function AppearanceSettings() {
                   >
                     {selected && <Check fontSize="small" />}
                   </ButtonBase>
-                  <Typography variant="caption" color={selected ? 'text.primary' : 'text.secondary'} sx={{ fontWeight: selected ? 600 : 400 }}>
+                  <Typography
+                    variant="caption"
+                    color={selected ? 'text.primary' : 'text.secondary'}
+                    sx={{ fontWeight: selected ? 600 : 400 }}
+                  >
                     {ACCENT_LABELS[option]}
                   </Typography>
                 </Box>

@@ -14,7 +14,9 @@ describe('quoteFor', () => {
 
   it('shows every line once before any repeats', () => {
     const start = Date.UTC(2026, 8, 29);
-    const days = Array.from({ length: QUOTES.length }, (_, i) => new Date(start + i * 86_400_000).toISOString().slice(0, 10));
+    const days = Array.from({ length: QUOTES.length }, (_, i) =>
+      new Date(start + i * 86_400_000).toISOString().slice(0, 10),
+    );
     const shown = days.map(quoteFor);
     expect(new Set(shown).size).toBe(QUOTES.length);
     const nextCycle = new Date(start + QUOTES.length * 86_400_000).toISOString().slice(0, 10);

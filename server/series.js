@@ -34,8 +34,7 @@ export function expandSeries({
   for (let day = first; day <= last; day++) {
     const date = new Date(day * DAY_MS);
     const dayOfMonth = date.getUTCDate();
-    const isMonthlyDate =
-      recurrence_type === "monthly_date" && dayOfMonth === day_of_month;
+    const isMonthlyDate = recurrence_type === "monthly_date" && dayOfMonth === day_of_month;
     const isMonthlyWeekday =
       recurrence_type === "monthly_weekday" &&
       weekday(day) === monthlyWeekday &&

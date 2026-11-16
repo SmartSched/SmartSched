@@ -54,7 +54,20 @@ export function useAuthForm() {
   };
 
   return {
-    mode, name, email, password, showPassword, error, message, submitting, passwordTooShort,
-    setName, setEmail, setPassword, setShowPassword, changeMode, submit,
+    mode,
+    name,
+    email,
+    password,
+    showPassword,
+    error,
+    message,
+    submitting,
+    passwordTooShort,
+    setName,
+    setEmail,
+    setPassword,
+    setShowPassword,
+    changeMode,
+    submit,
   };
 }

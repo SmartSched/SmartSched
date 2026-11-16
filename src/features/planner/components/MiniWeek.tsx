@@ -25,9 +25,19 @@ interface MiniWeekProps {
 
 // A small week at a glance: the week's existing blocks in their colours, faded, and the blocks an option
 // would add in the solid accent colour on top, so options can be compared side by side.
-export function MiniWeek({ dates, existing, added, downtime, startHour = 7, endHour = 23, height = 200, label }: MiniWeekProps) {
+export function MiniWeek({
+  dates,
+  existing,
+  added,
+  downtime,
+  startHour = 7,
+  endHour = 23,
+  height = 200,
+  label,
+}: MiniWeekProps) {
   const span = (endHour - startHour) * 60;
-  const y = (minutes: number) => ((Math.min(Math.max(minutes, startHour * 60), endHour * 60) - startHour * 60) / span) * 100;
+  const y = (minutes: number) =>
+    ((Math.min(Math.max(minutes, startHour * 60), endHour * 60) - startHour * 60) / span) * 100;
 
   const bar = (block: MiniBlock, key: string, isAdded: boolean) => {
     const top = y(toMinutes(block.start_time));
@@ -78,7 +88,14 @@ export function MiniWeek({ dates, existing, added, downtime, startHour = 7, endH
               return bottom > top ? (
                 <Box
                   key={range.start}
-                  sx={{ position: 'absolute', left: 0, right: 0, top: `${top}%`, height: `${bottom - top}%`, backgroundColor: colors.surfaceMuted }}
+                  sx={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: `${top}%`,
+                    height: `${bottom - top}%`,
+                    backgroundColor: colors.surfaceMuted,
+                  }}
                 />
               ) : null;
             })}

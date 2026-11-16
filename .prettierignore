@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+server/node_modules/
+supabase/.temp/
+ml/**/outputs/
+ml/**/train/
+ml/outs from csp/

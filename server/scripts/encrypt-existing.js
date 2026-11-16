@@ -8,12 +8,7 @@
 import "dotenv/config";
 import ws from "ws";
 import { createClient } from "@supabase/supabase-js";
-import {
-  ENCRYPTED_COLUMNS,
-  encryptionKey,
-  encryptValue,
-  isEncrypted,
-} from "../crypto.js";
+import { ENCRYPTED_COLUMNS, encryptionKey, encryptValue, isEncrypted } from "../crypto.js";
 
 const PAGE = 500;
 const apply = process.argv.includes("--apply");
@@ -27,11 +22,10 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in server/.env");
   process.exit(1);
 }
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false }, realtime: { transport: ws } },
-);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+  realtime: { transport: ws },
+});
 
 let total = 0;
 for (const [table, columns] of Object.entries(ENCRYPTED_COLUMNS)) {
@@ -50,16 +44,12 @@ for (const [table, columns] of Object.entries(ENCRYPTED_COLUMNS)) {
       const patch = {};
       for (const column of columns) {
         const value = row[column];
-        if (value !== null && value !== undefined && !isEncrypted(value))
-          patch[column] = encryptValue(value, key);
+        if (value !== null && value !== undefined && !isEncrypted(value)) patch[column] = encryptValue(value, key);
       }
       if (Object.keys(patch).length === 0) continue;
       rowsChanged++;
       if (!apply) continue;
-      const { error: updateError } = await supabase
-        .from(table)
-        .update(patch)
-        .eq("id", row.id);
+      const { error: updateError } = await supabase.from(table).update(patch).eq("id", row.id);
       if (updateError) {
         console.error(`Could not update ${table} ${row.id}:`, updateError.message);
         process.exit(1);
@@ -71,7 +61,5 @@ for (const [table, columns] of Object.entries(ENCRYPTED_COLUMNS)) {
   total += rowsChanged;
 }
 console.log(
-  apply
-    ? `Done. ${total} row(s) encrypted.`
-    : `${total} row(s) to encrypt. Run again with --apply to encrypt them.`,
+  apply ? `Done. ${total} row(s) encrypted.` : `${total} row(s) to encrypt. Run again with --apply to encrypt them.`,
 );

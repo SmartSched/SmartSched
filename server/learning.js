@@ -16,24 +16,19 @@ function minutesBetween(start, end) {
 }
 
 function slotFeatures(slot, hours, days, sessions) {
-  if (!slot || typeof slot.date !== "string" || !TIME.test(slot.start ?? ""))
-    return;
+  if (!slot || typeof slot.date !== "string" || !TIME.test(slot.start ?? "")) return;
   const match = TIME.exec(slot.start);
   const hour = Number(match[1]);
   hours[hour] = (hours[hour] ?? 0) + 1;
   const date = new Date(`${slot.date}T00:00:00Z`);
-  if (!Number.isNaN(date.getTime()))
-    days[date.getUTCDay()] = (days[date.getUTCDay()] ?? 0) + 1;
+  if (!Number.isNaN(date.getTime())) days[date.getUTCDay()] = (days[date.getUTCDay()] ?? 0) + 1;
   const duration = minutesBetween(slot.start, slot.end);
   if (duration) sessions.push(duration);
 }
 
-const rounded = (value, digits = 1) =>
-  Math.round(value * 10 ** digits) / 10 ** digits;
+const rounded = (value, digits = 1) => Math.round(value * 10 ** digits) / 10 ** digits;
 const average = (values) =>
-  values.length
-    ? rounded(values.reduce((sum, value) => sum + value, 0) / values.length)
-    : null;
+  values.length ? rounded(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
 
 // Returns aggregate-only model features. `data` is intentionally never copied wholesale into this result.
 export function summarizeLearningEvents(events = []) {
@@ -57,14 +52,11 @@ export function summarizeLearningEvents(events = []) {
     if (event.event_type in counts) counts[event.event_type] += 1;
     const data = event.data && typeof event.data === "object" ? event.data : {};
     if (event.event_type === "schedule_accepted") {
-      for (const block of Array.isArray(data.planned_blocks)
-        ? data.planned_blocks
-        : []) {
+      for (const block of Array.isArray(data.planned_blocks) ? data.planned_blocks : []) {
         slotFeatures(block, preferredHours, preferredDays, sessionLengths);
       }
     }
-    if (event.event_type === "study_block_moved")
-      slotFeatures(data.to, preferredHours, preferredDays, sessionLengths);
+    if (event.event_type === "study_block_moved") slotFeatures(data.to, preferredHours, preferredDays, sessionLengths);
     if (event.event_type === "task_completed") {
       const type = data.task_type;
       const estimated = Number(data.estimated_minutes);
@@ -82,10 +74,7 @@ export function summarizeLearningEvents(events = []) {
         value.count += 1;
         estimates[type] = value;
       }
-      if (
-        typeof data.due_date === "string" &&
-        typeof event.occurred_at === "string"
-      ) {
+      if (typeof data.due_date === "string" && typeof event.occurred_at === "string") {
         const due = Date.parse(data.due_date);
         const completed = Date.parse(event.occurred_at);
         if (!Number.isNaN(due) && !Number.isNaN(completed)) {
@@ -125,18 +114,13 @@ export function summarizeLearningEvents(events = []) {
       moved_blocks: counts.study_block_moved,
       deleted_or_skipped_blocks: counts.study_block_deleted,
       rescheduled_block_rate: scheduled
-        ? rounded(
-            (counts.study_block_moved + counts.study_block_deleted) / scheduled,
-            2,
-          )
+        ? rounded((counts.study_block_moved + counts.study_block_deleted) / scheduled, 2)
         : null,
     },
     completion_timing: {
       completed_tasks: counts.task_completed,
       tasks_with_due_date: completionsWithDueDate,
-      average_hours_before_due: completionsWithDueDate
-        ? rounded(totalHoursBeforeDue / completionsWithDueDate)
-        : null,
+      average_hours_before_due: completionsWithDueDate ? rounded(totalHoursBeforeDue / completionsWithDueDate) : null,
     },
     event_counts: counts,
   };
@@ -155,9 +139,7 @@ export function isValidPreferenceJson(value) {
     return false;
   if (
     value.sleep !== undefined &&
-    (!value.sleep ||
-      typeof value.sleep !== "object" ||
-      !TIME_OF_DAY.test(value.sleep.bedtime ?? ""))
+    (!value.sleep || typeof value.sleep !== "object" || !TIME_OF_DAY.test(value.sleep.bedtime ?? ""))
   )
     return false;
   const preferenceKinds = new Set([
@@ -170,36 +152,22 @@ export function isValidPreferenceJson(value) {
     "distribution",
   ]);
   for (const item of value.preferences) {
-    if (!item || typeof item !== "object" || !preferenceKinds.has(item.kind))
-      return false;
-    if (
-      item.kind === "session_length" &&
-      (!Number.isFinite(item.ideal) || item.ideal < 15 || item.ideal > 180)
-    )
+    if (!item || typeof item !== "object" || !preferenceKinds.has(item.kind)) return false;
+    if (item.kind === "session_length" && (!Number.isFinite(item.ideal) || item.ideal < 15 || item.ideal > 180))
       return false;
     if (
       item.kind === "daily_load" &&
-      (!Number.isFinite(item.max_minutes) ||
-        item.max_minutes < 30 ||
-        item.max_minutes > 720)
+      (!Number.isFinite(item.max_minutes) || item.max_minutes < 30 || item.max_minutes > 720)
     )
       return false;
-    if (
-      item.kind === "min_gap" &&
-      (!Number.isFinite(item.minutes) || item.minutes < 5 || item.minutes > 90)
-    )
+    if (item.kind === "min_gap" && (!Number.isFinite(item.minutes) || item.minutes < 5 || item.minutes > 90))
       return false;
     if (
       item.kind === "deadline_buffer" &&
-      (!Number.isFinite(item.hours_before) ||
-        item.hours_before < 0 ||
-        item.hours_before > 168)
+      (!Number.isFinite(item.hours_before) || item.hours_before < 0 || item.hours_before > 168)
     )
       return false;
-    if (
-      item.kind === "distribution" &&
-      !["front_loaded", "even", "spaced", "clustered"].includes(item.style)
-    )
+    if (item.kind === "distribution" && !["front_loaded", "even", "spaced", "clustered"].includes(item.style))
       return false;
     if (
       item.kind === "activity_window" &&

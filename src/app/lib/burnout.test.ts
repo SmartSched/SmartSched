@@ -13,8 +13,17 @@ function block(date: string, start_time: string, end_time: string, type: TimeBlo
 
 function task(due_date: string | null, completed = false): Task {
   return {
-    id: String(nextId++), title: 't', description: null, completed, priority: 'medium', type: 'homework',
-    due_date, estimated_time: null, completed_at: null, created_at: '2026-09-01T12:00:00Z', time_spent: 0,
+    id: String(nextId++),
+    title: 't',
+    description: null,
+    completed,
+    priority: 'medium',
+    type: 'homework',
+    due_date,
+    estimated_time: null,
+    completed_at: null,
+    created_at: '2026-09-01T12:00:00Z',
+    time_spent: 0,
   };
 }
 
@@ -38,10 +47,14 @@ describe('burnoutWarnings', () => {
       block('2026-09-28', '17:00', '19:30'),
     ];
     const [warning] = burnoutWarnings(blocks, [], WEEK).filter((w) => w.kind === 'long_day');
-    expect(warning).toEqual({ kind: 'long_day', date: '2026-09-28', message: 'Monday: 10.5 hours of classes, work and study' });
+    expect(warning).toEqual({
+      kind: 'long_day',
+      date: '2026-09-28',
+      message: 'Monday: 10.5 hours of classes, work and study',
+    });
   });
 
-  it('doesn\'t count personal time, meals or breaks toward a long day', () => {
+  it("doesn't count personal time, meals or breaks toward a long day", () => {
     const blocks = [
       block('2026-09-28', '08:00', '14:00', 'class'),
       block('2026-09-28', '14:30', '19:00', 'personal'),
@@ -86,12 +99,24 @@ describe('burnoutWarnings', () => {
   });
 
   it('flags three or more unfinished tasks due on the same day', () => {
-    const tasks = [task('2026-10-02T09:00'), task('2026-10-02T17:00'), task('2026-10-02T23:59'), task('2026-10-03T23:59')];
-    expect(burnoutWarnings([], tasks, WEEK)).toEqual([{ kind: 'due_pileup', date: '2026-10-02', message: 'Friday: 3 tasks due' }]);
+    const tasks = [
+      task('2026-10-02T09:00'),
+      task('2026-10-02T17:00'),
+      task('2026-10-02T23:59'),
+      task('2026-10-03T23:59'),
+    ];
+    expect(burnoutWarnings([], tasks, WEEK)).toEqual([
+      { kind: 'due_pileup', date: '2026-10-02', message: 'Friday: 3 tasks due' },
+    ]);
   });
 
-  it('doesn\'t count finished tasks or ones due outside the week', () => {
-    const tasks = [task('2026-10-02T09:00'), task('2026-10-02T17:00'), task('2026-10-02T23:59', true), task('2026-10-05T23:59')];
+  it("doesn't count finished tasks or ones due outside the week", () => {
+    const tasks = [
+      task('2026-10-02T09:00'),
+      task('2026-10-02T17:00'),
+      task('2026-10-02T23:59', true),
+      task('2026-10-05T23:59'),
+    ];
     expect(burnoutWarnings([], tasks, WEEK)).toEqual([]);
   });
 });

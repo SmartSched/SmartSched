@@ -100,12 +100,21 @@ export function PlannerKey({
       <Card
         component="aside"
         aria-label="Planner key"
-        sx={{ flex: '1 1 200px', maxWidth: { md: compact ? 200 : 260 }, p: compact ? 2 : 2.5, position: { md: 'sticky' }, top: { md: 88 } }}
+        sx={{
+          flex: '1 1 200px',
+          maxWidth: { md: compact ? 200 : 260 },
+          p: compact ? 2 : 2.5,
+          position: { md: 'sticky' },
+          top: { md: 88 },
+        }}
       >
         <Typography variant="h6" component="h2" sx={{ fontSize: '1rem', mb: 1.5 }}>
           Key
         </Typography>
-        <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: compact ? 0.75 : 1.25 }}>
+        <Box
+          component="ul"
+          sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: compact ? 0.75 : 1.25 }}
+        >
           {KEY_TYPES.map((type) => (
             <Row key={type} swatch={<Swatch color={categoryColor(type)} />} label={CATEGORY_LABELS[type]} />
           ))}
@@ -134,7 +143,14 @@ export function PlannerKey({
             swatch={
               <Box
                 aria-hidden
-                sx={{ width: 14, height: 14, borderRadius: '4px', boxSizing: 'border-box', border: `1.5px dashed ${colors.accent600}`, backgroundColor: colors.accent100 }}
+                sx={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '4px',
+                  boxSizing: 'border-box',
+                  border: `1.5px dashed ${colors.accent600}`,
+                  backgroundColor: colors.accent100,
+                }}
               />
             }
             label="Reflect on your day"

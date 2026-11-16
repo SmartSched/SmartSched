@@ -2,7 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { layoutBlocks, minutesSoFar, toMinutes, type TimeBlock } from './planner';
 
 function block(id: string, start_time: string, end_time: string): TimeBlock {
-  return { id, date: '2026-09-29', start_time, end_time, activity: id, type: 'study', task_id: null, completed: false, completed_at: null };
+  return {
+    id,
+    date: '2026-09-29',
+    start_time,
+    end_time,
+    activity: id,
+    type: 'study',
+    task_id: null,
+    completed: false,
+    completed_at: null,
+  };
 }
 
 // id -> [column, columns], easier to read than the full objects.
@@ -20,7 +30,7 @@ describe('toMinutes', () => {
 });
 
 describe('layoutBlocks', () => {
-  it('gives blocks that don\'t overlap the full width', () => {
+  it("gives blocks that don't overlap the full width", () => {
     expect(layout([block('a', '09:00', '10:00'), block('b', '11:00', '12:00')])).toEqual({ a: [0, 1], b: [0, 1] });
   });
 
@@ -48,13 +58,13 @@ describe('layoutBlocks', () => {
     expect(Object.values(layout(blocks)).map(([, columns]) => columns)).toEqual([3, 3, 3]);
   });
 
-  it('counts a very short block as its drawn height, so it doesn\'t overlap the next one on screen', () => {
+  it("counts a very short block as its drawn height, so it doesn't overlap the next one on screen", () => {
     const blocks = [block('a', '09:00', '09:05'), block('b', '09:15', '10:00')];
     expect(layout(blocks)).toEqual({ a: [0, 1], b: [0, 1] });
     expect(layout(blocks, 25)).toEqual({ a: [0, 2], b: [1, 2] });
   });
 
-  it('doesn\'t depend on the order blocks arrive in', () => {
+  it("doesn't depend on the order blocks arrive in", () => {
     const blocks = [block('c', '10:00', '11:30'), block('a', '09:00', '10:00'), block('b', '09:30', '11:00')];
     expect(layout(blocks)).toEqual({ a: [0, 2], b: [1, 2], c: [0, 2] });
   });
@@ -62,7 +72,15 @@ describe('layoutBlocks', () => {
 
 describe('minutesSoFar', () => {
   const taskBlock = (id: string, date: string, start_time: string, end_time: string, task_id = 'essay'): TimeBlock => ({
-    id, date, start_time, end_time, activity: 'Essay', type: 'task', task_id, completed: false, completed_at: null,
+    id,
+    date,
+    start_time,
+    end_time,
+    activity: 'Essay',
+    type: 'task',
+    task_id,
+    completed: false,
+    completed_at: null,
   });
   const blocks = [
     taskBlock('mon', '2026-09-28', '14:00', '15:00'),
@@ -71,7 +89,7 @@ describe('minutesSoFar', () => {
     taskBlock('other', '2026-09-28', '09:00', '10:00', 'reading'),
   ];
 
-  it('adds up the task\'s blocks that have happened, counting one in progress up to now', () => {
+  it("adds up the task's blocks that have happened, counting one in progress up to now", () => {
     expect(minutesSoFar(blocks, 'essay', new Date(2026, 8, 29, 11, 0))).toBe(60 + 60);
     expect(minutesSoFar(blocks, 'essay', new Date(2026, 8, 29, 12, 0))).toBe(60 + 90);
     expect(minutesSoFar(blocks, 'essay', new Date(2026, 9, 1, 9, 0))).toBe(60 + 90 + 60);

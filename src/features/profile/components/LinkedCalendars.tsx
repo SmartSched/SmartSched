@@ -1,5 +1,16 @@
 import { useEffect, useState, FormEvent } from 'react';
-import { Alert, Box, Button, Card, CardContent, Collapse, IconButton, Link, TextField, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Collapse,
+  IconButton,
+  Link,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { DeleteOutline, Sync } from '@mui/icons-material';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { apiDelete, apiGet, apiPost } from '../../../app/lib/api';
@@ -77,9 +88,9 @@ export function LinkedCalendars() {
           Linked calendars
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Bring in events from Google Calendar or Outlook. They show in your planner as busy time, and suggested
-          plans fit around them. To change an event, edit it in that calendar; SmartSched picks up changes each
-          time the planner opens.
+          Bring in events from Google Calendar or Outlook. They show in your planner as busy time, and suggested plans
+          fit around them. To change an event, edit it in that calendar; SmartSched picks up changes each time the
+          planner opens.
         </Typography>
 
         {feeds && feeds.length > 0 && (
@@ -87,7 +98,15 @@ export function LinkedCalendars() {
             {feeds.map((feed) => (
               <Box
                 key={feed.id}
-                sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: 1, borderColor: 'divider', borderRadius: '12px' }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  p: 1.5,
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: '12px',
+                }}
               >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -95,7 +114,9 @@ export function LinkedCalendars() {
                   </Typography>
                   <Typography variant="caption" color="text.secondary" noWrap component="div">
                     {feed.link}
-                    {feed.last_synced_at ? ` · synced ${formatDistanceToNow(parseISO(feed.last_synced_at), { addSuffix: true })}` : ''}
+                    {feed.last_synced_at
+                      ? ` · synced ${formatDistanceToNow(parseISO(feed.last_synced_at), { addSuffix: true })}`
+                      : ''}
                   </Typography>
                   {feed.last_error && (
                     <Typography variant="caption" color="error" component="div">
@@ -116,7 +137,11 @@ export function LinkedCalendars() {
           </Box>
         )}
 
-        <Box component="form" onSubmit={handleAdd} sx={{ display: 'flex', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+        <Box
+          component="form"
+          onSubmit={handleAdd}
+          sx={{ display: 'flex', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}
+        >
           <TextField
             size="small"
             fullWidth
@@ -155,8 +180,8 @@ export function LinkedCalendars() {
           </Typography>
         </Collapse>
         <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1.5 }}>
-          The link gives read access to that calendar, so it's encrypted before it's saved and never shown in full
-          here. The events brought in are encrypted too. All-day events and ones marked free aren't brought in.
+          The link gives read access to that calendar, so it's encrypted before it's saved and never shown in full here.
+          The events brought in are encrypted too. All-day events and ones marked free aren't brought in.
         </Typography>
 
         {error && (

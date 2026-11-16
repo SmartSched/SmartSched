@@ -62,7 +62,9 @@ export function toMinutes(time: string) {
 // block in a group of overlapping blocks is as wide as that group's column count allows.
 // minVisualMinutes: the shortest a block is drawn, so a 5-minute block still counts as taking up that much room.
 export function layoutBlocks(blocks: TimeBlock[], minVisualMinutes = 0): PlacedBlock[] {
-  const sorted = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time) || toMinutes(a.end_time) - toMinutes(b.end_time));
+  const sorted = [...blocks].sort(
+    (a, b) => toMinutes(a.start_time) - toMinutes(b.start_time) || toMinutes(a.end_time) - toMinutes(b.end_time),
+  );
   const placed: PlacedBlock[] = [];
   let group: PlacedBlock[] = [];
   let columnEnds: number[] = [];

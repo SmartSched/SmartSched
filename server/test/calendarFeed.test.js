@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  checkFeedUrl,
-  feedBlocks,
-  isTimeZone,
-  maskFeedUrl,
-} from "../calendarFeed.js";
+import { checkFeedUrl, feedBlocks, isTimeZone, maskFeedUrl } from "../calendarFeed.js";
 
 const ics = (events) =>
   [
@@ -39,38 +34,25 @@ const window = {
 describe("checkFeedUrl", () => {
   it("accepts Google and Outlook ics links, and webcal ones", () => {
     expect(
-      checkFeedUrl(
-        "https://calendar.google.com/calendar/ical/me%40gmail.com/private-abc/basic.ics",
-      ).provider,
+      checkFeedUrl("https://calendar.google.com/calendar/ical/me%40gmail.com/private-abc/basic.ics").provider,
     ).toBe("google");
-    expect(
-      checkFeedUrl(
-        " webcal://outlook.office365.com/owa/calendar/x@y.com/abc/calendar.ics",
-      ).url,
-    ).toMatch(/^https:\/\/outlook/);
+    expect(checkFeedUrl(" webcal://outlook.office365.com/owa/calendar/x@y.com/abc/calendar.ics").url).toMatch(
+      /^https:\/\/outlook/,
+    );
   });
 
   it("rejects other hosts, http, and non-ics pages", () => {
     expect(checkFeedUrl("https://localhost/calendar.ics").error).toBeTruthy();
-    expect(
-      checkFeedUrl("http://calendar.google.com/calendar/ical/x/basic.ics")
-        .error,
-    ).toBeTruthy();
-    expect(
-      checkFeedUrl("https://calendar.google.com/calendar/embed?src=x").error,
-    ).toBeTruthy();
-    expect(
-      checkFeedUrl("https://calendar.google.com.evil.com/x.ics").error,
-    ).toBeTruthy();
+    expect(checkFeedUrl("http://calendar.google.com/calendar/ical/x/basic.ics").error).toBeTruthy();
+    expect(checkFeedUrl("https://calendar.google.com/calendar/embed?src=x").error).toBeTruthy();
+    expect(checkFeedUrl("https://calendar.google.com.evil.com/x.ics").error).toBeTruthy();
     expect(checkFeedUrl(42).error).toBeTruthy();
   });
 
   it("masks the secret part", () => {
-    expect(
-      maskFeedUrl(
-        "https://calendar.google.com/calendar/ical/me/private-abc/basic.ics",
-      ),
-    ).toBe("calendar.google.com/…/basic.ics");
+    expect(maskFeedUrl("https://calendar.google.com/calendar/ical/me/private-abc/basic.ics")).toBe(
+      "calendar.google.com/…/basic.ics",
+    );
   });
 });
 
@@ -107,20 +89,10 @@ describe("feedBlocks", () => {
   });
 
   it("converts UTC times into the user time zone", () => {
-    const blocks = feedBlocks(
-      ics([
-        [
-          "UID:1",
-          "SUMMARY:Call",
-          "DTSTART:20261110T150000Z",
-          "DTEND:20261110T153000Z",
-        ],
-      ]),
-      {
-        ...window,
-        timeZone: "America/Los_Angeles",
-      },
-    );
+    const blocks = feedBlocks(ics([["UID:1", "SUMMARY:Call", "DTSTART:20261110T150000Z", "DTEND:20261110T153000Z"]]), {
+      ...window,
+      timeZone: "America/Los_Angeles",
+    });
     expect(blocks[0]).toMatchObject({
       date: "2026-11-10",
       start_time: "07:00:00",
@@ -157,9 +129,7 @@ describe("feedBlocks", () => {
       ]),
       window,
     );
-    expect(
-      blocks.map((b) => `${b.date} ${b.start_time} ${b.activity}`),
-    ).toEqual([
+    expect(blocks.map((b) => `${b.date} ${b.start_time} ${b.activity}`)).toEqual([
       "2026-11-09 10:00:00 Lecture",
       "2026-11-10 10:00:00 Lecture",
       "2026-11-13 14:00:00 Lecture (moved)",
@@ -171,24 +141,9 @@ describe("feedBlocks", () => {
   it("skips all-day and free events, and splits ones past midnight", () => {
     const blocks = feedBlocks(
       ics([
-        [
-          "UID:a",
-          "SUMMARY:Holiday",
-          "DTSTART;VALUE=DATE:20261111",
-          "DTEND;VALUE=DATE:20261112",
-        ],
-        [
-          "UID:f",
-          "SUMMARY:Maybe",
-          "TRANSP:TRANSPARENT",
-          "DTSTART:20261110T150000Z",
-          "DTEND:20261110T160000Z",
-        ],
-        [
-          "UID:n",
-          "DTSTART;TZID=America/New_York:20261110T220000",
-          "DTEND;TZID=America/New_York:20261111T010000",
-        ],
+        ["UID:a", "SUMMARY:Holiday", "DTSTART;VALUE=DATE:20261111", "DTEND;VALUE=DATE:20261112"],
+        ["UID:f", "SUMMARY:Maybe", "TRANSP:TRANSPARENT", "DTSTART:20261110T150000Z", "DTEND:20261110T160000Z"],
+        ["UID:n", "DTSTART;TZID=America/New_York:20261110T220000", "DTEND;TZID=America/New_York:20261111T010000"],
       ]),
       window,
     );
@@ -211,17 +166,10 @@ describe("feedBlocks", () => {
   });
 
   it("leaves out events outside the window", () => {
-    expect(
-      feedBlocks(
-        ics([["UID:1", "DTSTART:20270110T150000Z", "DTEND:20270110T160000Z"]]),
-        window,
-      ),
-    ).toEqual([]);
+    expect(feedBlocks(ics([["UID:1", "DTSTART:20270110T150000Z", "DTEND:20270110T160000Z"]]), window)).toEqual([]);
   });
 
   it("throws on text that is not a calendar", () => {
-    expect(() => feedBlocks("<html>nope</html>", window)).toThrow(
-      /didn't return a calendar/,
-    );
+    expect(() => feedBlocks("<html>nope</html>", window)).toThrow(/didn't return a calendar/);
   });
 });

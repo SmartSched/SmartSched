@@ -28,9 +28,7 @@ function title(place) {
 // Returns { add: [block rows without user_id], tight: [{ date, from, to, gap, needed, after, before }] }.
 export function planCommutes(dayBlocks, travelMinutes) {
   const blocks = dayBlocks.filter((b) => !b.auto);
-  const located = blocks
-    .filter((b) => b.location)
-    .sort((a, b) => minutes(a.start_time) - minutes(b.start_time));
+  const located = blocks.filter((b) => b.location).sort((a, b) => minutes(a.start_time) - minutes(b.start_time));
   const add = [];
   const tight = [];
   if (located.length === 0) return { add, tight };
@@ -40,21 +38,11 @@ export function planCommutes(dayBlocks, travelMinutes) {
   // run into another block. Returns false when it doesn't fit.
   const trip = (from, to, start, end, gapStart, gapEnd, ends) => {
     // A commute the user put there themselves already covers this trip.
-    if (
-      blocks.some(
-        (b) =>
-          b.type === "commute" &&
-          minutes(b.start_time) < gapEnd &&
-          gapStart < minutes(b.end_time),
-      )
-    ) {
+    if (blocks.some((b) => b.type === "commute" && minutes(b.start_time) < gapEnd && gapStart < minutes(b.end_time))) {
       return true;
     }
     const inTheWay = blocks.some(
-      (b) =>
-        !ends.includes(b) &&
-        minutes(b.start_time) < end &&
-        start < minutes(b.end_time),
+      (b) => !ends.includes(b) && minutes(b.start_time) < end && start < minutes(b.end_time),
     );
     if (start < gapStart || end > gapEnd || inTheWay) return false;
     add.push({
@@ -72,8 +60,7 @@ export function planCommutes(dayBlocks, travelMinutes) {
   };
 
   const first = located[0];
-  const fromHome =
-    first.location !== HOME && travelMinutes[pairKey(HOME, first.location)];
+  const fromHome = first.location !== HOME && travelMinutes[pairKey(HOME, first.location)];
   if (fromHome) {
     const arrive = minutes(first.start_time);
     trip(HOME, first.location, arrive - fromHome, arrive, 0, arrive, [first]);
@@ -86,17 +73,7 @@ export function planCommutes(dayBlocks, travelMinutes) {
     if (from.location === to.location || !needed) continue;
     const gapStart = minutes(from.end_time);
     const gapEnd = minutes(to.start_time);
-    if (
-      !trip(
-        from.location,
-        to.location,
-        gapEnd - needed,
-        gapEnd,
-        gapStart,
-        gapEnd,
-        [from, to],
-      )
-    ) {
+    if (!trip(from.location, to.location, gapEnd - needed, gapEnd, gapStart, gapEnd, [from, to])) {
       // gap is 0 or less when the blocks touch or overlap.
       tight.push({
         date,
@@ -111,11 +88,8 @@ export function planCommutes(dayBlocks, travelMinutes) {
   }
 
   // Whichever block ends last (with overlapping blocks that isn't always the one that starts last).
-  const last = located.reduce((latest, b) =>
-    minutes(b.end_time) > minutes(latest.end_time) ? b : latest,
-  );
-  const toHome =
-    last.location !== HOME && travelMinutes[pairKey(last.location, HOME)];
+  const last = located.reduce((latest, b) => (minutes(b.end_time) > minutes(latest.end_time) ? b : latest));
+  const toHome = last.location !== HOME && travelMinutes[pairKey(last.location, HOME)];
   if (toHome) {
     const leave = minutes(last.end_time);
     trip(last.location, HOME, leave, leave + toHome, leave, DAY_END, [last]);

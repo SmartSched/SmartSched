@@ -34,7 +34,13 @@ const STOPS: Record<ColorMode, Stop[]> = {
 function lerpHex(a: string, b: string, t: number) {
   const ch = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const [ca, cb] = [ch(a), ch(b)];
-  return `#${ca.map((v, i) => Math.round(v + (cb[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
+  return `#${ca
+    .map((v, i) =>
+      Math.round(v + (cb[i] - v) * t)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
 }
 
 export function skyColors(minutes: number, mode: ColorMode) {
@@ -62,10 +68,20 @@ export function sunTimes(date: string, lat: number, lon: number, utcOffset: numb
   const dayOfYear = Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(y, 0, 0)) / 86_400_000);
   const g = ((2 * Math.PI) / 365) * (dayOfYear - 1);
   const eqTime =
-    229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+    229.18 *
+    (0.000075 +
+      0.001868 * Math.cos(g) -
+      0.032077 * Math.sin(g) -
+      0.014615 * Math.cos(2 * g) -
+      0.040849 * Math.sin(2 * g));
   const decl =
-    0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) +
-    0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+    0.006918 -
+    0.399912 * Math.cos(g) +
+    0.070257 * Math.sin(g) -
+    0.006758 * Math.cos(2 * g) +
+    0.000907 * Math.sin(2 * g) -
+    0.002697 * Math.cos(3 * g) +
+    0.00148 * Math.sin(3 * g);
   const rad = Math.PI / 180;
   const cosHa = Math.cos(90.833 * rad) / (Math.cos(lat * rad) * Math.cos(decl)) - Math.tan(lat * rad) * Math.tan(decl);
   if (cosHa < -1 || cosHa > 1) return DEFAULT_SUN;

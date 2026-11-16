@@ -10,10 +10,8 @@ export function parseGradioEvents(text) {
   let event = null;
   for (const line of text.split("\n")) {
     if (line.startsWith("event:")) event = line.slice(6).trim();
-    else if (line.startsWith("data:") && event === "complete")
-      return { result: JSON.parse(line.slice(5))[0] };
-    else if (line.startsWith("data:") && event === "error")
-      return { error: line.slice(5).trim() || "error" };
+    else if (line.startsWith("data:") && event === "complete") return { result: JSON.parse(line.slice(5))[0] };
+    else if (line.startsWith("data:") && event === "error") return { error: line.slice(5).trim() || "error" };
   }
   return { error: "the stream ended without a result" };
 }
@@ -23,8 +21,7 @@ export async function askModel(bundle, survey, behaviorSummary = null) {
   const base = `${process.env.MODEL_URL}/gradio_api/call/prefs`;
   // The Space is private, so Hugging Face wants a token; the token's (PRO) account pays the GPU quota.
   const headers = { "Content-Type": "application/json" };
-  if (process.env.MODEL_HF_TOKEN)
-    headers.Authorization = `Bearer ${process.env.MODEL_HF_TOKEN}`;
+  if (process.env.MODEL_HF_TOKEN) headers.Authorization = `Bearer ${process.env.MODEL_HF_TOKEN}`;
   const key = process.env.MODEL_API_KEY ?? process.env.SERVICE_API_KEY ?? "";
   const signal = AbortSignal.timeout(MODEL_TIMEOUT_MS);
 

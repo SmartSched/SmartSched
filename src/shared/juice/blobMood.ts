@@ -16,7 +16,11 @@ export function isSleepTime(minutes: number, survey: Partial<SurveyAnswers> | nu
 }
 
 // The mood it settles back into when nothing is happening.
-export function restingMood(minutes: number, survey: Partial<SurveyAnswers> | null | undefined, path: string): BlobMood {
+export function restingMood(
+  minutes: number,
+  survey: Partial<SurveyAnswers> | null | undefined,
+  path: string,
+): BlobMood {
   if (isSleepTime(minutes, survey)) return 'sleep';
   if (path.startsWith('/reflection')) return 'yawn';
   return 'idle';

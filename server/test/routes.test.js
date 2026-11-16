@@ -17,8 +17,7 @@ const fake = vi.hoisted(() => {
           // Awaiting the chain runs the "query".
           if (method === "then") {
             const result = state.results.shift() ?? { data: [], error: null };
-            return (resolve, reject) =>
-              Promise.resolve(result).then(resolve, reject);
+            return (resolve, reject) => Promise.resolve(result).then(resolve, reject);
           }
           return (...args) => {
             query.calls.push([method, ...args]);
@@ -113,14 +112,11 @@ describe("every route", () => {
     expect(fake.state.queries).toHaveLength(0);
   });
 
-  it.each(ROUTES)(
-    "%s %s turns away a token Supabase rejects",
-    async (method, path) => {
-      fake.state.user = null;
-      const res = await request(app)[method](path).set(AUTH);
-      expect(res.status).toBe(401);
-    },
-  );
+  it.each(ROUTES)("%s %s turns away a token Supabase rejects", async (method, path) => {
+    fake.state.user = null;
+    const res = await request(app)[method](path).set(AUTH);
+    expect(res.status).toBe(401);
+  });
 
   it("unknown API routes, including the removed habits ones, get a JSON 404", async () => {
     for (const path of ["/api/nope", "/api/habits"]) {
@@ -131,11 +127,7 @@ describe("every route", () => {
   });
 
   it("a body that isn't JSON gets a JSON 400, not an HTML page", async () => {
-    const res = await request(app)
-      .post("/api/tasks")
-      .set(AUTH)
-      .set("Content-Type", "application/json")
-      .send("{bad");
+    const res = await request(app).post("/api/tasks").set(AUTH).set("Content-Type", "application/json").send("{bad");
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "The request was not valid JSON" });
   });
@@ -152,9 +144,7 @@ describe("every route", () => {
     ];
     const res = await request(app).get("/api/tasks").set(AUTH);
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe(
-      "Something went wrong on our end. Try again in a moment.",
-    );
+    expect(res.body.error).toBe("Something went wrong on our end. Try again in a moment.");
     expect(JSON.stringify(res.body)).not.toMatch(/constraint/);
     expect(log).toHaveBeenCalled();
   });
@@ -162,17 +152,11 @@ describe("every route", () => {
 
 describe("tasks", () => {
   it("lists tasks newest first", async () => {
-    fake.state.results = [
-      { data: [{ id: "t1", title: "Essay" }], error: null },
-    ];
+    fake.state.results = [{ data: [{ id: "t1", title: "Essay" }], error: null }];
     const res = await request(app).get("/api/tasks").set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([{ id: "t1", title: "Essay" }]);
-    expect(callsOn("tasks")).toContainEqual([
-      "order",
-      "created_at",
-      { ascending: false },
-    ]);
+    expect(callsOn("tasks")).toContainEqual(["order", "created_at", { ascending: false }]);
   });
 
   it("creates a task for the logged-in user with a trimmed title", async () => {
@@ -208,15 +192,12 @@ describe("tasks", () => {
     ];
     expect(
       (
-        await request(app)
-          .post("/api/tasks")
-          .set(AUTH)
-          .send({
-            title: "Essay",
-            type: "homework",
-            priority: "high",
-            estimated_time: 45,
-          })
+        await request(app).post("/api/tasks").set(AUTH).send({
+          title: "Essay",
+          type: "homework",
+          priority: "high",
+          estimated_time: 45,
+        })
       ).status,
     ).toBe(201);
     expect(inserted("user_learning_events")[0]).toMatchObject({
@@ -232,10 +213,7 @@ describe("tasks", () => {
   });
 
   it("needs a title", async () => {
-    const res = await request(app)
-      .post("/api/tasks")
-      .set(AUTH)
-      .send({ title: "   " });
+    const res = await request(app).post("/api/tasks").set(AUTH).send({ title: "   " });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("Title is required");
     expect(fake.state.queries).toHaveLength(0);
@@ -246,14 +224,9 @@ describe("tasks", () => {
       { data: { id: "t1", completed: false }, error: null },
       { data: [{ id: "t1", completed: true }], error: null },
     ];
-    const res = await request(app)
-      .patch("/api/tasks/t1")
-      .set(AUTH)
-      .send({ completed: true });
+    const res = await request(app).patch("/api/tasks/t1").set(AUTH).send({ completed: true });
     expect(res.status).toBe(200);
-    const [, updates] = callsOn("tasks").find(
-      ([method]) => method === "update",
-    );
+    const [, updates] = callsOn("tasks").find(([method]) => method === "update");
     expect(updates.completed).toBe(true);
     expect(typeof updates.completed_at).toBe("string");
   });
@@ -263,21 +236,13 @@ describe("tasks", () => {
       { data: { id: "t1", completed: false }, error: null },
       { data: [{ id: "t1", time_spent: 95 }], error: null },
     ];
-    const res = await request(app)
-      .patch("/api/tasks/t1")
-      .set(AUTH)
-      .send({ completed: true, time_spent: 95 });
+    const res = await request(app).patch("/api/tasks/t1").set(AUTH).send({ completed: true, time_spent: 95 });
     expect(res.status).toBe(200);
-    const [, updates] = callsOn("tasks").find(
-      ([method]) => method === "update",
-    );
+    const [, updates] = callsOn("tasks").find(([method]) => method === "update");
     expect(updates.time_spent).toBe(95);
 
     fake.state.queries = [];
-    const bad = await request(app)
-      .patch("/api/tasks/t1")
-      .set(AUTH)
-      .send({ time_spent: -10 });
+    const bad = await request(app).patch("/api/tasks/t1").set(AUTH).send({ time_spent: -10 });
     expect(bad.status).toBe(400);
     expect(fake.state.queries).toHaveLength(0);
   });
@@ -303,9 +268,7 @@ describe("time blocks", () => {
     expect(callsOn("time_blocks")).toContainEqual(["eq", "date", "2026-09-29"]);
 
     fake.state.queries = [];
-    await request(app)
-      .get("/api/time-blocks?start=2026-09-27&end=2026-10-03")
-      .set(AUTH);
+    await request(app).get("/api/time-blocks?start=2026-09-27&end=2026-10-03").set(AUTH);
     expect(callsOn("time_blocks")).toEqual(
       expect.arrayContaining([
         ["gte", "date", "2026-09-27"],
@@ -315,29 +278,15 @@ describe("time blocks", () => {
   });
 
   it("rejects bad dates and backwards ranges", async () => {
-    expect(
-      (await request(app).get("/api/time-blocks?date=2026-02-30").set(AUTH))
-        .status,
-    ).toBe(400);
-    expect(
-      (
-        await request(app)
-          .get("/api/time-blocks?start=2026-10-03&end=2026-09-27")
-          .set(AUTH)
-      ).status,
-    ).toBe(400);
+    expect((await request(app).get("/api/time-blocks?date=2026-02-30").set(AUTH)).status).toBe(400);
+    expect((await request(app).get("/api/time-blocks?start=2026-10-03&end=2026-09-27").set(AUTH)).status).toBe(400);
   });
 
   it("saves a valid block with normalized times", async () => {
     fake.state.results = [{ data: [{ id: "b1" }], error: null }];
-    const res = await request(app)
-      .post("/api/time-blocks")
-      .set(AUTH)
-      .send(block);
+    const res = await request(app).post("/api/time-blocks").set(AUTH).send(block);
     expect(res.status).toBe(201);
-    const [, row] = callsOn("time_blocks").find(
-      ([method]) => method === "insert",
-    );
+    const [, row] = callsOn("time_blocks").find(([method]) => method === "insert");
     expect(row).toEqual({
       user_id: "user-1",
       ...block,
@@ -350,9 +299,7 @@ describe("time blocks", () => {
 
   it("returns each block with its task attached", async () => {
     await request(app).get("/api/time-blocks?date=2026-09-29").set(AUTH);
-    const [, columns] = callsOn("time_blocks").find(
-      ([method]) => method === "select",
-    );
+    const [, columns] = callsOn("time_blocks").find(([method]) => method === "select");
     expect(columns).toMatch(/task:tasks\(/);
   });
 
@@ -370,24 +317,25 @@ describe("time blocks", () => {
       { data: saved, error: null },
       { data: [{ ...saved, completed: true, completed_at: "2026-09-29T18:00:00.000Z" }], error: null },
     ];
-    const res = await request(app)
-      .patch("/api/time-blocks/b1/completion")
-      .set(AUTH)
-      .send({ completed: true });
+    const res = await request(app).patch("/api/time-blocks/b1/completion").set(AUTH).send({ completed: true });
     expect(res.status).toBe(200);
     expect(fake.state.queries.some((q) => q.table === "tasks")).toBe(false);
-    expect(callsOn("time_blocks")).toEqual(expect.arrayContaining([
-      ["update", expect.objectContaining({ completed: true, completed_at: expect.any(String) })],
-    ]));
-    expect(inserted("user_learning_events")[0]).toEqual(expect.objectContaining({
-      user_id: "user-1",
-      event_type: "study_block_completed",
-      data: expect.objectContaining({
-        task_type: "homework",
-        planned: { date: "2026-09-29", start: "17:00", end: "18:00" },
-        completed_at: expect.any(String),
+    expect(callsOn("time_blocks")).toEqual(
+      expect.arrayContaining([
+        ["update", expect.objectContaining({ completed: true, completed_at: expect.any(String) })],
+      ]),
+    );
+    expect(inserted("user_learning_events")[0]).toEqual(
+      expect.objectContaining({
+        user_id: "user-1",
+        event_type: "study_block_completed",
+        data: expect.objectContaining({
+          task_type: "homework",
+          planned: { date: "2026-09-29", start: "17:00", end: "18:00" },
+          completed_at: expect.any(String),
+        }),
       }),
-    }));
+    );
   });
 
   it("does not log another observation when a completed session is reopened", async () => {
@@ -395,10 +343,7 @@ describe("time blocks", () => {
       { data: { id: "b1", type: "task", completed: true }, error: null },
       { data: [{ id: "b1", type: "task", completed: false, completed_at: null }], error: null },
     ];
-    const res = await request(app)
-      .patch("/api/time-blocks/b1/completion")
-      .set(AUTH)
-      .send({ completed: false });
+    const res = await request(app).patch("/api/time-blocks/b1/completion").set(AUTH).send({ completed: false });
     expect(res.status).toBe(200);
     expect(fake.state.queries.some((q) => q.table === "user_learning_events")).toBe(false);
   });
@@ -406,10 +351,7 @@ describe("time blocks", () => {
   it("filters by task, for adding up the time planned for one", async () => {
     await request(app).get(`/api/time-blocks?task_id=${TASK_ID}`).set(AUTH);
     expect(callsOn("time_blocks")).toContainEqual(["eq", "task_id", TASK_ID]);
-    expect(
-      (await request(app).get("/api/time-blocks?task_id=nope").set(AUTH))
-        .status,
-    ).toBe(400);
+    expect((await request(app).get("/api/time-blocks?task_id=nope").set(AUTH)).status).toBe(400);
   });
 
   it("saves a task block only for one of your own tasks", async () => {
@@ -418,28 +360,18 @@ describe("time blocks", () => {
       { data: { id: TASK_ID }, error: null },
       { data: [{ id: "b1" }], error: null },
     ];
-    const res = await request(app)
-      .post("/api/time-blocks")
-      .set(AUTH)
-      .send(taskBlock);
+    const res = await request(app).post("/api/time-blocks").set(AUTH).send(taskBlock);
     expect(res.status).toBe(201);
     expect(callsOn("tasks")).toContainEqual(["eq", "id", TASK_ID]);
-    const [, row] = callsOn("time_blocks").find(
-      ([method]) => method === "insert",
-    );
+    const [, row] = callsOn("time_blocks").find(([method]) => method === "insert");
     expect(row.task_id).toBe(TASK_ID);
 
     fake.state.queries = [];
     fake.state.results = [{ data: null, error: null }];
-    const missing = await request(app)
-      .post("/api/time-blocks")
-      .set(AUTH)
-      .send(taskBlock);
+    const missing = await request(app).post("/api/time-blocks").set(AUTH).send(taskBlock);
     expect(missing.status).toBe(400);
     expect(missing.body.error).toBe("That task no longer exists");
-    expect(fake.state.queries.some((q) => q.table === "time_blocks")).toBe(
-      false,
-    );
+    expect(fake.state.queries.some((q) => q.table === "time_blocks")).toBe(false);
   });
 
   it("never reaches the database with an invalid block", async () => {
@@ -464,26 +396,17 @@ describe("time blocks", () => {
       { data: saved, error: null },
       { data: [{ ...saved, end_time: "18:30:00" }], error: null },
     ];
-    const res = await request(app)
-      .patch("/api/time-blocks/b1")
-      .set(AUTH)
-      .send({ end_time: "18:30" });
+    const res = await request(app).patch("/api/time-blocks/b1").set(AUTH).send({ end_time: "18:30" });
     expect(res.status).toBe(200);
 
     fake.state.results = [{ data: saved, error: null }];
-    const bad = await request(app)
-      .patch("/api/time-blocks/b1")
-      .set(AUTH)
-      .send({ end_time: "16:30" });
+    const bad = await request(app).patch("/api/time-blocks/b1").set(AUTH).send({ end_time: "16:30" });
     expect(bad.status).toBe(400);
   });
 
   it("says 404 when editing a block that isn't there", async () => {
     fake.state.results = [{ data: null, error: null }];
-    const res = await request(app)
-      .patch("/api/time-blocks/missing")
-      .set(AUTH)
-      .send({ end_time: "18:30" });
+    const res = await request(app).patch("/api/time-blocks/missing").set(AUTH).send({ end_time: "18:30" });
     expect(res.status).toBe(404);
   });
 });
@@ -501,10 +424,7 @@ describe("profile survey", () => {
       wake_time: "07:30",
     };
     fake.state.results = [{ data: [{ id: "user-1", survey }], error: null }];
-    expect(
-      (await request(app).put("/api/profile/survey").set(AUTH).send({ survey }))
-        .status,
-    ).toBe(200);
+    expect((await request(app).put("/api/profile/survey").set(AUTH).send({ survey })).status).toBe(200);
 
     const res = await request(app)
       .put("/api/profile/survey")
@@ -517,35 +437,19 @@ describe("profile survey", () => {
 
 describe("consent and deleting the account", () => {
   it("records when the tester agreed and to which version", async () => {
-    fake.state.results = [
-      { data: [{ id: "user-1", consent_version: "2026-10-26" }], error: null },
-    ];
-    const res = await request(app)
-      .put("/api/profile/consent")
-      .set(AUTH)
-      .send({ version: "2026-10-26" });
+    fake.state.results = [{ data: [{ id: "user-1", consent_version: "2026-10-26" }], error: null }];
+    const res = await request(app).put("/api/profile/consent").set(AUTH).send({ version: "2026-10-26" });
     expect(res.status).toBe(200);
     expect(res.body.consent_version).toBe("2026-10-26");
-    const [[, row, options]] = callsOn("profiles").filter(
-      ([method]) => method === "upsert",
-    );
+    const [[, row, options]] = callsOn("profiles").filter(([method]) => method === "upsert");
     expect(row).toMatchObject({ id: "user-1", consent_version: "2026-10-26" });
     expect(Date.parse(row.consented_at)).not.toBeNaN();
     expect(options).toEqual({ onConflict: "id" });
   });
 
   it("refuses a missing or odd version", async () => {
-    for (const body of [
-      {},
-      { version: "" },
-      { version: 42 },
-      { version: "a b" },
-      { version: "x".repeat(41) },
-    ]) {
-      const res = await request(app)
-        .put("/api/profile/consent")
-        .set(AUTH)
-        .send(body);
+    for (const body of [{}, { version: "" }, { version: 42 }, { version: "a b" }, { version: "x".repeat(41) }]) {
+      const res = await request(app).put("/api/profile/consent").set(AUTH).send(body);
       expect(res.status).toBe(400);
     }
     expect(fake.state.queries).toHaveLength(0);
@@ -554,21 +458,15 @@ describe("consent and deleting the account", () => {
   it("deletes the account through delete_my_account", async () => {
     const res = await request(app).delete("/api/account").set(AUTH);
     expect(res.status).toBe(204);
-    expect(fake.state.queries.map((q) => q.table)).toEqual([
-      "rpc:delete_my_account",
-    ]);
+    expect(fake.state.queries.map((q) => q.table)).toEqual(["rpc:delete_my_account"]);
   });
 
   it("reports a failed delete instead of pretending it worked", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    fake.state.results = [
-      { data: null, error: { message: "permission denied for table users" } },
-    ];
+    fake.state.results = [{ data: null, error: { message: "permission denied for table users" } }];
     const res = await request(app).delete("/api/account").set(AUTH);
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe(
-      "Something went wrong on our end. Try again in a moment.",
-    );
+    expect(res.body.error).toBe("Something went wrong on our end. Try again in a moment.");
   });
 });
 
@@ -576,17 +474,10 @@ describe("reflections", () => {
   const ratings = { productivity: 4, mood: 3, energy: 2, sleep: 5 };
 
   it("saves one reflection per day, all four ratings required", async () => {
-    fake.state.results = [
-      { data: [{ date: "2026-09-29", ratings }], error: null },
-    ];
-    const res = await request(app)
-      .post("/api/reflections")
-      .set(AUTH)
-      .send({ date: "2026-09-29", ratings });
+    fake.state.results = [{ data: [{ date: "2026-09-29", ratings }], error: null }];
+    const res = await request(app).post("/api/reflections").set(AUTH).send({ date: "2026-09-29", ratings });
     expect(res.status).toBe(201);
-    const [, row, options] = callsOn("reflections").find(
-      ([method]) => method === "upsert",
-    );
+    const [, row, options] = callsOn("reflections").find(([method]) => method === "upsert");
     expect(row).toEqual({
       user_id: "user-1",
       date: "2026-09-29",
@@ -607,21 +498,15 @@ describe("reflections", () => {
   });
 
   it("saves optional bed and wake-up times as HH:MM", async () => {
-    fake.state.results = [
-      { data: [{ date: "2026-09-29", ratings }], error: null },
-    ];
+    fake.state.results = [{ data: [{ date: "2026-09-29", ratings }], error: null }];
     const body = {
       date: "2026-09-29",
       ratings,
       bed_time: "23:40",
       wake_time: "07:15:00",
     };
-    expect(
-      (await request(app).post("/api/reflections").set(AUTH).send(body)).status,
-    ).toBe(201);
-    const [, row] = callsOn("reflections").find(
-      ([method]) => method === "upsert",
-    );
+    expect((await request(app).post("/api/reflections").set(AUTH).send(body)).status).toBe(201);
+    const [, row] = callsOn("reflections").find(([method]) => method === "upsert");
     expect(row).toMatchObject({ bed_time: "23:40", wake_time: "07:15" });
 
     fake.state.queries = [];
@@ -634,17 +519,10 @@ describe("reflections", () => {
   });
 
   it("rejects a bad date", async () => {
-    expect(
-      (await request(app).get("/api/reflections/yesterday").set(AUTH)).status,
-    ).toBe(400);
-    expect(
-      (
-        await request(app)
-          .post("/api/reflections")
-          .set(AUTH)
-          .send({ date: "2026-02-30", ratings })
-      ).status,
-    ).toBe(400);
+    expect((await request(app).get("/api/reflections/yesterday").set(AUTH)).status).toBe(400);
+    expect((await request(app).post("/api/reflections").set(AUTH).send({ date: "2026-02-30", ratings })).status).toBe(
+      400,
+    );
   });
 });
 
@@ -662,31 +540,21 @@ describe("appearance and profile picture", () => {
       .send({ theme_mode: "dark", accent: "teal" });
     expect(res.status).toBe(200);
     expect(res.body.accent).toBe("teal");
-    const [[, row, options]] = callsOn("profiles").filter(
-      ([method]) => method === "upsert",
-    );
+    const [[, row, options]] = callsOn("profiles").filter(([method]) => method === "upsert");
     expect(row).toEqual({ id: "user-1", theme_mode: "dark", accent: "teal" });
     expect(options).toEqual({ onConflict: "id" });
   });
 
   it("changes just one of them when only one is sent", async () => {
     fake.state.results = [{ data: [{ id: "user-1" }], error: null }];
-    await request(app)
-      .put("/api/profile/appearance")
-      .set(AUTH)
-      .send({ accent: "rose" });
-    const [[, row]] = callsOn("profiles").filter(
-      ([method]) => method === "upsert",
-    );
+    await request(app).put("/api/profile/appearance").set(AUTH).send({ accent: "rose" });
+    const [[, row]] = callsOn("profiles").filter(([method]) => method === "upsert");
     expect(row).toEqual({ id: "user-1", accent: "rose" });
   });
 
   it("refuses unknown themes and accents, and an empty change", async () => {
     for (const body of [{ theme_mode: "sepia" }, { accent: "#ff0000" }, {}]) {
-      expect(
-        (await request(app).put("/api/profile/appearance").set(AUTH).send(body))
-          .status,
-      ).toBe(400);
+      expect((await request(app).put("/api/profile/appearance").set(AUTH).send(body)).status).toBe(400);
     }
     expect(fake.state.queries).toHaveLength(0);
   });
@@ -697,18 +565,8 @@ describe("appearance and profile picture", () => {
       { data: [{ id: "user-1", avatar }], error: null },
       { data: [{ id: "user-1", avatar: null }], error: null },
     ];
-    expect(
-      (await request(app).put("/api/profile/avatar").set(AUTH).send({ avatar }))
-        .status,
-    ).toBe(200);
-    expect(
-      (
-        await request(app)
-          .put("/api/profile/avatar")
-          .set(AUTH)
-          .send({ avatar: null })
-      ).status,
-    ).toBe(200);
+    expect((await request(app).put("/api/profile/avatar").set(AUTH).send({ avatar })).status).toBe(200);
+    expect((await request(app).put("/api/profile/avatar").set(AUTH).send({ avatar: null })).status).toBe(200);
     const rows = callsOn("profiles")
       .filter(([method]) => method === "upsert")
       .map(([, row]) => row.avatar);
@@ -722,14 +580,7 @@ describe("appearance and profile picture", () => {
       `data:image/png;base64,${"A".repeat(99_000)}`,
       42,
     ]) {
-      expect(
-        (
-          await request(app)
-            .put("/api/profile/avatar")
-            .set(AUTH)
-            .send({ avatar })
-        ).status,
-      ).toBe(400);
+      expect((await request(app).put("/api/profile/avatar").set(AUTH).send({ avatar })).status).toBe(400);
     }
     // Bigger than the JSON body limit: turned away before the route, with a plain message.
     const huge = await request(app)
@@ -737,9 +588,7 @@ describe("appearance and profile picture", () => {
       .set(AUTH)
       .send({ avatar: `data:image/png;base64,${"A".repeat(130_000)}` });
     expect(huge.status).toBe(413);
-    expect(huge.body.error).toBe(
-      "That is too large to save. Try something smaller.",
-    );
+    expect(huge.body.error).toBe("That is too large to save. Try something smaller.");
     expect(fake.state.queries).toHaveLength(0);
   });
 });
@@ -747,9 +596,7 @@ describe("appearance and profile picture", () => {
 describe("reflections over a range", () => {
   it("lists them between two dates, oldest first", async () => {
     fake.state.results = [{ data: [{ date: "2026-11-02" }], error: null }];
-    const res = await request(app)
-      .get("/api/reflections?start=2026-11-01&end=2026-11-07")
-      .set(AUTH);
+    const res = await request(app).get("/api/reflections?start=2026-11-01&end=2026-11-07").set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([{ date: "2026-11-02" }]);
     expect(callsOn("reflections")).toEqual(
@@ -762,15 +609,8 @@ describe("reflections over a range", () => {
   });
 
   it("needs both dates, in order", async () => {
-    for (const query of [
-      "",
-      "?start=2026-11-01",
-      "?start=2026-11-07&end=2026-11-01",
-      "?start=nov&end=dec",
-    ]) {
-      expect(
-        (await request(app).get(`/api/reflections${query}`).set(AUTH)).status,
-      ).toBe(400);
+    for (const query of ["", "?start=2026-11-01", "?start=2026-11-07&end=2026-11-01", "?start=nov&end=dec"]) {
+      expect((await request(app).get(`/api/reflections${query}`).set(AUTH)).status).toBe(400);
     }
   });
 });
@@ -803,11 +643,7 @@ describe("commutes", () => {
 
   it("adds a commute before the next block when a saved block is somewhere else", async () => {
     // insert the work block, then: the profile's travel times, the day's blocks, the commute insert
-    fake.state.results = [
-      { data: [work], error: null },
-      travel,
-      { data: [campus, work], error: null },
-    ];
+    fake.state.results = [{ data: [work], error: null }, travel, { data: [campus, work], error: null }];
     const res = await request(app).post("/api/time-blocks").set(AUTH).send({
       activity: "Shift",
       date: "2026-09-29",
@@ -830,18 +666,12 @@ describe("commutes", () => {
       auto: true,
     };
     expect(res.body.commutes).toEqual({ added: [commute], tight: [] });
-    expect(inserted("time_blocks")).toContainEqual([
-      { user_id: "user-1", ...commute },
-    ]);
+    expect(inserted("time_blocks")).toContainEqual([{ user_id: "user-1", ...commute }]);
   });
 
   it("reports a gap too short for the trip instead of squeezing a commute in", async () => {
     const tightWork = { ...work, start_time: "12:10:00" };
-    fake.state.results = [
-      { data: [tightWork], error: null },
-      travel,
-      { data: [campus, tightWork], error: null },
-    ];
+    fake.state.results = [{ data: [tightWork], error: null }, travel, { data: [campus, tightWork], error: null }];
     const res = await request(app).post("/api/time-blocks").set(AUTH).send({
       activity: "Shift",
       date: "2026-09-29",
@@ -878,11 +708,7 @@ describe("commutes", () => {
       location: null,
       auto: true,
     };
-    fake.state.results = [
-      { data: [work], error: null },
-      travel,
-      { data: [campus, work, oldCommute], error: null },
-    ];
+    fake.state.results = [{ data: [work], error: null }, travel, { data: [campus, work, oldCommute], error: null }];
     await request(app).post("/api/time-blocks").set(AUTH).send({
       activity: "Shift",
       date: "2026-09-29",
@@ -899,14 +725,9 @@ describe("commutes", () => {
       { data: { ...campus, series_id: "s1", auto: true }, error: null },
       { data: [campus], error: null },
     ];
-    const res = await request(app)
-      .patch("/api/time-blocks/c")
-      .set(AUTH)
-      .send({ end_time: "12:30" });
+    const res = await request(app).patch("/api/time-blocks/c").set(AUTH).send({ end_time: "12:30" });
     expect(res.status).toBe(200);
-    const [, updates] = callsOn("time_blocks").find(
-      ([method]) => method === "update",
-    );
+    const [, updates] = callsOn("time_blocks").find(([method]) => method === "update");
     expect(updates).toMatchObject({
       series_id: null,
       auto: false,
@@ -931,9 +752,7 @@ describe("commutes", () => {
       .set(AUTH)
       .send({ travel: { places: [], minutes: { "work|campus": 20 } } });
     expect(res.status).toBe(200);
-    const [, updates] = callsOn("profiles").find(
-      ([method]) => method === "update",
-    );
+    const [, updates] = callsOn("profiles").find(([method]) => method === "update");
     expect(updates).toEqual({
       travel: { places: [], minutes: { "campus|work": 20 } },
     });
@@ -960,21 +779,11 @@ describe("repeating blocks", () => {
   };
 
   it("saves the rule once and writes out a block for each date", async () => {
-    fake.state.results = [
-      { data: [{ id: "s1", user_id: "user-1", ...rule }], error: null },
-    ];
-    const res = await request(app)
-      .post("/api/block-series")
-      .set(AUTH)
-      .send(rule);
+    fake.state.results = [{ data: [{ id: "s1", user_id: "user-1", ...rule }], error: null }];
+    const res = await request(app).post("/api/block-series").set(AUTH).send(rule);
     expect(res.status).toBe(201);
     const [rows] = inserted("time_blocks");
-    expect(rows.map((r) => r.date)).toEqual([
-      "2026-09-28",
-      "2026-09-30",
-      "2026-10-05",
-      "2026-10-07",
-    ]);
+    expect(rows.map((r) => r.date)).toEqual(["2026-09-28", "2026-09-30", "2026-10-05", "2026-10-07"]);
     expect(rows[0]).toMatchObject({
       user_id: "user-1",
       series_id: "s1",
@@ -1032,10 +841,7 @@ describe("repeating blocks", () => {
 
   it("says 404 for a repeat that isn't there", async () => {
     fake.state.results = [{ data: [], error: null }];
-    expect(
-      (await request(app).put("/api/block-series/nope").set(AUTH).send(rule))
-        .status,
-    ).toBe(404);
+    expect((await request(app).put("/api/block-series/nope").set(AUTH).send(rule)).status).toBe(404);
   });
 });
 
@@ -1110,18 +916,11 @@ describe("POST /api/schedule/accept", () => {
         error: null,
       },
     ];
-    const res = await request(app)
-      .post("/api/schedule/accept")
-      .set(AUTH)
-      .send(PLAN);
+    const res = await request(app).post("/api/schedule/accept").set(AUTH).send(PLAN);
     expect(res.status).toBe(201);
-    const deletes = callsOn("time_blocks").filter(
-      ([method]) => method === "delete",
-    );
+    const deletes = callsOn("time_blocks").filter(([method]) => method === "delete");
     expect(deletes).toHaveLength(1);
-    const deleted = callsOn("time_blocks").find(
-      ([method, column]) => method === "in" && column === "id",
-    );
+    const deleted = callsOn("time_blocks").find(([method, column]) => method === "in" && column === "id");
     expect(deleted).toEqual(["in", "id", ["later-today", "tomorrow"]]);
     expect(inserted("time_blocks")[0]).toEqual([
       expect.objectContaining({
@@ -1139,9 +938,7 @@ function fakeScheduler({
   historyStatus = 200,
 } = {}) {
   const calendar = {
-    blocks: [
-      { task: TASK_ID, date: "2026-10-23", start: "19:00", end: "19:45" },
-    ],
+    blocks: [{ task: TASK_ID, date: "2026-10-23", start: "19:00", end: "19:45" }],
     unscheduled: [],
   };
   const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
@@ -1172,9 +969,7 @@ function fakeScheduler({
 
 // The profile update a refresh makes, if any.
 function savedPreferenceUpdate() {
-  return callsOn("profiles").find(
-    ([method, row]) => method === "update" && "scheduler_preferences" in row,
-  )?.[1];
+  return callsOn("profiles").find(([method, row]) => method === "update" && "scheduler_preferences" in row)?.[1];
 }
 
 describe("POST /api/schedule/suggest", () => {
@@ -1219,8 +1014,7 @@ describe("POST /api/schedule/suggest", () => {
       ...after,
     ];
   }
-  const suggest = () =>
-    request(app).post("/api/schedule/suggest").set(AUTH).send(BODY);
+  const suggest = () => request(app).post("/api/schedule/suggest").set(AUTH).send(BODY);
 
   it("sends fresh saved preferences as they are and returns the picks with their reasons", async () => {
     load(fresh, [{ data: null, count: 3, error: null }]);
@@ -1321,10 +1115,7 @@ describe("preference refresh", () => {
   it("is skipped on a survey save without the clock", async () => {
     fake.state.results = [{ data: [{ id: "user-1", survey }], error: null }];
     const scheduler = fakeScheduler();
-    expect(
-      (await request(app).put("/api/profile/survey").set(AUTH).send({ survey }))
-        .status,
-    ).toBe(200);
+    expect((await request(app).put("/api/profile/survey").set(AUTH).send({ survey })).status).toBe(200);
     expect(scheduler.called("/history")).toBe(false);
   });
 
@@ -1357,10 +1148,7 @@ describe("preference refresh", () => {
       updatedAt: "2026-10-22T19:00:00Z",
       version: "rules-v1",
     });
-    expect(
-      (await request(app).post("/api/preferences/refresh").set(AUTH).send({}))
-        .status,
-    ).toBe(400);
+    expect((await request(app).post("/api/preferences/refresh").set(AUTH).send({})).status).toBe(400);
   });
 });
 
@@ -1389,12 +1177,8 @@ describe("schedule events", () => {
       },
     ];
     expect(
-      (
-        await request(app)
-          .patch("/api/time-blocks/b1")
-          .set(AUTH)
-          .send({ start_time: "19:00", end_time: "19:45" })
-      ).status,
+      (await request(app).patch("/api/time-blocks/b1").set(AUTH).send({ start_time: "19:00", end_time: "19:45" }))
+        .status,
     ).toBe(200);
     expect(loggedEvents()).toEqual([
       expect.objectContaining({
@@ -1414,17 +1198,10 @@ describe("schedule events", () => {
       { data: taskBlock, error: null },
       { data: [{ ...taskBlock, activity: "Essay draft" }], error: null },
     ];
-    expect(
-      (
-        await request(app)
-          .patch("/api/time-blocks/b1")
-          .set(AUTH)
-          .send({ activity: "Essay draft" })
-      ).status,
-    ).toBe(200);
-    expect(fake.state.queries.some((q) => q.table === "schedule_events")).toBe(
-      false,
+    expect((await request(app).patch("/api/time-blocks/b1").set(AUTH).send({ activity: "Essay draft" })).status).toBe(
+      200,
     );
+    expect(fake.state.queries.some((q) => q.table === "schedule_events")).toBe(false);
   });
 
   it("logs a deleted task block, and not a deleted class", async () => {
@@ -1432,9 +1209,7 @@ describe("schedule events", () => {
       { data: { feed_id: null }, error: null },
       { data: [taskBlock], error: null },
     ];
-    expect(
-      (await request(app).delete("/api/time-blocks/b1").set(AUTH)).status,
-    ).toBe(204);
+    expect((await request(app).delete("/api/time-blocks/b1").set(AUTH)).status).toBe(204);
     expect(loggedEvents()).toEqual([
       expect.objectContaining({
         kind: "block_deleted",
@@ -1453,12 +1228,8 @@ describe("schedule events", () => {
       { data: { feed_id: null }, error: null },
       { data: [{ ...taskBlock, type: "class", task_id: null }], error: null },
     ];
-    expect(
-      (await request(app).delete("/api/time-blocks/b1").set(AUTH)).status,
-    ).toBe(204);
-    expect(fake.state.queries.some((q) => q.table === "schedule_events")).toBe(
-      false,
-    );
+    expect((await request(app).delete("/api/time-blocks/b1").set(AUTH)).status).toBe(204);
+    expect(fake.state.queries.some((q) => q.table === "schedule_events")).toBe(false);
   });
 
   it("logs which plan was chosen, by style", async () => {
@@ -1480,10 +1251,7 @@ describe("schedule events", () => {
         },
       ],
     };
-    expect(
-      (await request(app).post("/api/schedule/accept").set(AUTH).send(plan))
-        .status,
-    ).toBe(201);
+    expect((await request(app).post("/api/schedule/accept").set(AUTH).send(plan)).status).toBe(201);
     expect(loggedEvents()).toEqual([
       expect.objectContaining({
         kind: "plan_accepted",
@@ -1500,9 +1268,7 @@ describe("schedule events", () => {
 
 describe("GET /api/preferences/history", () => {
   it("sends the last 21 days of rows to the scheduler and returns what it read", async () => {
-    fake.state.results = [
-      { data: { survey: { focus_time: "evening" } }, error: null },
-    ];
+    fake.state.results = [{ data: { survey: { focus_time: "evening" } }, error: null }];
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -1512,9 +1278,7 @@ describe("GET /api/preferences/history", () => {
         { status: 200 },
       ),
     );
-    const res = await request(app)
-      .get("/api/preferences/history?now=2026-10-22T12:00&tzOffset=420")
-      .set(AUTH);
+    const res = await request(app).get("/api/preferences/history?now=2026-10-22T12:00&tzOffset=420").set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body.bundle).toBe("TODAY: 2026-10-22 Thu");
     const [url, init] = fetchSpy.mock.calls[0];
@@ -1524,28 +1288,12 @@ describe("GET /api/preferences/history", () => {
       tz_offset: 420,
       survey: { focus_time: "evening" },
     });
-    expect(callsOn("time_blocks")).toContainEqual([
-      "gte",
-      "date",
-      "2026-10-01",
-    ]);
+    expect(callsOn("time_blocks")).toContainEqual(["gte", "date", "2026-10-01"]);
   });
 
   it("needs the local time and offset", async () => {
-    expect(
-      (
-        await request(app)
-          .get("/api/preferences/history?tzOffset=420")
-          .set(AUTH)
-      ).status,
-    ).toBe(400);
-    expect(
-      (
-        await request(app)
-          .get("/api/preferences/history?now=2026-10-22T12:00")
-          .set(AUTH)
-      ).status,
-    ).toBe(400);
+    expect((await request(app).get("/api/preferences/history?tzOffset=420").set(AUTH)).status).toBe(400);
+    expect((await request(app).get("/api/preferences/history?now=2026-10-22T12:00").set(AUTH)).status).toBe(400);
   });
 });
 
@@ -1561,9 +1309,7 @@ describe("scheduler waking up", () => {
     completed: false,
   };
   const calendar = {
-    blocks: [
-      { task: TASK_ID, date: "2026-10-23", start: "19:00", end: "19:45" },
-    ],
+    blocks: [{ task: TASK_ID, date: "2026-10-23", start: "19:00", end: "19:45" }],
     unscheduled: [],
   };
   const ok = () =>
@@ -1617,21 +1363,15 @@ describe("scheduler waking up", () => {
   });
 
   it("tries once more when there is no answer, then gives a readable error", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockRejectedValue(new TypeError("fetch failed"));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("fetch failed"));
     const res = await suggest();
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(res.status).toBe(503);
-    expect(res.body.error).toBe(
-      "The planner is starting up. Try again in a minute.",
-    );
+    expect(res.body.error).toBe("The planner is starting up. Try again in a minute.");
   });
 
   it("doesn't retry a real answer like 422", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response("bad input", { status: 422 }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("bad input", { status: 422 }));
     const res = await suggest();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(res.status).toBe(502);
@@ -1639,9 +1379,7 @@ describe("scheduler waking up", () => {
   });
 
   it("wake says the scheduler is up once its health check answers, without logging in", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response("{}", { status: 200 }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
     const res = await request(app).get("/api/wake");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ server: "ok", scheduler: "ok" });
@@ -1649,9 +1387,7 @@ describe("scheduler waking up", () => {
   });
 
   it("wake says the scheduler is still waking when it gives a 503 or no answer", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response("", { status: 503 }),
-    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("", { status: 503 }));
     expect((await request(app).get("/api/wake")).body.scheduler).toBe("waking");
     vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("timeout"));
     expect((await request(app).get("/api/wake")).body.scheduler).toBe("waking");
@@ -1674,14 +1410,9 @@ describe("choosing a plan that has gone stale", () => {
         },
       ],
     };
-    const res = await request(app)
-      .post("/api/schedule/accept")
-      .set(AUTH)
-      .send(plan);
+    const res = await request(app).post("/api/schedule/accept").set(AUTH).send(plan);
     expect(res.status).toBe(409);
-    expect(res.body.error).toBe(
-      "Part of this plan has already started. Suggest a new plan.",
-    );
+    expect(res.body.error).toBe("Part of this plan has already started. Suggest a new plan.");
     expect(fake.state.queries).toHaveLength(0);
   });
 });
@@ -1725,24 +1456,17 @@ describe("the preference model", () => {
   function fakeServices(modelReply) {
     return vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       if (url.endsWith("/history"))
-        return new Response(
-          JSON.stringify({ bundle: "TODAY: 2026-10-22 Thu", rules }),
-          { status: 200 },
-        );
+        return new Response(JSON.stringify({ bundle: "TODAY: 2026-10-22 Thu", rules }), { status: 200 });
       if (url.endsWith("/gradio_api/call/prefs"))
         return new Response(JSON.stringify({ event_id: "e1" }), {
           status: 200,
         });
-      return new Response(
-        `event: complete\ndata: ${JSON.stringify([modelReply])}\n\n`,
-        { status: 200 },
-      );
+      return new Response(`event: complete\ndata: ${JSON.stringify([modelReply])}\n\n`, { status: 200 });
     });
   }
   const modelUpdates = () =>
     callsOn("profiles").filter(
-      ([method, row]) =>
-        method === "update" && row.preference_model_version === "qwen-lora-v1",
+      ([method, row]) => method === "update" && row.preference_model_version === "qwen-lora-v1",
     );
 
   it("answers with the rules right away, then saves the model reply in the background", async () => {
@@ -1755,29 +1479,20 @@ describe("the preference model", () => {
       version: "qwen-lora-v1",
     });
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const res = await request(app)
-      .post("/api/preferences/refresh")
-      .set(AUTH)
-      .send(BODY);
+    const res = await request(app).post("/api/preferences/refresh").set(AUTH).send(BODY);
     expect(res.status).toBe(200);
     expect(res.body.preferences).toEqual(rules);
 
     await vi.waitFor(() => expect(modelUpdates()).toHaveLength(1));
     expect(modelUpdates()[0][1].scheduler_preferences).toEqual(modelPrefs);
-    const [url, init] = fetchSpy.mock.calls.find(([u]) =>
-      u.endsWith("/gradio_api/call/prefs"),
-    );
+    const [url, init] = fetchSpy.mock.calls.find(([u]) => u.endsWith("/gradio_api/call/prefs"));
     expect(url).toBe("https://model.test/gradio_api/call/prefs");
     expect(init.headers.Authorization).toBe("Bearer hf_test");
     expect(JSON.parse(init.body).data.slice(0, 2)).toEqual([
       "TODAY: 2026-10-22 Thu",
       JSON.stringify({ focus_time: "evening" }),
     ]);
-    expect(
-      fetchSpy.mock.calls.some(
-        ([u]) => u === "https://model.test/gradio_api/call/prefs/e1",
-      ),
-    ).toBe(true);
+    expect(fetchSpy.mock.calls.some(([u]) => u === "https://model.test/gradio_api/call/prefs/e1")).toBe(true);
   });
 
   it("keeps the rules when the model reply was not usable", async () => {
@@ -1790,15 +1505,8 @@ describe("the preference model", () => {
       version: "qwen-lora-v1",
     });
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(
-      (await request(app).post("/api/preferences/refresh").set(AUTH).send(BODY))
-        .status,
-    ).toBe(200);
-    await vi.waitFor(() =>
-      expect(fetchSpy.mock.calls.some(([u]) => u.endsWith("/prefs/e1"))).toBe(
-        true,
-      ),
-    );
+    expect((await request(app).post("/api/preferences/refresh").set(AUTH).send(BODY)).status).toBe(200);
+    await vi.waitFor(() => expect(fetchSpy.mock.calls.some(([u]) => u.endsWith("/prefs/e1"))).toBe(true));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(modelUpdates()).toHaveLength(0);
   });
@@ -1806,19 +1514,13 @@ describe("the preference model", () => {
   it("is not asked when MODEL_URL is not set", async () => {
     delete process.env.MODEL_URL;
     const fetchSpy = fakeServices({});
-    expect(
-      (await request(app).post("/api/preferences/refresh").set(AUTH).send(BODY))
-        .status,
-    ).toBe(200);
-    expect(fetchSpy.mock.calls.some(([u]) => u.includes("/gradio_api/"))).toBe(
-      false,
-    );
+    expect((await request(app).post("/api/preferences/refresh").set(AUTH).send(BODY)).status).toBe(200);
+    expect(fetchSpy.mock.calls.some(([u]) => u.includes("/gradio_api/"))).toBe(false);
   });
 });
 
 describe("linked calendars", () => {
-  const LINK =
-    "https://calendar.google.com/calendar/ical/me%40gmail.com/private-abc/basic.ics";
+  const LINK = "https://calendar.google.com/calendar/ical/me%40gmail.com/private-abc/basic.ics";
   const ICS = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -1842,18 +1544,9 @@ describe("linked calendars", () => {
       feed_id: "f1",
     };
     fake.state.results = [{ data: feedBlock, error: null }];
-    expect(
-      (
-        await request(app)
-          .patch("/api/time-blocks/b1")
-          .set(AUTH)
-          .send({ activity: "x" })
-      ).status,
-    ).toBe(409);
+    expect((await request(app).patch("/api/time-blocks/b1").set(AUTH).send({ activity: "x" })).status).toBe(409);
     fake.state.results = [{ data: { feed_id: "f1" }, error: null }];
-    expect(
-      (await request(app).delete("/api/time-blocks/b1").set(AUTH)).status,
-    ).toBe(409);
+    expect((await request(app).delete("/api/time-blocks/b1").set(AUTH)).status).toBe(409);
   });
 
   it("rejects links that are not Google or Outlook calendars, without fetching them", async () => {
@@ -1867,27 +1560,17 @@ describe("linked calendars", () => {
   });
 
   it("reports a link that does not load before saving anything", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("not found", { status: 404 }),
-    );
-    const res = await request(app)
-      .post("/api/calendar-feeds")
-      .set(AUTH)
-      .send({ url: LINK, timeZone: "UTC" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("not found", { status: 404 }));
+    const res = await request(app).post("/api/calendar-feeds").set(AUTH).send({ url: LINK, timeZone: "UTC" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Couldn't load/);
-    expect(
-      fake.state.queries.some(
-        (q) =>
-          q.table === "calendar_feeds" && q.calls.some(([m]) => m === "insert"),
-      ),
-    ).toBe(false);
+    expect(fake.state.queries.some((q) => q.table === "calendar_feeds" && q.calls.some(([m]) => m === "insert"))).toBe(
+      false,
+    );
   });
 
   it("saves the calendar, copies its events, and hides the secret link", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(ICS, { status: 200 }),
-    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(ICS, { status: 200 }));
     const feed = {
       id: "f1",
       provider: "google",
@@ -1905,10 +1588,7 @@ describe("linked calendars", () => {
       { data: null, error: null },
       { data: synced, error: null },
     ];
-    const res = await request(app)
-      .post("/api/calendar-feeds")
-      .set(AUTH)
-      .send({ url: LINK, timeZone: "UTC" });
+    const res = await request(app).post("/api/calendar-feeds").set(AUTH).send({ url: LINK, timeZone: "UTC" });
     expect(res.status).toBe(201);
     expect(res.body.link).toBe("calendar.google.com/…/basic.ics");
     expect(JSON.stringify(res.body)).not.toContain("private-abc");
@@ -1977,13 +1657,8 @@ describe("encryption", () => {
   });
 
   it("saves the sign-up name encrypted", async () => {
-    fake.state.results = [
-      { data: [{ id: "user-1", name: crypto.encryptValue("Sam") }], error: null },
-    ];
-    const res = await request(app)
-      .put("/api/profile/name")
-      .set(AUTH)
-      .send({ name: "  Sam " });
+    fake.state.results = [{ data: [{ id: "user-1", name: crypto.encryptValue("Sam") }], error: null }];
+    const res = await request(app).put("/api/profile/name").set(AUTH).send({ name: "  Sam " });
     expect(res.status).toBe(200);
     expect(res.body.name).toBe("Sam");
     const [, row] = callsOn("profiles").find(([m]) => m === "upsert");

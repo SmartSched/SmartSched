@@ -106,6 +106,9 @@ export function taskTimes(tasks: Task[]): TaskTimeRow[] {
 export function averageRatings(reflections: ReflectionRow[], keys: readonly string[]) {
   return keys.map((key) => {
     const values = reflections.map((r) => r.ratings?.[key]).filter((v): v is number => typeof v === 'number' && v > 0);
-    return { key, average: values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null };
+    return {
+      key,
+      average: values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null,
+    };
   });
 }

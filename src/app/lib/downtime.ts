@@ -29,9 +29,7 @@ function sleepHours(survey: Partial<SurveyAnswers>) {
 export function sleepPlan(survey: Partial<SurveyAnswers> | null | undefined) {
   const s = survey ?? {};
   const length = Math.round(sleepHours(s) * 60);
-  const bed = s.wake_time
-    ? toMinutes(s.wake_time) + DAY - length
-    : (DEFAULT_BED[s.focus_time ?? ''] ?? 23 * 60 + 30);
+  const bed = s.wake_time ? toMinutes(s.wake_time) + DAY - length : (DEFAULT_BED[s.focus_time ?? ''] ?? 23 * 60 + 30);
   const low = Math.max(BED_BAND[0], WAKE_BAND[0] + DAY - length);
   const high = Math.min(BED_BAND[1], WAKE_BAND[1] + DAY - length);
   const bedtime = Math.max(low, Math.min(high, bed));
