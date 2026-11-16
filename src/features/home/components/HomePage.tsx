@@ -274,20 +274,37 @@ export function HomePage() {
             </Typography>
           </Box>
           {todayBlocks.length > 0 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, mb: { sm: 1 } }}>
+            <Box
+              sx={{
+                width: { xs: '100%', sm: 'auto' },
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { xs: 'stretch', sm: 'center' },
+                gap: { xs: 0.75, sm: 1.75 },
+                mb: { sm: 1 },
+              }}
+            >
               <LinearProgress
                 variant="determinate"
                 value={(doneCount / todayBlocks.length) * 100}
                 aria-label="Today's blocks done"
                 sx={{
-                  width: 180,
+                  width: { xs: '100%', sm: 180 },
                   height: 10,
                   borderRadius: '10px',
                   backgroundColor: colors.accent100,
                   '& .MuiLinearProgress-bar': { backgroundColor: colors.accent400, borderRadius: '10px' },
                 }}
               />
-              <Typography variant="body2" sx={{ fontWeight: 600, color: colors.accent800, whiteSpace: 'nowrap' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  color: colors.accent800,
+                  whiteSpace: { xs: 'normal', sm: 'nowrap' },
+                  textAlign: { xs: 'right', sm: 'left' },
+                }}
+              >
                 {doneCount} of {todayBlocks.length} blocks done today
               </Typography>
             </Box>
