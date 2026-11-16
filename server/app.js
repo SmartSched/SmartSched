@@ -556,6 +556,50 @@ app.patch("/api/time-blocks/:id", requireAuth, async (req, res) => {
   res.json({ block: data[0], commutes });
 });
 
+// Completing a scheduled session is independent from completing its task. The task list remains the
+// place to mark all of a task done (and record its overall time spent).
+app.patch("/api/time-blocks/:id/completion", requireAuth, async (req, res) => {
+  if (typeof req.body.completed !== "boolean")
+    return res.status(400).json({ error: "completed must be true or false" });
+
+  const { data: existing, error: fetchError } = await req.supabase
+    .from("time_blocks")
+    .select("*, task:tasks(type)")
+    .eq("id", req.params.id)
+    .maybeSingle();
+  if (fetchError) return serverError(res, fetchError);
+  if (!existing) return res.status(404).json({ error: "Time block not found" });
+  if (existing.type !== "task")
+    return res.status(400).json({ error: "Only task blocks can be completed" });
+
+  const completedAt = req.body.completed
+    ? existing.completed
+      ? existing.completed_at
+      : new Date().toISOString()
+    : null;
+  let update = req.supabase
+    .from("time_blocks")
+    .update({ completed: req.body.completed, completed_at: completedAt })
+    .eq("id", req.params.id);
+  // The condition makes the false -> true transition atomic, so two quick taps cannot log two events.
+  if (req.body.completed && !existing.completed)
+    update = update.eq("completed", false);
+  const { data, error } = await update.select(BLOCK_COLUMNS);
+  if (error) return serverError(res, error);
+  if (data.length === 0)
+    return res.status(404).json({ error: "Time block not found" });
+
+  // Repeating a completed request and reopening a session are state changes, not new observations.
+  if (req.body.completed && !existing.completed) {
+    await logLearningEvent(req, "study_block_completed", {
+      task_type: existing.task?.type ?? null,
+      planned: blockTime(existing),
+      completed_at: completedAt,
+    }, completedAt);
+  }
+  res.json({ block: data[0] });
+});
+
 app.delete("/api/time-blocks/:id", requireAuth, async (req, res) => {
   const { data: existing, error: fetchError } = await req.supabase
     .from("time_blocks")
@@ -975,16 +1019,18 @@ app.post("/api/schedule/accept", requireAuth, async (req, res) => {
       .status(400)
       .json({ error: "A task in this plan no longer exists" });
 
-  // Replace the week's unfinished task blocks from now on with the chosen plan. Blocks on completed tasks
-  // and blocks that already started stay: they're the record of what was planned (time spent, history).
+  // Replace the week's unfinished task blocks from now on with the chosen plan. Blocks on completed tasks,
+  // individually completed blocks, and blocks that already started stay as history.
   const { data: old, error: oldError } = await req.supabase
     .from("time_blocks")
-    .select("id, date, start_time, task:tasks(completed)")
+    .select("id, date, start_time, completed, task:tasks(completed)")
     .eq("type", "task")
     .gte("date", weekStart)
     .lte("date", weekEnd);
   if (oldError) return serverError(res, oldError);
-  const stale = old.filter((b) => !b.task?.completed && !startsBefore(b, now));
+  const stale = old.filter(
+    (b) => !b.task?.completed && !b.completed && !startsBefore(b, now),
+  );
   const staleIds = stale.map((b) => b.id);
   if (staleIds.length) {
     const { error: deleteError } = await req.supabase

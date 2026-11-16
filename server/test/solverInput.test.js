@@ -69,7 +69,7 @@ describe("buildSolverInput fixed blocks", () => {
     ...extra,
   });
 
-  it("keeps classes, done tasks and started task blocks fixed, and leaves the rest to be replaced", () => {
+  it("keeps classes, done tasks, completed sessions and started task blocks fixed, and leaves the rest to be replaced", () => {
     const blocks = [
       block("class", "2026-10-23", "09:00:00", { type: "class" }),
       block("started", "2026-10-22", "20:00:00", {
@@ -84,6 +84,11 @@ describe("buildSolverInput fixed blocks", () => {
         type: "task",
         task_id: "finished",
       }),
+      block("completed-session", "2026-10-24", "14:00:00", {
+        type: "task",
+        task_id: "open",
+        completed: true,
+      }),
     ];
     const input = buildSolverInput({
       now: "2026-10-22T20:30",
@@ -96,6 +101,7 @@ describe("buildSolverInput fixed blocks", () => {
       "class",
       "started",
       "done",
+      "completed-session",
     ]);
   });
 });

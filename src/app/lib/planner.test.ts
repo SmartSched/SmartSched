@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { layoutBlocks, minutesSoFar, toMinutes, type TimeBlock } from './planner';
 
 function block(id: string, start_time: string, end_time: string): TimeBlock {
-  return { id, date: '2026-09-29', start_time, end_time, activity: id, type: 'study', task_id: null };
+  return { id, date: '2026-09-29', start_time, end_time, activity: id, type: 'study', task_id: null, completed: false, completed_at: null };
 }
 
 // id -> [column, columns], easier to read than the full objects.
@@ -62,7 +62,7 @@ describe('layoutBlocks', () => {
 
 describe('minutesSoFar', () => {
   const taskBlock = (id: string, date: string, start_time: string, end_time: string, task_id = 'essay'): TimeBlock => ({
-    id, date, start_time, end_time, activity: 'Essay', type: 'task', task_id,
+    id, date, start_time, end_time, activity: 'Essay', type: 'task', task_id, completed: false, completed_at: null,
   });
   const blocks = [
     taskBlock('mon', '2026-09-28', '14:00', '15:00'),

@@ -87,6 +87,7 @@ const ROUTES = [
   ["get", "/api/time-blocks"],
   ["post", "/api/time-blocks"],
   ["patch", "/api/time-blocks/abc"],
+  ["patch", "/api/time-blocks/abc/completion"],
   ["delete", "/api/time-blocks/abc"],
   ["get", "/api/reflections/2026-09-29"],
   ["post", "/api/reflections"],
@@ -353,6 +354,53 @@ describe("time blocks", () => {
       ([method]) => method === "select",
     );
     expect(columns).toMatch(/task:tasks\(/);
+  });
+
+  it("completes one task session without updating its task and logs one structured observation", async () => {
+    const saved = {
+      id: "b1",
+      type: "task",
+      completed: false,
+      date: "2026-09-29",
+      start_time: "17:00:00",
+      end_time: "18:00:00",
+      task: { type: "homework" },
+    };
+    fake.state.results = [
+      { data: saved, error: null },
+      { data: [{ ...saved, completed: true, completed_at: "2026-09-29T18:00:00.000Z" }], error: null },
+    ];
+    const res = await request(app)
+      .patch("/api/time-blocks/b1/completion")
+      .set(AUTH)
+      .send({ completed: true });
+    expect(res.status).toBe(200);
+    expect(fake.state.queries.some((q) => q.table === "tasks")).toBe(false);
+    expect(callsOn("time_blocks")).toEqual(expect.arrayContaining([
+      ["update", expect.objectContaining({ completed: true, completed_at: expect.any(String) })],
+    ]));
+    expect(inserted("user_learning_events")[0]).toEqual(expect.objectContaining({
+      user_id: "user-1",
+      event_type: "study_block_completed",
+      data: expect.objectContaining({
+        task_type: "homework",
+        planned: { date: "2026-09-29", start: "17:00", end: "18:00" },
+        completed_at: expect.any(String),
+      }),
+    }));
+  });
+
+  it("does not log another observation when a completed session is reopened", async () => {
+    fake.state.results = [
+      { data: { id: "b1", type: "task", completed: true }, error: null },
+      { data: [{ id: "b1", type: "task", completed: false, completed_at: null }], error: null },
+    ];
+    const res = await request(app)
+      .patch("/api/time-blocks/b1/completion")
+      .set(AUTH)
+      .send({ completed: false });
+    expect(res.status).toBe(200);
+    expect(fake.state.queries.some((q) => q.table === "user_learning_events")).toBe(false);
   });
 
   it("filters by task, for adding up the time planned for one", async () => {
@@ -1043,6 +1091,13 @@ describe("POST /api/schedule/accept", () => {
             id: "tomorrow",
             date: "2026-10-23",
             start_time: "14:00:00",
+            task: { completed: false },
+          },
+          {
+            id: "completed-session",
+            date: "2026-10-24",
+            start_time: "14:00:00",
+            completed: true,
             task: { completed: false },
           },
           {

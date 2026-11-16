@@ -60,7 +60,13 @@ export function useHomeDashboard(userId: string | undefined, today: string) {
     setNearbyBlocks(refresh);
   }, []);
 
+  const applyBlock = useCallback((updated: TimeBlock) => {
+    const refresh = (blocks: TimeBlock[]) => blocks.map((block) => (block.id === updated.id ? updated : block));
+    setWeekBlocks(refresh);
+    setNearbyBlocks(refresh);
+  }, []);
+
   const warnings = useMemo(() => burnoutWarnings(weekBlocks, tasks, weekDates), [weekBlocks, tasks, weekDates]);
 
-  return { tasks, weekBlocks, nearbyBlocks, weekDates, warnings, loading, loadError, reload, applyTask };
+  return { tasks, weekBlocks, nearbyBlocks, weekDates, warnings, loading, loadError, reload, applyTask, applyBlock };
 }

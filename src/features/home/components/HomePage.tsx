@@ -87,7 +87,7 @@ export function HomePage() {
   const { user } = useAuth();
   const { profile } = useProfile();
   const today = useToday();
-  const { tasks, weekBlocks, nearbyBlocks, weekDates, warnings, loading, loadError, reload, applyTask } = useHomeDashboard(
+  const { tasks, weekBlocks, nearbyBlocks, weekDates, warnings, loading, loadError, reload, applyTask, applyBlock } = useHomeDashboard(
     user?.id,
     today,
   );
@@ -111,8 +111,8 @@ export function HomePage() {
   );
   const current = todayBlocks.find((b) => toMinutes(b.start_time) <= nowMinutes && nowMinutes < toMinutes(b.end_time));
   const next = todayBlocks.find((b) => toMinutes(b.start_time) > nowMinutes);
-  // A task block is done when its task is checked off; anything else once its time has passed.
-  const isDone = (b: TimeBlock) => (b.type === 'task' ? Boolean(b.task?.completed) : toMinutes(b.end_time) <= nowMinutes);
+  // Task sessions are checked off individually; a completed task can still retain its planned sessions.
+  const isDone = (b: TimeBlock) => (b.type === 'task' ? b.completed : toMinutes(b.end_time) <= nowMinutes);
   const doneCount = todayBlocks.filter(isDone).length;
 
   const missed = useMemo(() => {
@@ -151,6 +151,18 @@ export function HomePage() {
   const toggleTask = (task: BlockTask | Task) => {
     if (task.completed) updateTask(task.id, { completed: false });
     else setFinishingTask(task);
+  };
+
+  const toggleBlock = async (block: TimeBlock) => {
+    try {
+      const { block: updated }: { block: TimeBlock } = await apiPatch(
+        `/api/time-blocks/${block.id}/completion`,
+        { completed: !block.completed },
+      );
+      applyBlock(updated);
+    } catch {
+      setNotice({ severity: 'error', text: "Couldn't update the study block. Try again." });
+    }
   };
 
   const finishTask = async (minutes: number | null) => {
@@ -355,7 +367,7 @@ export function HomePage() {
                   const color = categoryColor(block.type);
                   const done = isDone(block);
                   const isNow = block === current;
-                  const notChecked = block.type === 'task' && !block.task?.completed && toMinutes(block.end_time) <= nowMinutes;
+                  const notChecked = block.type === 'task' && !block.completed && !block.task?.completed && toMinutes(block.end_time) <= nowMinutes;
                   const meta = [CATEGORY_LABELS[block.type] ?? block.type, block.location ? placeLabel(block.location) : null]
                     .filter(Boolean)
                     .join(' · ');
@@ -409,9 +421,9 @@ export function HomePage() {
                       )}
                       {block.task && (
                         <JuicyCheckbox
-                          checked={block.task.completed}
-                          onChange={() => toggleTask(block.task!)}
-                          slotProps={{ input: { 'aria-label': `${block.task.completed ? 'Reopen' : 'Check off'} ${block.task.title}` } }}
+                          checked={block.completed}
+                          onChange={() => toggleBlock(block)}
+                          slotProps={{ input: { 'aria-label': `${block.completed ? 'Reopen' : 'Check off'} study block for ${block.task.title}` } }}
                           sx={{ m: -1 }}
                         />
                       )}

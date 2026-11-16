@@ -22,7 +22,7 @@ function hhmm(minutes: number) {
 export function missedTaskBlocks(blocks: TimeBlock[], now: Date): TimeBlock[] {
   const byTask = new Map<string, TimeBlock[]>();
   for (const block of blocks) {
-    if (block.type !== 'task' || !block.task_id || !block.task || block.task.completed) continue;
+    if (block.type !== 'task' || !block.task_id || !block.task || block.task.completed || block.completed) continue;
     byTask.set(block.task_id, [...(byTask.get(block.task_id) ?? []), block]);
   }
   const missed: TimeBlock[] = [];

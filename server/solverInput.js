@@ -65,12 +65,15 @@ export function buildSolverInput({
   const weekEnd = addDays(weekStart, 6);
   const planFrom = addMinutes(now, LEAD_MINUTES);
   // Task blocks that accepting a plan won't replace (see /api/schedule/accept) are fixed like classes:
-  // ones for tasks that are done, and ones that already started.
+  // ones for tasks that are done, individually completed sessions, and ones that already started.
   const unfinished = new Set(
     tasks.filter((t) => !t.completed).map((t) => t.id),
   );
   const stays = (b) =>
-    b.type !== "task" || !unfinished.has(b.task_id) || startsBefore(b, now);
+    b.type !== "task" ||
+    !unfinished.has(b.task_id) ||
+    b.completed ||
+    startsBefore(b, now);
 
   const solverTasks = tasks
     .filter((t) => !t.completed && t.due_date && t.estimated_time > 0)

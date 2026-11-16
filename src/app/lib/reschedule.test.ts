@@ -3,7 +3,7 @@ import type { TimeBlock } from './planner';
 import { findOpenSlot, missedTaskBlocks } from './reschedule';
 
 function block(id: string, date: string, start_time: string, end_time: string, extra: Partial<TimeBlock> = {}): TimeBlock {
-  return { id, date, start_time, end_time, activity: id, type: 'study', task_id: null, ...extra };
+  return { id, date, start_time, end_time, activity: id, type: 'study', task_id: null, completed: false, completed_at: null, ...extra };
 }
 
 function taskBlock(id: string, date: string, start_time: string, end_time: string, taskId: string, completed = false) {
@@ -34,6 +34,11 @@ describe('missedTaskBlocks', () => {
       taskBlock('later', '2026-09-30', '10:00', '11:00', 'quiz'),
     ];
     expect(missedTaskBlocks(blocks, NOW)).toEqual([]);
+  });
+
+  it('ignores an individually completed session while its task remains open', () => {
+    const doneSession = { ...taskBlock('session', '2026-09-28', '14:00', '15:00', 'essay'), completed: true };
+    expect(missedTaskBlocks([doneSession], NOW)).toEqual([]);
   });
 
   it('waits while the same task still has a block coming up', () => {

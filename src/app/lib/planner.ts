@@ -22,6 +22,8 @@ export interface TimeBlock {
   activity: string;
   type: 'class' | 'study' | 'break' | 'personal' | 'commute' | 'meal' | 'work' | 'task';
   task_id: string | null;
+  completed: boolean;
+  completed_at: string | null;
   task?: BlockTask | null;
   location?: string | null; // lowercase place name, see places.ts
   series_id?: string | null; // set when the block is one of a repeat

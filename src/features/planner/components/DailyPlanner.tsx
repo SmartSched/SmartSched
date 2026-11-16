@@ -793,14 +793,14 @@ interface TimeBlockItemProps {
   minHeight: number;
   dense?: boolean;
   onClick: () => void;
-  onToggleTask: (block: TimeBlock) => void;
+  onToggleBlock: (block: TimeBlock) => void;
   // Dragging: picked up and following the pointer, or just dropped (plays a little landing squash).
   lifted?: boolean;
   landed?: boolean;
   onDragStart?: (block: TimeBlock, e: ReactPointerEvent<HTMLElement>) => void;
 }
 
-function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClick, onToggleTask, lifted, landed, onDragStart }: TimeBlockItemProps) {
+function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClick, onToggleBlock, lifted, landed, onDragStart }: TimeBlockItemProps) {
   const start = toMinutes(block.start_time);
   const end = toMinutes(block.end_time);
   const top = scale.toY(start, 'start');
@@ -809,7 +809,7 @@ function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClic
   const color = categoryColor(block.type);
   const timeRange = `${formatTime(block.start_time)} – ${formatTime(block.end_time)}`;
   const gap = dense ? 2 : 4;
-  // Task blocks show the task's current title and priority, and a checkbox that completes the task.
+  // Task blocks show the task's current title and priority, and a checkbox for this session.
   const task = block.type === 'task' ? block.task : null;
   const title = task?.title ?? block.activity;
   // Compact view leaves 2–6 AM out; a block entirely in there isn't drawn.
@@ -835,7 +835,7 @@ function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClic
         alignItems: compact ? 'center' : 'flex-start',
         overflow: 'hidden',
         boxSizing: 'border-box',
-        opacity: task?.completed && !lifted ? 0.6 : 1,
+        opacity: (block.completed || task?.completed) && !lifted ? 0.6 : 1,
         cursor: lifted ? 'grabbing' : onDragStart && canDrag(block) ? 'grab' : undefined,
         '& .MuiButtonBase-root': { cursor: 'inherit' },
         // Lifted: raised with a shadow and a slight tilt, snapping between 15-minute steps with a little
@@ -858,9 +858,9 @@ function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClic
       {task && (
         <JuicyCheckbox
           size="small"
-          checked={task.completed}
-          onChange={() => onToggleTask(block)}
-          slotProps={{ input: { 'aria-label': `${task.completed ? 'Reopen' : 'Check off'} ${title}` } }}
+          checked={block.completed}
+          onChange={() => onToggleBlock(block)}
+          slotProps={{ input: { 'aria-label': `${block.completed ? 'Reopen' : 'Check off'} study block for ${title}` } }}
           sx={{ p: dense ? 0.25 : 0.5, color, '&.Mui-checked': { color } }}
         />
       )}
@@ -886,7 +886,7 @@ function TimeBlockItem({ block, column, columns, scale, minHeight, dense, onClic
           noWrap
           sx={{ fontWeight: 600, color: 'text.primary', minWidth: 0, maxWidth: '100%' }}
         >
-          {task ? <InkText done={task.completed}>{title}</InkText> : title}
+          {task ? <InkText done={block.completed || task.completed}>{title}</InkText> : title}
         </Typography>
         {!dense && (
           <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
@@ -1203,11 +1203,17 @@ export function DailyPlanner() {
     }
   };
 
-  // Checking off a task block completes the task (after asking how long it took); unchecking reopens it.
-  const handleToggleTask = (block: TimeBlock) => {
-    if (!block.task) return;
-    if (block.task.completed) updateTask(block.task.id, { completed: false });
-    else setFinishingTask(block.task);
+  const handleToggleBlock = async (block: TimeBlock) => {
+    try {
+      const { block: updated }: { block: TimeBlock } = await apiPatch(
+        `/api/time-blocks/${block.id}/completion`,
+        { completed: !block.completed },
+      );
+      showSavedBlock(updated);
+      setNearbyBlocks((current) => current.map((b) => (b.id === updated.id ? updated : b)));
+    } catch {
+      setActionError("Couldn't update the study block. Try again.");
+    }
   };
 
   const finishTask = async (minutes: number | null) => {
@@ -1475,7 +1481,7 @@ export function DailyPlanner() {
                     minHeight={minBlockHeight}
                     dense={compact}
                     onClick={() => openEdit(block)}
-                    onToggleTask={handleToggleTask}
+                    onToggleBlock={handleToggleBlock}
                     lifted={dragPreview?.id === block.id}
                     landed={landedId === block.id}
                     onDragStart={startDrag}
@@ -1552,7 +1558,7 @@ export function DailyPlanner() {
                           minHeight={minBlockHeight}
                           dense
                           onClick={() => openEdit(block)}
-                          onToggleTask={handleToggleTask}
+                          onToggleBlock={handleToggleBlock}
                           lifted={dragPreview?.id === block.id}
                           landed={landedId === block.id}
                           onDragStart={startDrag}
