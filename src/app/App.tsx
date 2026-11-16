@@ -28,7 +28,7 @@ import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ProfileProvider, useProfile } from './lib/ProfileContext';
 import { needsConsent } from './lib/consent';
 import { colors } from './theme';
-import { AppearanceProvider } from './lib/AppearanceContext';
+import { AppearanceProvider, useAppearance } from './lib/AppearanceContext';
 import { HomePage } from '../features/home/components/HomePage';
 import { SurveyPage } from '../features/survey/components/SurveyPage';
 import { ConsentPage } from '../features/planner/components/ConsentPage';
@@ -40,6 +40,7 @@ import { AuthPage } from '../features/auth/components/AuthPage';
 import { ResetPasswordPage } from '../features/auth/components/ResetPasswordPage';
 import { PageLoader } from '../shared/components/States';
 import { Blob } from '../shared/juice/Blob';
+import { BuddyFavicon } from '../shared/juice/BuddyFavicon';
 import { FeedbackButton } from '../shared/components/FeedbackButton';
 import { useJuicePrefs } from '../shared/juice/prefs';
 import { LandingPage } from '../features/landing/components/LandingPage';
@@ -257,6 +258,7 @@ function AppShell() {
   const isLanding = location.pathname === '/' && !user;
   const showNav = Boolean(user);
   const juice = useJuicePrefs();
+  const { accent } = useAppearance();
   const showBlob = showNav && juice.blob && !['/survey', '/consent'].includes(location.pathname);
 
   if (isLanding) {
@@ -271,6 +273,7 @@ function AppShell() {
         pb: showNav && isMobile ? `${TAB_BAR_HEIGHT + 16}px` : 0,
       }}
     >
+      <BuddyFavicon buddy={juice.buddy} accent={accent} />
       <AppBar
         position="sticky"
         elevation={0}
